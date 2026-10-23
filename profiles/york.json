@@ -1,0 +1,91 @@
+{
+  "name": "York",
+  "page": "https://jumpstart-york.arcforge.uk/",
+  "workspaces": {
+    "inGoogleDrive": true,
+    "choices": [
+      {
+        "name": "Thinking space",
+        "default": true
+      },
+      {
+        "name": "Personal assistant",
+        "default": true
+      }
+    ]
+  },
+  "connectors": [
+    {
+      "name": "Gmail",
+      "default": true
+    },
+    {
+      "name": "Google Drive",
+      "default": true
+    },
+    {
+      "name": "Google Calendar",
+      "default": true
+    },
+    {
+      "name": "Asana",
+      "default": false
+    },
+    {
+      "name": "Google Docs",
+      "default": false
+    },
+    {
+      "name": "Google Sheets",
+      "default": false
+    },
+    {
+      "name": "Google Slides",
+      "default": false
+    }
+  ],
+  "extraTools": [
+    {
+      "id": "apps-script",
+      "question": "Would you like the agent to be able to publish and manage Apps Script projects for you?",
+      "default": false
+    }
+  ],
+  "skills": [
+    {
+      "source": "mattpocock/skills",
+      "names": [
+        "grilling",
+        "grill-me",
+        "grill-with-docs",
+        "domain-modeling",
+        "teach",
+        "to-questionnaire",
+        "handoff",
+        "wait-what",
+        "research",
+        "wayfinder",
+        "to-spec",
+        "to-tickets",
+        "setup-matt-pocock-skills",
+        "prototype",
+        "wizard"
+      ]
+    },
+    {
+      "source": "anthropics/skills",
+      "names": [
+        "frontend-design"
+      ]
+    },
+    {
+      "source": "cursor/plugins/pstack/skills/unslop"
+    },
+    {
+      "source": "Bozodragon/agent-jumpstart",
+      "names": [
+        "jumpstart"
+      ]
+    }
+  ]
+}
