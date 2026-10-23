@@ -1,6 +1,9 @@
 {
   "name": "York",
   "page": "https://jumpstart-york.arcforge.uk/",
+  "pastedLine": "irm https://jumpstart-install.arcforge.uk/york.ps1 | iex",
+  "shareLogLine": "irm https://jumpstart-install.arcforge.uk/share-log.ps1 | iex",
+  "logGoesTo": "Jacob",
   "workspaces": {
     "inGoogleDrive": true,
     "choices": [

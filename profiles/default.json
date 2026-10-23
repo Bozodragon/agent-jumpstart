@@ -1,6 +1,9 @@
 {
   "name": "Default",
   "page": "https://jumpstart.arcforge.uk/",
+  "pastedLine": "irm https://jumpstart-install.arcforge.uk/install.ps1 | iex",
+  "shareLogLine": "irm https://jumpstart-install.arcforge.uk/share-log.ps1 | iex",
+  "logGoesTo": "the person who sent you this page",
   "workspaces": {
     "inGoogleDrive": false,
     "defaultLocation": "Documents",

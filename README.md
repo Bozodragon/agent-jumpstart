@@ -7,9 +7,9 @@ Sets a team member up with an agent: the **Installer** puts everything on their 
 | `bootstrap/` | The four PowerShell files people paste the address of, and the script that builds the Portall item they're published from. |
 | `installer/` | The Node program the pasted line runs. It reads a profile, asks its questions, installs the tools and prints a checklist. |
 | `manifest.json` | Every version the installer installs, pinned with its download address and SHA-256 checksum. Bumping one is an edit here. |
-| `profiles/` | One JSON file per profile (`york`, `default`): the workspace, connector, extra-tool and skill lists, which are ticked by default, whether workspaces live in Google Drive, and the setup page's address. Adapting the setup for a new team is an edit here, not to the code. |
+| `profiles/` | One JSON file per profile (`york`, `default`): the workspace, connector, extra-tool and skill lists, which are ticked by default, whether workspaces live in Google Drive, and the setup page's address, its line to paste and who to send a log to. Adapting the setup for a new team is an edit here, not to the code. |
 | `skills/` | Skills the installer installs from this repo, such as `jumpstart`. |
-| `page/` | The setup page, one source rendered per profile. |
+| `page/` | The setup page, one source rendered per profile and published to the address in that profile's `page`. See `page/README.md`. |
 
 `.agents/` and `.claude/` hold the skills used to build this repo, not ones the installer ships.
 
@@ -32,6 +32,10 @@ All four and `installer.zip` are one public Portall item, so one publish ships t
 npm run publish:portall
 ```
 
+## The setup page
+
+Each profile has its own page showing only its line to paste: [York](https://jumpstart-york.arcforge.uk/) and [everyone else](https://jumpstart.arcforge.uk/). `npm run publish:page` renders and publishes both; see `page/README.md`.
+
 ## Running the installer
 
 ```
@@ -52,4 +56,4 @@ npm test
 npm run typecheck
 ```
 
-The tests run the real installer end to end in a temporary home with all three overrides, and check only what it leaves behind: the printed checklist, the exit code, the log and the settings file. `pasted-lines.test.js` reads the four PowerShell files as text (it never runs them) and checks the rules above, that the three bootstrap lines differ only in their top line, and that their Node.js pin matches `manifest.json`.
+The tests run the real installer end to end in a temporary home with all three overrides, and check only what it leaves behind: the printed checklist, the exit code, the log and the settings file. `pasted-lines.test.js` reads the four PowerShell files as text (it never runs them) and checks the rules above, that the three bootstrap lines differ only in their top line, and that their Node.js pin matches `manifest.json`. `page.test.js` renders the setup page for each profile and checks it shows that profile's own line once, the three steps in order and the share-log line.

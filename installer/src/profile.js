@@ -10,6 +10,9 @@ const profilesFolder = fileURLToPath(new URL('../../profiles/', import.meta.url)
  * @property {string} id The file name, which is what the bootstrap passes.
  * @property {string} name
  * @property {string} page The address of this profile's setup page.
+ * @property {string} [pastedLine] The one line the setup page tells a person to paste into PowerShell.
+ * @property {string} [shareLogLine] The line the setup page gives for copying the newest installer log.
+ * @property {string} [logGoesTo] Who the setup page says to send the log to, as it reads after "send it to".
  * @property {{ inGoogleDrive: boolean, defaultLocation?: string, choices: Choice[] }} workspaces
  *   `defaultLocation` is the folder, within the user's profile folder, offered for workspaces when they aren't in Google Drive.
  * @property {Choice[]} connectors

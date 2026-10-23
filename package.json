@@ -9,7 +9,9 @@
     "test": "node --test \"installer/test/**/*.test.js\"",
     "typecheck": "tsc",
     "build:portall": "node bootstrap/build.js",
-    "publish:portall": "node bootstrap/build.js && portall publish dist/portall --item jumpstart-install --public"
+    "publish:portall": "node bootstrap/build.js && portall publish dist/portall --item jumpstart-install --public",
+    "build:page": "node page/build.js",
+    "publish:page": "node page/build.js --publish"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
