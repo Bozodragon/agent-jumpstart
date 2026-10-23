@@ -58,11 +58,15 @@ test('york.ps1, install.ps1 and york-debug.ps1 differ only in their top line, wh
 
 test('the bootstrap pins the same Node.js version and checksums as manifest.json', async () => {
   const manifest = JSON.parse(await readFile(join(repo, 'manifest.json'), 'utf8'));
+  /** @type {{ version: string, downloads: Record<string, { url: string, sha256: string }> }} */
+  const node = manifest.tools.find((/** @type {{ id: string }} */ tool) => tool.id === 'node');
   const text = (await read('york.ps1')).toString('ascii');
-  assert.match(text, new RegExp(`\\$nodeVersion = '${manifest.node.version.replaceAll('.', '\\.')}'`));
-  for (const [arch, { url, sha256 }] of Object.entries(manifest.node.downloads)) {
+  assert.match(text, new RegExp(`\\$nodeVersion = '${node.version.replaceAll('.', '\\.')}'`));
+  assert.deepEqual(Object.keys(node.downloads).sort(), ['arm64', 'x64']);
+  for (const [arch, { url, sha256 }] of Object.entries(node.downloads)) {
     assert.match(text, new RegExp(`\\b${arch} = '${sha256}'`), arch);
-    assert.equal(url, `https://nodejs.org/dist/v${manifest.node.version}/node-v${manifest.node.version}-win-${arch}.zip`);
+    // The bootstrap builds the address from the version and arch rather than repeating it.
+    assert.equal(url, `https://nodejs.org/dist/v${node.version}/node-v${node.version}-win-${arch}.zip`);
   }
 });
 

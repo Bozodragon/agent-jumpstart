@@ -6,8 +6,9 @@ $AgentJumpstart = @{ Profile = 'default'; Debug = $false }
 #
 # york.ps1, install.ps1 and york-debug.ps1 are this same file with a different top line.
 # It asks nothing. It downloads the pinned Node.js zip, checks it against its published
-# checksum, unpacks it into local AppData, fetches the installer program from the same
-# Portall item as this file, and runs it. The program does everything else.
+# checksum and unpacks it to %LOCALAPPDATA%\Programs\nodejs, where the installer keeps
+# Node.js too, so there is one Node.js. It then fetches the installer program from the
+# same Portall item as this file and runs it. The program does everything else.
 #
 # It runs through iex on Windows PowerShell 5.1, perhaps in Constrained Language Mode, so:
 # plain ASCII with no byte-order mark; no exit (it would close the person's window); no
@@ -39,10 +40,20 @@ function Start-AgentJumpstart {
   $root = Join-Path $env:LOCALAPPDATA 'agent-jumpstart'
   $downloads = Join-Path $root 'downloads'
   $unpacking = Join-Path $root 'unpacking'
-  $nodeHome = Join-Path $root 'node'
-  $nodeDir = Join-Path $nodeHome $nodeName
+  $replaced = Join-Path $root 'replaced-nodejs'
+  $programs = Join-Path $env:LOCALAPPDATA 'Programs'
+  $nodeDir = Join-Path $programs 'nodejs'
   $nodeExe = Join-Path $nodeDir 'node.exe'
   $programDir = Join-Path $root 'program'
+
+  function Get-NodeVersion {
+    if (-not (Test-Path -LiteralPath $nodeExe)) { return 'none' }
+    try {
+      return (& $nodeExe --version)
+    } catch {
+      return 'none'
+    }
+  }
 
   function Save-Download([string]$Url, [string]$Path, [string]$What) {
     try {
@@ -91,7 +102,9 @@ function Start-AgentJumpstart {
   try {
     New-Item -ItemType Directory -Force -Path $downloads | Out-Null
 
-    if (Test-Path -LiteralPath $nodeExe) {
+    $have = Get-NodeVersion
+    if ($DebugOn) { Write-Host "Debug: Node.js already in $nodeDir is $have" }
+    if ($have -eq "v$nodeVersion") {
       Write-Host "Node.js $nodeVersion is already here."
     } else {
       $nodeZip = Join-Path $downloads "$nodeName.zip"
@@ -106,13 +119,20 @@ function Start-AgentJumpstart {
       }
       Write-Host 'Unpacking Node.js...'
       Expand-Zip $nodeZip $unpacking
-      New-Item -ItemType Directory -Force -Path $nodeHome | Out-Null
+      # Set the old folder aside in one move, so a Node.js still in use is left whole.
+      if (Test-Path -LiteralPath $replaced) { Remove-Item -LiteralPath $replaced -Recurse -Force }
+      if (Test-Path -LiteralPath $nodeDir) {
+        try {
+          Move-Item -LiteralPath $nodeDir -Destination $replaced
+        } catch {
+          throw "Node.js $have needs replacing with $nodeVersion, but something is using it. Close T3 Code and any other window that might be using Node.js, then paste the line again."
+        }
+      }
+      New-Item -ItemType Directory -Force -Path $programs | Out-Null
       Move-Item -LiteralPath (Join-Path $unpacking $nodeName) -Destination $nodeDir
       Remove-Item -LiteralPath $unpacking -Recurse -Force
+      if (Test-Path -LiteralPath $replaced) { Remove-Item -LiteralPath $replaced -Recurse -Force -ErrorAction SilentlyContinue }
       if (-not $DebugOn) { Remove-Item -LiteralPath $nodeZip -Force }
-      # Versions left behind by an earlier pin; one still in use is left for next time.
-      Get-ChildItem -LiteralPath $nodeHome -Directory | Where-Object { $_.Name -ne $nodeName } |
-        Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
     }
 
     Write-Host 'Downloading the installer...'
