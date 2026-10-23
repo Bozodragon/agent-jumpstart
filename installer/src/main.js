@@ -17,6 +17,7 @@ import { openLog } from './log.js';
 import { openPage } from './open-page.js';
 import { findPlaces } from './places.js';
 import { loadProfile } from './profile.js';
+import { answersFrom, askQuestions } from './questions.js';
 import { messageOf, Stop } from './stop.js';
 import * as ui from './ui.js';
 
@@ -82,7 +83,9 @@ async function main() {
     ui.step(`Setup page: ${profile.page}`);
     log.write(`Setup page: ${profile.page} (${unattended ? 'not opened: answers came from a file' : await tryToOpen(profile.page)})`);
 
-    const settings = { profile: profile.id };
+    const choices = await askQuestions(profile, places, unattended ? answersFrom(answers) : ui.ask, log);
+
+    const settings = { profile: profile.id, ...choices };
     await mkdir(dirname(places.settings), { recursive: true });
     await writeFile(places.settings, `${JSON.stringify(settings, null, 2)}\n`);
     log.write(`Settings written to ${places.settings}`);
