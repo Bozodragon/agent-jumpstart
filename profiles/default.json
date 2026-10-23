@@ -45,6 +45,7 @@
       "default": false
     }
   ],
+  "connectorsPage": "https://claude.ai/customize/connectors",
   "extraTools": [
     {
       "id": "apps-script",

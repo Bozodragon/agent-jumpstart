@@ -62,6 +62,22 @@ export function summary(rows, title) {
   note(rows.map(([label, value]) => `${styleText('bold', label.padEnd(width))}  ${value}`).join('\n'), title);
 }
 
+export const bullet = unicodeOr('•', '-');
+
+/** @param {string} text @param {string} title */
+export function notice(text, title) {
+  note(text, title);
+}
+
+/**
+ * Waits for the person to press Enter. A single choice, so there is nothing to
+ * type and nothing to get wrong.
+ * @param {string} message
+ */
+export async function pressEnter(message) {
+  unlessCancelled(await select({ message, options: [{ value: 'done', label: 'Done' }] }));
+}
+
 /** @param {string} text */
 export function finish(text) {
   outro(styleText(accent, text));
