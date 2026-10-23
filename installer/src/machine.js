@@ -5,7 +5,8 @@
 //
 //   <home>/fake-machine/environment.json  the user environment variables, as HKCU\Environment
 //                                         holds them; the user PATH is `Path`, joined with `;`
-//   <home>/fake-machine/runs.json         every program it was asked to run: [{ file, args }]
+//   <home>/fake-machine/runs.json         every program it was asked to run: [{ file, args }],
+//                                         with `onScreen: true` for one run in the person's window
 //   <home>/fake-machine/replies.json      written by a test: what a run returns, keyed by the
 //                                         file name, or the file name and its arguments
 //                                         ("gh.exe auth status"). No reply means code 0, no output.
@@ -22,6 +23,9 @@ import { basename, join } from 'node:path';
  *   environment variable, seen by programs started afterwards.
  * @property {(file: string, args: string[]) => Promise<Ran>} run Runs a program and waits for it.
  *   Never throws: a program that couldn't start gives code -1 and the reason as its output.
+ * @property {(file: string, args: string[]) => Promise<number>} runOnScreen Runs a program in the
+ *   person's window, so they see what it prints and can answer it, and waits for it. Returns its
+ *   exit code, or -1 if it couldn't start.
  */
 
 /** @typedef {{ code: number, output: string }} Ran */
@@ -77,13 +81,21 @@ function fakeMachine(folder) {
       await write('environment.json', { ...(await environment()), [name]: value });
     },
     async run(file, args) {
-      await write('runs.json', [...(await read('runs.json', [])), { file, args }]);
-      /** @type {Record<string, Partial<Ran>>} */
-      const replies = await read('replies.json', {});
-      const reply = replies[[basename(file), ...args].join(' ')] ?? replies[basename(file)] ?? {};
-      return { code: reply.code ?? 0, output: reply.output ?? '' };
+      return reply(file, args, { file, args });
+    },
+    async runOnScreen(file, args) {
+      return (await reply(file, args, { file, args, onScreen: true })).code;
     },
   };
+
+  /** @param {string} file @param {string[]} args @param {object} record @returns {Promise<Ran>} */
+  async function reply(file, args, record) {
+    await write('runs.json', [...(await read('runs.json', [])), record]);
+    /** @type {Record<string, Partial<Ran>>} */
+    const replies = await read('replies.json', {});
+    const found = replies[[basename(file), ...args].join(' ')] ?? replies[basename(file)] ?? {};
+    return { code: found.code ?? 0, output: found.output ?? '' };
+  }
 }
 
 /** @param {string} name */
@@ -139,6 +151,13 @@ function realMachine() {
       process.env[name] = value;
     },
     run: runProgram,
+    runOnScreen(file, args) {
+      return new Promise((resolve) => {
+        const child = spawn(file, args, { stdio: 'inherit' });
+        child.once('error', () => resolve(-1));
+        child.once('close', (code) => resolve(code ?? -1));
+      });
+    },
   };
 }
 
