@@ -11,5 +11,5 @@
     "skipLibCheck": true,
     "types": ["node"]
   },
-  "include": ["installer/**/*.js"]
+  "include": ["installer/**/*.js", "bootstrap/**/*.js"]
 }

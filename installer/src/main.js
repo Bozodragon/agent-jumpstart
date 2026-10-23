@@ -1,7 +1,9 @@
 #!/usr/bin/env node
 // The Installer. The bootstrap runs this as:
 //
-//   node main.js --profile <id>
+//   node main.js --profile <id> [--debug]
+//
+// --debug comes from the debug pasted line (york-debug.ps1).
 //
 // Three overrides let a test run it end to end with no network and no prompts:
 //   --home <folder>       use this as the user's profile folder (local AppData sits inside it)
@@ -18,11 +20,12 @@ import { loadProfile } from './profile.js';
 import { messageOf, Stop } from './stop.js';
 import * as ui from './ui.js';
 
-/** @returns {{ profile: string, home?: string, answers?: string, downloads?: string }} */
+/** @returns {{ profile: string, debug: boolean, home?: string, answers?: string, downloads?: string }} */
 function readOptions() {
   const { values } = parseArgs({
     options: {
       profile: { type: 'string', default: 'default' },
+      debug: { type: 'boolean', default: false },
       home: { type: 'string' },
       answers: { type: 'string' },
       downloads: { type: 'string' },
@@ -64,6 +67,7 @@ async function main() {
   const log = openLog(places.logs);
   log.write(`Installer started with Node ${process.version}`);
   log.write(`Profile: ${options.profile}`);
+  log.write(`Debug: ${options.debug ? 'on' : 'off'}`);
   log.write(`Home: ${places.home}`);
   if (options.answers) log.write(`Answers from: ${options.answers}`);
   if (options.downloads) log.write(`Downloads from: ${options.downloads}`);
