@@ -1,0 +1,16 @@
+{
+  "name": "agent-jumpstart",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "installer"
+  ],
+  "scripts": {
+    "test": "node --test \"installer/test/**/*.test.js\"",
+    "typecheck": "tsc"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.9.0"
+  }
+}
