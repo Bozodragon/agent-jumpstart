@@ -15,13 +15,18 @@ export async function readProfile(name) {
   return JSON.parse(await readFile(join(repo, 'profiles', `${name}.json`), 'utf8'));
 }
 
+/** @typedef {'signed-in' | 'signed-out' | 'missing'} GoogleDriveState */
+
 /**
  * A temporary home with an answers file and an empty downloads folder,
- * removed when the test ends.
+ * removed when the test ends. Like a York laptop, it has Google Drive for
+ * desktop signed in and mirroring to `My Drive` in the home folder, unless
+ * told otherwise.
  * @param {import('node:test').TestContext} t
  * @param {object} [answers]
+ * @param {{ googleDrive?: GoogleDriveState }} [options]
  */
-export async function makeHome(t, answers = {}) {
+export async function makeHome(t, answers = {}, { googleDrive = 'signed-in' } = {}) {
   const root = await mkdtemp(join(tmpdir(), 'jumpstart-test-'));
   t.after(() => rm(root, { recursive: true, force: true }));
   const home = join(root, 'home');
@@ -30,7 +35,33 @@ export async function makeHome(t, answers = {}) {
   await mkdir(home);
   await mkdir(downloads);
   await writeFile(answersFile, JSON.stringify(answers));
+  await fakeGoogleDrive(home, googleDrive);
   return { home, downloads, answersFile };
+}
+
+/** The account folder Google Drive for desktop keeps per signed-in account, named by Google account number. */
+const driveAccount = '104857600123456789012';
+
+/**
+ * Leaves the traces Google Drive for desktop leaves in a profile folder: its
+ * data folder in local AppData (with one folder per signed-in account) and,
+ * when signed in, the mirrored `My Drive` folder.
+ * @param {string} home
+ * @param {GoogleDriveState} state
+ */
+export async function fakeGoogleDrive(home, state) {
+  if (state === 'missing') return;
+  const data = join(home, 'AppData', 'Local', 'Google', 'DriveFS');
+  await mkdir(join(data, 'Logs'), { recursive: true });
+  if (state === 'signed-in') {
+    await mkdir(join(data, driveAccount), { recursive: true });
+    await mkdir(join(home, 'My Drive'));
+  }
+}
+
+/** @param {string} home */
+export async function readSettings(home) {
+  return JSON.parse(await readFile(join(stateFolder(home), 'settings.json'), 'utf8'));
 }
 
 /**
