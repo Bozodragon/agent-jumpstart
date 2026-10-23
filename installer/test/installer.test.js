@@ -16,7 +16,7 @@ for (const id of ['york', 'default']) {
     assert.equal(result.code, 0, result.stderr);
     assert.ok(result.stdout.includes(`Setup page: ${profile.page}`), result.stdout);
     assert.match(result.stdout, /Checklist/);
-    assert.match(result.stdout, /Nothing was installed/);
+    assert.match(result.stdout, /Not installed/);
 
     const settings = JSON.parse(await readFile(join(stateFolder(where.home), 'settings.json'), 'utf8'));
     assert.equal(settings.profile, id);
@@ -24,7 +24,7 @@ for (const id of ['york', 'default']) {
     const log = await readOnlyLog(where.home);
     assert.match(log.name, new RegExp(`^install-(${dayBefore}|${dayAfter})-\\d{6}\\.log$`));
     assert.ok(log.text.includes(profile.page), log.text);
-    assert.match(log.text, /Nothing was installed/);
+    assert.match(log.text, /Not installed/);
   });
 }
 
