@@ -12,10 +12,12 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { parseArgs } from 'node:util';
 import { openLog } from './log.js';
-import { openPage } from './open-page.js';
+import { walkThroughConnectors } from './connectors.js';
+import { tryToOpen } from './open-page.js';
 import { findPlaces } from './places.js';
 import { openMachine } from './machine.js';
 import { loadProfile } from './profile.js';
+import { answersFrom, askQuestions } from './questions.js';
 import { messageOf, Stop } from './stop.js';
 import { installTools } from './tools.js';
 import * as ui from './ui.js';
@@ -40,16 +42,6 @@ async function readAnswers(path) {
     return JSON.parse(await readFile(path, 'utf8'));
   } catch (error) {
     throw new Stop(`The answers file ${path} couldn't be read: ${messageOf(error)}`);
-  }
-}
-
-/** @param {string} url @returns {Promise<string>} what happened, for the log */
-async function tryToOpen(url) {
-  try {
-    await openPage(url);
-    return 'opened';
-  } catch (error) {
-    return `couldn't open: ${messageOf(error)}`;
   }
 }
 
@@ -80,20 +72,23 @@ async function main() {
     ui.step(`Setup page: ${profile.page}`);
     log.write(`Setup page: ${profile.page} (${unattended ? 'not opened: answers came from a file' : await tryToOpen(profile.page)})`);
 
-    const settings = { profile: profile.id };
+    const choices = await askQuestions(profile, places, unattended ? answersFrom(answers) : ui.ask, log);
+
+    const settings = { profile: profile.id, ...choices };
     await mkdir(dirname(places.settings), { recursive: true });
     await writeFile(places.settings, `${JSON.stringify(settings, null, 2)}\n`);
     log.write(`Settings written to ${places.settings}`);
 
     const machine = openMachine(places);
     const tools = await installTools({ places, machine, downloads: options.downloads, log });
+    const connectors = await walkThroughConnectors(profile, choices.connectors, { attended: !unattended, log });
 
     /** @type {[string, string][]} */
     const checklist = [
       ['Profile', profile.name],
       ...tools,
       ['Workspaces', 'None created'],
-      ['Connectors', 'None set up'],
+      ['Connectors', connectors],
     ];
     ui.summary(checklist, 'Checklist');
     for (const [label, value] of checklist) log.write(`Checklist: ${label}: ${value}`);

@@ -3,6 +3,7 @@
   "page": "https://jumpstart.arcforge.uk/",
   "workspaces": {
     "inGoogleDrive": false,
+    "defaultLocation": "Documents",
     "choices": [
       {
         "name": "Thinking space",
@@ -44,6 +45,7 @@
       "default": false
     }
   ],
+  "connectorsPage": "https://claude.ai/customize/connectors",
   "extraTools": [
     {
       "id": "apps-script",

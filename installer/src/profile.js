@@ -10,8 +10,10 @@ const profilesFolder = fileURLToPath(new URL('../../profiles/', import.meta.url)
  * @property {string} id The file name, which is what the bootstrap passes.
  * @property {string} name
  * @property {string} page The address of this profile's setup page.
- * @property {{ inGoogleDrive: boolean, choices: Choice[] }} workspaces
+ * @property {{ inGoogleDrive: boolean, defaultLocation?: string, choices: Choice[] }} workspaces
+ *   `defaultLocation` is the folder, within the user's profile folder, offered for workspaces when they aren't in Google Drive.
  * @property {Choice[]} connectors
+ * @property {string} [connectorsPage] The address of the page where the person connects the connectors they ticked.
  * @property {{ id: string, question: string, default: boolean }[]} extraTools
  * @property {{ source: string, names?: string[] }[]} skills
  */
