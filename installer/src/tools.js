@@ -27,7 +27,8 @@ class NotInstalled extends Error {}
  */
 
 /**
- * Installs every tool in the manifest, in order.
+ * Installs every tool in the manifest, in order, except those set aside for a later step
+ * (`when`).
  * @param {Context} context
  * @returns {Promise<[string, string][]>} checklist rows
  */
@@ -36,7 +37,7 @@ export async function installTools(context) {
   context.log.write(`Versions from: ${manifest.source}`);
   /** @type {[string, string][]} */
   const rows = [];
-  for (const tool of manifest.tools) rows.push([tool.name, await installTool(tool, context)]);
+  for (const tool of manifest.tools) if (!tool.when) rows.push([tool.name, await installTool(tool, context)]);
   return rows;
 }
 
@@ -66,6 +67,18 @@ export async function installTool(tool, { places, machine, downloads, keepDownlo
       if (tool.install.how === 'zip') {
         await unpack(file, folder, tool.install.check, { scratch: join(places.state, 'unpacking'), machine, say });
         say(`unpacked to ${folder}`);
+      } else if (tool.install.how === 'npm') {
+        // The npm beside the Node running this (the pinned one the bootstrap unpacked). The
+        // package goes in its own prefix, not npm's default (the Node folder, which the
+        // bootstrap replaces when Node's pin changes).
+        const npm = join(dirname(process.execPath), 'npm.cmd');
+        const args = ['install', '--global', '--prefix', folder, '--no-audit', '--no-fund', file];
+        say(`running ${npm} ${args.join(' ')}`);
+        const ran = await machine.run(npm, args);
+        if (ran.code !== 0) {
+          say(`npm output: ${ran.output.trim()}`);
+          throw new NotInstalled(`npm stopped with code ${ran.code}`);
+        }
       } else {
         const args = (tool.install.arguments ?? []).map((arg) => arg.replaceAll('{folder}', folder));
         say(`running ${basename(file)} ${args.join(' ')}`);

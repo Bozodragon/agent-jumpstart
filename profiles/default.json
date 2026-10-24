@@ -57,7 +57,10 @@
     {
       "id": "apps-script",
       "question": "Would you like the agent to be able to publish and manage Apps Script projects for you?",
-      "default": false
+      "default": false,
+      "signIn": "A browser window will open. Choose the Google account you use for Apps Script and allow what clasp asks for. Come back here when the page says \"Logged in!\".",
+      "settingsPage": "https://script.google.com/home/usersettings",
+      "settings": "On the Apps Script settings page, check the account shown at the top right is the one you just signed in with. Then click Google Apps Script API and switch it on. Only you can change this setting."
     }
   ],
   "skills": [

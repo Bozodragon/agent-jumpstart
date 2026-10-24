@@ -72,7 +72,8 @@ test('Node, Git and gh install per user from checked downloads, with their folde
   const result = await runWith(where, 'default');
 
   assert.equal(result.code, 0, result.stderr);
-  for (const tool of manifest.tools) checklistSays(result.stdout, tool.name, tool.version);
+  // Tools with `when` (an extra tool's) are installed only when it's ticked.
+  for (const tool of manifest.tools.filter((/** @type {any} */ tool) => !tool.when)) checklistSays(result.stdout, tool.name, tool.version);
 
   assert.ok(await exists(join(programs, 'nodejs', 'node.exe')), 'node.exe unpacked without its top folder');
   assert.ok(await exists(join(programs, 'nodejs', 'npm.cmd')));

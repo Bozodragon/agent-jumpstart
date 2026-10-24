@@ -15,6 +15,7 @@ import { dirname } from 'node:path';
 import { parseArgs } from 'node:util';
 import { openLog } from './log.js';
 import { walkThroughConnectors } from './connectors.js';
+import { setUpExtraTools } from './extra-tools.js';
 import { setUpGitHub } from './github.js';
 import { tryToOpen } from './open-page.js';
 import { findPlaces } from './places.js';
@@ -93,11 +94,13 @@ async function main() {
     const skills = await installSkills(profile, { places, machine, downloads: options.downloads, log });
     const memory = await switchOffAutoMemory({ places, machine, log });
     const connectors = await walkThroughConnectors(profile, choices.connectors, { attended: !unattended, log });
+    const extraTools = await setUpExtraTools(profile, choices.extraTools, { places, machine, downloads: options.downloads, keepDownloads: options.debug, log, attended: !unattended });
 
     /** @type {[string, string][]} */
     const checklist = [
       ['Profile', profile.name],
       ...tools,
+      ...extraTools,
       ['Skills', skills.line],
       ['Memory', memory],
       ['Workspaces', 'None created'],

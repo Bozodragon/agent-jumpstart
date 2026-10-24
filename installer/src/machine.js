@@ -10,6 +10,9 @@
 //   <home>/fake-machine/replies.json      written by a test: what a run returns, keyed by the
 //                                         file name, or the file name and its arguments
 //                                         ("gh.exe auth status"). No reply means code 0, no output.
+//                                         A list of replies answers successive runs in turn
+//                                         (the last one repeats), e.g. a status before and
+//                                         after a sign-in.
 //
 // Every program the installer runs goes through `run`, `runHere` or `runOnScreen`, real or fake,
 // so a debug run's log holds each one with its exit code and full output (for `runOnScreen`,
@@ -130,10 +133,22 @@ function fakeMachine(folder, logged) {
 
   /** @param {string} file @param {string[]} args @param {object} record @returns {Promise<Ran>} */
   async function reply(file, args, record) {
-    await write('runs.json', [...(await read('runs.json', [])), record]);
-    /** @type {Record<string, Partial<Ran>>} */
+    /** @type {{ file: string, args: string[] }[]} */
+    const runs = await read('runs.json', []);
+    await write('runs.json', [...runs, record]);
+    /** @type {Record<string, Partial<Ran> | Partial<Ran>[]>} */
     const replies = await read('replies.json', {});
-    const found = replies[[basename(file), ...args].join(' ')] ?? replies[basename(file)] ?? {};
+    /** @param {string} key @param {(run: { file: string, args: string[] }) => string} keyOf */
+    const answer = (key, keyOf) => {
+      const found = replies[key];
+      if (!Array.isArray(found)) return found;
+      const earlier = runs.filter((run) => keyOf(run) === key).length;
+      return found[Math.min(earlier, found.length - 1)];
+    };
+    const found =
+      answer([basename(file), ...args].join(' '), (run) => [basename(run.file), ...run.args].join(' ')) ??
+      answer(basename(file), (run) => basename(run.file)) ??
+      {};
     return { code: found.code ?? 0, output: found.output ?? '' };
   }
 }
