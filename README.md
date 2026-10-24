@@ -43,11 +43,13 @@ npm install
 node installer/src/main.js --profile york
 ```
 
-It writes `settings.json` and a dated log under `%LOCALAPPDATA%\agent-jumpstart\`. Three overrides let it run with no network and no prompts:
+It writes `settings.json` and a dated log under `%LOCALAPPDATA%\agent-jumpstart\`. With `--debug` (the debug line passes it) the person sees exactly the same questions and checklist, but the log also holds every program the installer ran with its exit code and full output, and the user PATH before and after; and the downloads are kept in `%LOCALAPPDATA%\agent-jumpstart\downloads\` rather than deleted after use.
+
+Three overrides let it run with no network and no prompts:
 
 - `--home <folder>` uses that folder as the user's profile folder, with local AppData inside it. Nothing outside it is touched: changes to the user PATH and environment, and the programs it would run (such as Git's installer), are recorded under `<folder>\fake-machine\` instead.
 - `--answers <file>` answers every question from a JSON file. Nothing is asked and no browser is opened. Its keys are the settings file's: `googleDriveFolder` (Google Drive profiles) or `workspacesLocation` (others), `channel` (`stable` or `nightly`), `github` (true or false), and `workspaces`, `connectors` and `extraTools` (lists of names, or of ids for extra tools, from the profile). A key left out takes its default, as pressing Enter would.
-- `--downloads <folder>` takes downloads from that folder instead of the internet. A `manifest.json` there replaces the pinned one, so a test's stand-in files can pass the checksum check.
+- `--downloads <folder>` takes downloads from that folder instead of the internet. It stands in for the internet only: each file is copied into the installer's own downloads folder as a real download would be, and that folder is never changed. A `manifest.json` there replaces the pinned one, so a test's stand-in files can pass the checksum check.
 
 ## Testing
 

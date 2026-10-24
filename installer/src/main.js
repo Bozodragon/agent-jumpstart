@@ -59,13 +59,15 @@ async function main() {
   }
 
   const places = findPlaces(options.home);
-  const log = openLog(places.logs);
+  const log = openLog(places.logs, { debug: options.debug });
   log.write(`Installer started with Node ${process.version}`);
   log.write(`Profile: ${options.profile}`);
   log.write(`Debug: ${options.debug ? 'on' : 'off'}`);
   log.write(`Home: ${places.home}`);
   if (options.answers) log.write(`Answers from: ${options.answers}`);
   if (options.downloads) log.write(`Downloads from: ${options.downloads}`);
+  const machine = openMachine(places, log);
+  if (options.debug) await logUserPath(machine, log, 'before');
 
   try {
     const profile = await loadProfile(options.profile);
@@ -84,8 +86,7 @@ async function main() {
     await writeFile(places.settings, `${JSON.stringify(settings, null, 2)}\n`);
     log.write(`Settings written to ${places.settings}`);
 
-    const machine = openMachine(places);
-    const tools = await installTools({ places, machine, downloads: options.downloads, log });
+    const tools = await installTools({ places, machine, downloads: options.downloads, keepDownloads: options.debug, log });
     const github = await setUpGitHub(profile, choices.github, { attended: !unattended, places, machine, downloads: options.downloads, log });
     const connectors = await walkThroughConnectors(profile, choices.connectors, { attended: !unattended, log });
 
@@ -112,7 +113,18 @@ async function main() {
     ui.problem(error.message);
     log.write(`Stopped: ${error.message}`);
     return 1;
+  } finally {
+    if (options.debug) await logUserPath(machine, log, 'after');
   }
+}
+
+/**
+ * For a debug run's log, whichever way the run ends.
+ * @param {import('./machine.js').Machine} machine @param {import('./log.js').Log} log @param {string} when
+ */
+async function logUserPath(machine, log, when) {
+  const entries = await machine.userPath().catch((error) => [`(couldn't be read: ${messageOf(error)})`]);
+  log.detail([`User PATH ${when}:`, ...entries.map((entry) => `  ${entry}`)].join('\n'));
 }
 
 process.exitCode = await main();
