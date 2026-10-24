@@ -70,6 +70,27 @@ function listedUnder(text, heading) {
   return entries;
 }
 
+test("a debug run logs a program run in the person's window, though its output went to the screen", async (t) => {
+  const where = await makeHome(t, { github: true });
+  const { tools } = await readManifest();
+  const tool = tools.find((/** @type {any} */ entry) => entry.id === 'gh');
+  const gh = join(programsFolder(where.home), tool.install.folder, tool.install.check);
+  await mkdir(join(gh, '..'), { recursive: true });
+  await writeFile(gh, 'stand-in');
+  await fakeMachine(where.home).setReplies({
+    'gh.exe --version': { output: `gh version ${tool.version} (2026-10-01)\n` },
+    'gh.exe auth status --hostname github.com': { code: 1, output: 'You are not logged into any GitHub hosts.' },
+    'gh.exe auth login --hostname github.com --git-protocol https --web --clipboard': { code: 0 },
+  });
+
+  const result = await runWith(where, 'york', ['--debug']);
+
+  assert.equal(result.code, 0, result.stderr);
+  const { text } = await readOnlyLog(where.home);
+  assert.match(text, /Running in the person's window: .*gh\.exe"? auth login .*\n.*Ran: gh\.exe \(code 0\)\n.*its output went to the person's window/);
+  assert.match(text, /Running: .*gh\.exe"? auth status .*\n.*Ran: gh\.exe \(code 1\)\n.* {2}\| You are not logged into any GitHub hosts\./);
+});
+
 test('a debug run logs the user PATH before and after', async (t) => {
   const { where, nodeFolder } = await aLaptop(t);
 

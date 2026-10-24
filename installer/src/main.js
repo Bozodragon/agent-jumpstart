@@ -15,6 +15,7 @@ import { dirname } from 'node:path';
 import { parseArgs } from 'node:util';
 import { openLog } from './log.js';
 import { walkThroughConnectors } from './connectors.js';
+import { setUpGitHub } from './github.js';
 import { tryToOpen } from './open-page.js';
 import { findPlaces } from './places.js';
 import { openMachine } from './machine.js';
@@ -86,6 +87,7 @@ async function main() {
     log.write(`Settings written to ${places.settings}`);
 
     const tools = await installTools({ places, machine, downloads: options.downloads, keepDownloads: options.debug, log });
+    const github = await setUpGitHub(profile, choices.github, { attended: !unattended, places, machine, downloads: options.downloads, log });
     const connectors = await walkThroughConnectors(profile, choices.connectors, { attended: !unattended, log });
 
     /** @type {[string, string][]} */
@@ -94,6 +96,7 @@ async function main() {
       ...tools,
       ['Workspaces', 'None created'],
       ['Connectors', connectors],
+      ['GitHub', github],
     ];
     ui.summary(checklist, 'Checklist');
     for (const [label, value] of checklist) log.write(`Checklist: ${label}: ${value}`);

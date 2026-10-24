@@ -5,13 +5,16 @@
 //
 //   <home>/fake-machine/environment.json  the user environment variables, as HKCU\Environment
 //                                         holds them; the user PATH is `Path`, joined with `;`
-//   <home>/fake-machine/runs.json         every program it was asked to run: [{ file, args }]
+//   <home>/fake-machine/runs.json         every program it was asked to run: [{ file, args }],
+//                                         with `onScreen: true` for one run in the person's window
 //   <home>/fake-machine/replies.json      written by a test: what a run returns, keyed by the
 //                                         file name, or the file name and its arguments
 //                                         ("gh.exe auth status"). No reply means code 0, no output.
 //
-// Every program the installer runs goes through `run` (or `runHere`), real or fake, so a debug
-// run's log holds each one with its exit code and full output, and nothing else has to log it.
+// Every program the installer runs goes through `run`, `runHere` or `runOnScreen`, real or fake,
+// so a debug run's log holds each one with its exit code and full output (for `runOnScreen`,
+// the command and code only: its output goes to the person's window), and nothing else has to
+// log it.
 import { spawn } from 'node:child_process';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { basename, join } from 'node:path';
@@ -28,6 +31,9 @@ import { basename, join } from 'node:path';
  * @property {(file: string, args: string[]) => Promise<Ran>} runHere Like `run`, but always runs
  *   the program for real, even on the fake machine. Only for programs that change nothing but
  *   the installer's own folders, such as tar.exe unpacking a download into its scratch folder.
+ * @property {(file: string, args: string[]) => Promise<number>} runOnScreen Runs a program in the
+ *   person's window, so they see what it prints and can answer it, and waits for it. Returns its
+ *   exit code, or -1 if it couldn't start.
  */
 
 /** @typedef {(file: string, args: string[]) => Promise<Ran>} Runner */
@@ -50,8 +56,18 @@ export function openMachine(places, log) {
     log.detail(output ? output.split(/\r?\n/).map((line) => `  | ${line}`).join('\n') : '  (no output)');
     return ran;
   };
+  // A program in the person's window writes straight to it: catching its output would take the
+  // real terminal away from it (gh auth login needs one), so only the command and code are logged.
+  /** @param {Machine['runOnScreen']} run @returns {Machine['runOnScreen']} */
+  const loggedOnScreen = (run) => async (file, args) => {
+    log.detail(`Running in the person's window: ${[file, ...args].map(quoted).join(' ')}`);
+    const code = await run(file, args);
+    log.detail(`Ran: ${basename(file)} (code ${code})`);
+    log.detail("  (its output went to the person's window, not the log)");
+    return code;
+  };
   const machine = places.fakeMachine ? fakeMachine(places.fakeMachine, logged) : realMachine(logged(runProgram));
-  return { ...machine, runHere: logged(runProgram) };
+  return { ...machine, runOnScreen: loggedOnScreen(machine.runOnScreen), runHere: logged(runProgram) };
 }
 
 /** @param {string} arg */
@@ -106,14 +122,20 @@ function fakeMachine(folder, logged) {
     async setUserVariable(name, value) {
       await write('environment.json', { ...(await environment()), [name]: value });
     },
-    run: logged(async (file, args) => {
-      await write('runs.json', [...(await read('runs.json', [])), { file, args }]);
-      /** @type {Record<string, Partial<Ran>>} */
-      const replies = await read('replies.json', {});
-      const reply = replies[[basename(file), ...args].join(' ')] ?? replies[basename(file)] ?? {};
-      return { code: reply.code ?? 0, output: reply.output ?? '' };
-    }),
+    run: logged((file, args) => reply(file, args, { file, args })),
+    async runOnScreen(file, args) {
+      return (await reply(file, args, { file, args, onScreen: true })).code;
+    },
   };
+
+  /** @param {string} file @param {string[]} args @param {object} record @returns {Promise<Ran>} */
+  async function reply(file, args, record) {
+    await write('runs.json', [...(await read('runs.json', [])), record]);
+    /** @type {Record<string, Partial<Ran>>} */
+    const replies = await read('replies.json', {});
+    const found = replies[[basename(file), ...args].join(' ')] ?? replies[basename(file)] ?? {};
+    return { code: found.code ?? 0, output: found.output ?? '' };
+  }
 }
 
 /** @param {string} name */
@@ -170,6 +192,13 @@ function realMachine(runProgram) {
       process.env[name] = value;
     },
     run: runProgram,
+    runOnScreen(file, args) {
+      return new Promise((resolve) => {
+        const child = spawn(file, args, { stdio: 'inherit' });
+        child.once('error', () => resolve(-1));
+        child.once('close', (code) => resolve(code ?? -1));
+      });
+    },
   };
 }
 
