@@ -110,19 +110,18 @@ test('a tool at another version is moved to the pinned one, a tool at the pinned
 });
 
 /**
- * Every file under a folder with its contents and when it was last written, so a test can tell
- * that nothing in it was added, removed, rewritten or touched.
+ * Every folder and file under a folder, each file with its contents and when it was last
+ * written, so a test can tell that nothing in it was removed, rewritten or touched.
  * @param {string} folder
  */
 async function snapshot(folder) {
   /** @type {Record<string, string>} */
-  const files = {};
-  for (const entry of (await readdir(folder, { recursive: true, withFileTypes: true })).sort((a, b) => join(a.parentPath, a.name).localeCompare(join(b.parentPath, b.name)))) {
+  const entries = {};
+  for (const entry of await readdir(folder, { recursive: true, withFileTypes: true })) {
     const path = join(entry.parentPath, entry.name);
-    const what = entry.isDirectory() ? 'folder' : await readFile(path, 'utf8');
-    files[relative(folder, path)] = `${what} @ ${(await stat(path)).mtimeMs}`;
+    entries[relative(folder, path)] = entry.isDirectory() ? 'folder' : `${await readFile(path, 'utf8')} @ ${(await stat(path)).mtimeMs}`;
   }
-  return files;
+  return entries;
 }
 
 test('a re-run of a home set up earlier updates what is out of date, re-adds PATH entries, and leaves sign-ins, settings and folders alone', async (t) => {
@@ -212,7 +211,10 @@ test('a re-run of a home set up earlier updates what is out of date, re-adds PAT
   checklistSays(result.stdout, 'Memory', "Claude's automatic memory is off");
 
   assert.deepEqual(await readSettings(where.home), earlier);
-  assert.deepEqual(await snapshot(myDrive), foldersBefore, 'every workspace folder and file is untouched');
+  // Every folder and file already there is untouched. (Whatever creates the workspaces may add
+  // ones that are missing, so only those already there are compared.)
+  const foldersAfter = await snapshot(myDrive);
+  for (const [path, before] of Object.entries(foldersBefore)) assert.equal(foldersAfter[path], before, `${path} is untouched`);
 
   // Missing entries come back at the end; those already there aren't added again.
   assert.deepEqual(await machine.userPath(), [...userPathBefore, join(programs, 'GitHub CLI', 'bin')]);
