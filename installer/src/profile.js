@@ -19,9 +19,21 @@ const profilesFolder = fileURLToPath(new URL('../../profiles/', import.meta.url)
  * @property {string} [connectorsPage] The address of the page where the person connects the connectors they ticked.
  * @property {{ signUpPage: string, email: string }} [github] For the person who chooses to set up
  *   GitHub: the sign-up page, and which email to sign up with, in words ("your university email address").
- * @property {{ id: string, question: string, default: boolean }[]} extraTools
+ * @property {ExtraTool[]} extraTools
  * @property {{ source: string, names?: string[] }[]} skills Installed with the skills CLI. A source
  *   given without names is the path to one skill (`owner/repo/path/to/skill`), named by its last part.
+ */
+
+/**
+ * Something extra the person can tick. The manifest entries whose `when` is its id are
+ * installed only when it's ticked.
+ * @typedef {object} ExtraTool
+ * @property {string} id
+ * @property {string} question
+ * @property {boolean} default
+ * @property {string} [signIn] Said before a tool's browser sign-in starts.
+ * @property {string} [settingsPage] A page the person must change a setting on themselves.
+ * @property {string} [settings] What to do on that page.
  */
 
 /** @typedef {{ name: string, default: boolean }} Choice */
