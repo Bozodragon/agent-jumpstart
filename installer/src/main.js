@@ -15,6 +15,7 @@ import { dirname } from 'node:path';
 import { parseArgs } from 'node:util';
 import { openLog } from './log.js';
 import { walkThroughConnectors } from './connectors.js';
+import { setUpGitHub } from './github.js';
 import { tryToOpen } from './open-page.js';
 import { findPlaces } from './places.js';
 import { openMachine } from './machine.js';
@@ -87,6 +88,7 @@ async function main() {
 
     const machine = openMachine(places);
     const tools = await installTools({ places, machine, downloads: options.downloads, log });
+    const github = await setUpGitHub(profile, choices.github, { attended: !unattended, places, machine, downloads: options.downloads, log });
     const skills = await installSkills(profile, { places, machine, downloads: options.downloads, log });
     const memory = await switchOffAutoMemory({ places, machine, log });
     const connectors = await walkThroughConnectors(profile, choices.connectors, { attended: !unattended, log });
@@ -99,6 +101,7 @@ async function main() {
       ['Memory', memory],
       ['Workspaces', 'None created'],
       ['Connectors', connectors],
+      ['GitHub', github],
     ];
     if (skills.rows.length > 0) ui.summary(skills.rows, 'Skills');
     ui.summary(checklist, 'Checklist');
