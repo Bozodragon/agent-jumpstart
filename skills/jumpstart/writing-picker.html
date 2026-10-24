@@ -1,0 +1,496 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>How you like things written</title>
+
+<script>
+/*
+  THE EXAMPLES AND SWITCHES. Edit them here; nothing below this block needs to change.
+
+  Everyone sees the same examples with the same starting switches, so a trainer can talk a room
+  through one screen. Keep the characters < and > out of all text.
+
+  switches: shown in this order, and copied in this order. Each has
+    id       one of the four the page knows how to show:
+               length    which points appear. Options go shortest first; a point with
+                         from: "medium" appears from that option onwards.
+               tone      which wording appears. Option values are the keys of a point's text.
+               layout    option values "bullets" or "paragraphs".
+               headings  option values "yes" or "no".
+             Leave a switch out and the page stops showing that difference.
+    label    the switch's name on the page.
+    start    the option value everyone starts on.
+    options  value (what the page uses), label (the button), and line: what is copied, and
+             becomes a line of the person's profile when they choose it.
+
+  examples: the tabs, in order. Each has
+    name     the tab.
+    ask      what the person is imagined to have asked, shown above the example.
+    opening  and closing: a point shown before and after the sections (closing is optional).
+    sections a heading and its points.
+  A point is { text, from }. text is one string for every tone, or one string per tone value,
+  such as { warm: "...", plain: "...", formal: "..." }. from is optional: leave it out and the
+  point shows at every length. Write each point as a full sentence: in paragraphs they are joined.
+*/
+window.PICKER = {
+  switches: [
+    {
+      id: "length", label: "Length", start: "medium",
+      options: [
+        { value: "short", label: "Short", line: "Short: the main point and what happens next" },
+        { value: "medium", label: "Medium", line: "Medium length: the main points with a little detail" },
+        { value: "detailed", label: "Detailed", line: "Detailed: the background, the reasons and the next steps" },
+      ],
+    },
+    {
+      id: "tone", label: "Tone", start: "plain",
+      options: [
+        { value: "warm", label: "Warm", line: "A warm, friendly tone" },
+        { value: "plain", label: "Plain", line: "A plain, direct tone" },
+        { value: "formal", label: "Formal", line: "A formal tone" },
+      ],
+    },
+    {
+      id: "layout", label: "Layout", start: "bullets",
+      options: [
+        { value: "bullets", label: "Bullet points", line: "Bullet points rather than paragraphs" },
+        { value: "paragraphs", label: "Paragraphs", line: "Paragraphs rather than bullet points" },
+      ],
+    },
+    {
+      id: "headings", label: "Headings", start: "no",
+      options: [
+        { value: "yes", label: "Headings", line: "Headings to break up anything longer than a few lines" },
+        { value: "no", label: "No headings", line: "No headings" },
+      ],
+    },
+  ],
+
+  examples: [
+    {
+      name: "A report summary",
+      ask: "Can you sum up the staff survey results for me?",
+      opening: { text: {
+        warm: "Here's the gist of the staff survey: mostly good news, with one thing worth a closer look.",
+        plain: "The staff survey is mostly positive, with one area that needs attention.",
+        formal: "Please find below a summary of the staff survey results, which are broadly positive with one area requiring attention.",
+      } },
+      sections: [
+        { heading: "What went well", points: [
+          { text: {
+            warm: "Nearly everyone, 86%, feels their team works well together, up from 79% last year.",
+            plain: "86% say their team works well together, up from 79% last year.",
+            formal: "86% of respondents report that their team works well together, an increase from 79% last year.",
+          } },
+          { from: "medium", text: {
+            warm: "People especially liked the new hybrid working pattern.",
+            plain: "The hybrid working pattern was the most praised change.",
+            formal: "The revised hybrid working pattern received the most positive comments.",
+          } },
+          { from: "detailed", text: {
+            warm: "64% of staff replied, the most in five years, so you can trust these numbers.",
+            plain: "64% of staff replied, the highest rate in five years, so the figures are reliable.",
+            formal: "The response rate of 64% is the highest in five years, so the figures may be considered reliable.",
+          } },
+        ] },
+        { heading: "What needs attention", points: [
+          { text: {
+            warm: "Workload is the sore point: only 41% think theirs is manageable.",
+            plain: "Only 41% say their workload is manageable.",
+            formal: "Only 41% of respondents consider their workload manageable.",
+          } },
+          { from: "medium", text: {
+            warm: "Most of the comments about workload mention end-of-term reporting.",
+            plain: "Most workload comments mention end-of-term reporting.",
+            formal: "The majority of comments on workload refer to end-of-term reporting.",
+          } },
+          { from: "detailed", text: {
+            warm: "Professional services teams felt it most, at 33%.",
+            plain: "Professional services teams scored lowest, at 33%.",
+            formal: "Professional services teams recorded the lowest score, at 33%.",
+          } },
+        ] },
+        { heading: "What happens next", points: [
+          { text: {
+            warm: "The leadership team talk the results through on 12 November.",
+            plain: "The leadership team discuss the results on 12 November.",
+            formal: "The results will be discussed by the leadership team on 12 November.",
+          } },
+          { from: "detailed", text: {
+            warm: "If you'd like to add comments first, they're due by 5 November.",
+            plain: "Comments for that meeting are due by 5 November.",
+            formal: "Any comments for that meeting should be submitted by 5 November.",
+          } },
+        ] },
+      ],
+      closing: { from: "medium", text: {
+        warm: "Shout if you'd like me to dig into any of it.",
+        plain: "I can go into any part in more detail.",
+        formal: "I would be happy to provide further detail on any section.",
+      } },
+    },
+
+    {
+      name: "A meeting briefing",
+      ask: "Brief me for this afternoon's budget meeting.",
+      opening: { text: {
+        warm: "Here's what you need for the 2pm budget meeting with Finance.",
+        plain: "Budget meeting with Finance, 2pm today.",
+        formal: "Below is a briefing for this afternoon's budget meeting with Finance at 2pm.",
+      } },
+      sections: [
+        { heading: "Why it matters", points: [
+          { text: {
+            warm: "The big item is next year's events budget, which Finance would like to cut by 10%.",
+            plain: "The main item is next year's events budget: Finance want to cut it by 10%.",
+            formal: "The principal item is next year's events budget, which Finance propose to reduce by 10%.",
+          } },
+          { from: "medium", text: {
+            warm: "Your proposal in September asked to keep it as it is.",
+            plain: "Your September proposal asked to keep it the same.",
+            formal: "Your proposal of September requested that it remain unchanged.",
+          } },
+          { from: "detailed", text: {
+            warm: "Last year's events came in £3,200 under budget, so expect Finance to bring that up.",
+            plain: "Last year's events came in £3,200 under budget, which Finance are likely to raise.",
+            formal: "Last year's events were £3,200 under budget, a point Finance are likely to raise.",
+          } },
+        ] },
+        { heading: "Who's there", points: [
+          { from: "medium", text: {
+            warm: "Sam Patel from Finance is chairing, and Dana Hughes from Estates is joining for the venue costs.",
+            plain: "Sam Patel (Finance) is chairing; Dana Hughes (Estates) is joining for the venue costs.",
+            formal: "Sam Patel of Finance will chair, and Dana Hughes of Estates will attend to discuss venue costs.",
+          } },
+          { from: "detailed", text: {
+            warm: "Dana's likely to ask whether the spring fair could move to a cheaper room.",
+            plain: "Dana will probably ask whether the spring fair can move to a cheaper room.",
+            formal: "Dana is expected to ask whether the spring fair could be held in a less expensive room.",
+          } },
+        ] },
+        { heading: "What to bring", points: [
+          { text: {
+            warm: "Have the attendance figures from the last two open days to hand.",
+            plain: "Bring the attendance figures from the last two open days.",
+            formal: "Please have the attendance figures from the last two open days available.",
+          } },
+          { from: "detailed", text: {
+            warm: "They're in the Events folder on Drive, in 'Open day attendance 2026'.",
+            plain: "They're in the Events folder on Drive: 'Open day attendance 2026'.",
+            formal: "They may be found in the Events folder on Drive, under 'Open day attendance 2026'.",
+          } },
+        ] },
+      ],
+      closing: { from: "medium", text: {
+        warm: "Good luck! I can draft a few talking points if that would help.",
+        plain: "I can draft talking points if you'd like.",
+        formal: "I can prepare talking points should you require them.",
+      } },
+    },
+
+    {
+      name: "A plan",
+      ask: "Help me plan the induction week for our three new starters.",
+      opening: { text: {
+        warm: "Here's a first go at the week. I've kept Monday light so nobody's swamped.",
+        plain: "A plan for the induction week, Monday to Friday.",
+        formal: "Please find below a proposed plan for the new starters' induction week.",
+      } },
+      sections: [
+        { heading: "Before they arrive", points: [
+          { text: {
+            warm: "Order their laptops and building passes by the end of next week.",
+            plain: "Order laptops and building passes by the end of next week.",
+            formal: "Laptops and building passes should be ordered by the end of next week.",
+          } },
+          { from: "medium", text: {
+            warm: "Ask each manager to keep an hour free on Monday morning.",
+            plain: "Ask each manager to set aside an hour on Monday morning.",
+            formal: "Each manager should be asked to reserve an hour on Monday morning.",
+          } },
+        ] },
+        { heading: "Monday and Tuesday", points: [
+          { text: {
+            warm: "A welcome, getting their IT set up, and a wander round campus.",
+            plain: "Welcome, IT set-up and a tour of campus.",
+            formal: "A welcome session, IT set-up and a campus tour.",
+          } },
+          { from: "medium", text: {
+            warm: "Lunch with the team on Monday, so they meet everyone early.",
+            plain: "Team lunch on Monday.",
+            formal: "A team lunch on Monday.",
+          } },
+          { from: "detailed", text: {
+            warm: "Tuesday afternoon is for the required training modules, about three hours of it.",
+            plain: "Required training modules on Tuesday afternoon, about three hours.",
+            formal: "The required training modules on Tuesday afternoon, taking approximately three hours.",
+          } },
+        ] },
+        { heading: "Wednesday to Friday", points: [
+          { text: {
+            warm: "Time shadowing their own teams, with a quick check-in each afternoon.",
+            plain: "Shadowing in their own teams, with a check-in each afternoon.",
+            formal: "Shadowing within their own teams, with a check-in each afternoon.",
+          } },
+          { from: "detailed", text: {
+            warm: "A relaxed chat on Friday to catch anything that's still unclear.",
+            plain: "A short chat on Friday about anything still unclear.",
+            formal: "A short meeting on Friday to address any outstanding questions.",
+          } },
+        ] },
+      ],
+      closing: { from: "medium", text: {
+        warm: "Want me to pop these in the calendar once you're happy?",
+        plain: "I can add these to the calendar when you're ready.",
+        formal: "Once you have approved the plan, I can add these sessions to the calendar.",
+      } },
+    },
+  ],
+};
+</script>
+
+<style>
+  :root { color-scheme: light dark; --serif: Charter, "Bitstream Charter", "Sitka Text", Cambria, Georgia, serif; }
+  [hidden] { display: none !important; }
+  body { font-family: var(--font-sans, system-ui, sans-serif); color: var(--foreground, inherit); line-height: 1.45; }
+  .page { display: flex; flex-direction: column; gap: 20px; padding: 4px 0 8px; }
+  .intro { margin: 0; color: var(--muted-foreground, inherit); max-width: 62ch; }
+
+  .switches { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 24px; }
+  .switch { border: 0; margin: 0; padding: 0; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+  .switch legend { padding: 0; font-size: 13px; color: var(--muted-foreground, inherit); }
+  .seg { display: flex; flex-wrap: wrap; gap: 2px; padding: 2px; border: 1px solid var(--border, #8884); border-radius: calc(var(--radius, 8px) * 0.75); align-self: flex-start; }
+  .seg label { position: relative; padding: 5px 12px; font-size: 13px; border-radius: calc(var(--radius, 8px) * 0.55); color: var(--muted-foreground, inherit); cursor: pointer; }
+  .seg label:hover { color: var(--foreground, inherit); }
+  .seg input { position: absolute; inset: 0; margin: 0; opacity: 0; cursor: pointer; }
+  .seg label:has(input:checked) { background: var(--foreground, CanvasText); color: var(--background, Canvas); }
+  .seg label:has(input:focus-visible), .tabs label:has(input:focus-visible) { outline: 2px solid var(--ring, Highlight); outline-offset: 1px; }
+
+  .example { display: flex; flex-direction: column; gap: 12px; }
+  .tabs { display: flex; flex-wrap: wrap; gap: 4px 20px; border-bottom: 1px solid var(--border, #8884); }
+  .tabs label { position: relative; padding: 6px 0 8px; font-size: 14px; color: var(--muted-foreground, inherit); cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+  .tabs label:hover { color: var(--foreground, inherit); }
+  .tabs input { position: absolute; inset: 0; margin: 0; opacity: 0; cursor: pointer; }
+  .tabs label:has(input:checked) { color: var(--foreground, inherit); border-bottom-color: var(--foreground, currentColor); }
+
+  .ask { align-self: flex-end; max-width: 80%; margin: 4px 0 0; padding: 8px 14px; font-size: 14px; border-radius: var(--radius, 8px); background: var(--secondary, #8882); color: var(--secondary-foreground, inherit); }
+  .reply { font-family: var(--serif); font-size: 16px; line-height: 1.6; max-width: 64ch; padding: 20px 24px; border-radius: var(--radius, 8px); background: var(--card, transparent); color: var(--card-foreground, inherit); border: 1px solid var(--border, #8884); }
+  .reply > :first-child { margin-top: 0; }
+  .reply > :last-child { margin-bottom: 0; }
+  .reply p { margin: 0 0 12px; }
+  .reply h3 { font-family: var(--serif); font-size: 16px; font-weight: 700; margin: 18px 0 4px; }
+  .reply ul { margin: 0 0 12px; padding-left: 1.25em; }
+  .reply li { margin: 0 0 4px; }
+  .reply.fresh { animation: settle 180ms ease-out; }
+  @keyframes settle { from { opacity: 0.35; } to { opacity: 1; } }
+  @media (prefers-reduced-motion: reduce) { .reply.fresh { animation: none; } }
+
+  .extra { display: flex; flex-direction: column; gap: 6px; }
+  .extra label { font-size: 13px; color: var(--muted-foreground, inherit); }
+  textarea { width: 100%; box-sizing: border-box; font: inherit; font-size: 14px; color: var(--foreground, inherit); background: var(--input, transparent); border: 1px solid var(--border, #8884); border-radius: calc(var(--radius, 8px) * 0.75); padding: 6px 8px; resize: none; overflow: hidden; display: block; }
+  textarea:focus { outline: 2px solid var(--ring, Highlight); outline-offset: 0; }
+
+  .finish { display: flex; flex-direction: column; gap: 10px; }
+  .copy { align-self: flex-start; font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; border: none; padding: 8px 16px; border-radius: calc(var(--radius, 8px) * 0.75); background: var(--primary, ButtonFace); color: var(--primary-foreground, ButtonText); }
+  .copy:focus-visible { outline: 2px solid var(--ring, Highlight); outline-offset: 2px; }
+  .status { margin: 0; font-size: 13px; color: var(--muted-foreground, inherit); min-height: 1.2em; }
+  .output { font-family: var(--font-mono, monospace); font-size: 13px; background: var(--code-background, transparent); color: var(--code-foreground, inherit); }
+  .error { color: var(--destructive, inherit); }
+
+  @media (max-width: 520px) {
+    .switches { grid-template-columns: 1fr; }
+    .reply { padding: 16px; }
+    .ask { max-width: 92%; }
+  }
+</style>
+</head>
+<body>
+<div class="page" id="page">
+  <p class="intro">Here's how I might write a few everyday things for you. Flip the switches until they read the way you like, then copy your choices into the chat. Telling me in the chat works just as well.</p>
+</div>
+
+<script>
+(() => {
+  const page = document.getElementById('page');
+  const data = window.PICKER;
+  if (!data || !Array.isArray(data.switches) || !Array.isArray(data.examples) || !data.examples.length) {
+    page.append(el('p', 'error', "The examples couldn't be shown here. Tell me in the chat how you like things written instead."));
+    return;
+  }
+
+  /** The heading the skill looks for when this is pasted. SKILL.md relies on it. */
+  const HEADER = 'How I like things written:';
+
+  const choice = {};
+  for (const s of data.switches) choice[s.id] = s.start;
+  let shown = 0;
+
+  function el(tag, className, text) {
+    const node = document.createElement(tag);
+    if (className) node.className = className;
+    if (text !== undefined) node.textContent = text;
+    return node;
+  }
+
+  function grow(area) {
+    area.style.height = 'auto';
+    area.style.height = area.scrollHeight + 2 + 'px';
+  }
+
+  function radios(name, options, isChecked, onPick, groupClass, labelClass) {
+    const group = el('div', groupClass);
+    for (const option of options) {
+      const label = el('label', labelClass);
+      const input = el('input');
+      input.type = 'radio';
+      input.name = name;
+      input.value = option.value;
+      input.checked = isChecked(option);
+      input.addEventListener('change', () => { if (input.checked) onPick(option); });
+      label.append(input, document.createTextNode(option.label));
+      group.append(label);
+    }
+    return group;
+  }
+
+  // The switches.
+  const switches = el('div', 'switches');
+  for (const s of data.switches) {
+    const set = el('fieldset', 'switch');
+    set.append(el('legend', '', s.label));
+    set.append(radios('switch-' + s.id, s.options, (o) => o.value === s.start,
+      (o) => { choice[s.id] = o.value; draw(); refresh(); }, 'seg', ''));
+    switches.append(set);
+  }
+  page.append(switches);
+
+  // The example tabs, the question and the reply.
+  const example = el('section', 'example');
+  const tabs = radios('example', data.examples.map((e, i) => ({ value: String(i), label: e.name })),
+    (o) => o.value === '0', (o) => { shown = Number(o.value); draw(); }, 'tabs', '');
+  tabs.setAttribute('role', 'radiogroup');
+  tabs.setAttribute('aria-label', 'Examples');
+  const ask = el('p', 'ask');
+  const reply = el('div', 'reply');
+  reply.setAttribute('aria-live', 'polite');
+  example.append(tabs, ask, reply);
+  page.append(example);
+
+  const lengthOrder = (data.switches.find((s) => s.id === 'length') || { options: [] }).options.map((o) => o.value);
+
+  function visible(point) {
+    if (!point) return false;
+    if (!point.from || !('length' in choice)) return true;
+    return lengthOrder.indexOf(choice.length) >= lengthOrder.indexOf(point.from);
+  }
+
+  function words(point) {
+    const text = point.text;
+    if (typeof text === 'string') return text;
+    if (!text) return '';
+    if ('tone' in choice && text[choice.tone]) return text[choice.tone];
+    return Object.values(text)[0] || '';
+  }
+
+  function draw() {
+    const e = data.examples[shown];
+    ask.textContent = e.ask || '';
+    ask.hidden = !e.ask;
+    const bullets = choice.layout !== 'paragraphs';
+    const headings = choice.headings === 'yes';
+    const parts = [];
+    if (visible(e.opening)) parts.push(el('p', '', words(e.opening)));
+    for (const section of e.sections || []) {
+      const points = (section.points || []).filter(visible).map(words);
+      if (!points.length) continue;
+      if (headings && section.heading) parts.push(el('h3', '', section.heading));
+      if (bullets) {
+        const list = el('ul');
+        for (const text of points) list.append(el('li', '', text));
+        parts.push(list);
+      } else {
+        parts.push(el('p', '', points.join(' ')));
+      }
+    }
+    if (visible(e.closing)) parts.push(el('p', '', words(e.closing)));
+    reply.replaceChildren(...parts);
+    reply.classList.remove('fresh');
+    void reply.offsetWidth;
+    reply.classList.add('fresh');
+  }
+
+  // Anything else, and the copy.
+  const extra = el('div', 'extra');
+  const extraLabel = el('label', '', 'Anything else about how you like things written?');
+  extraLabel.htmlFor = 'extra';
+  const extraField = el('textarea');
+  extraField.id = 'extra';
+  extraField.rows = 1;
+  extraField.addEventListener('input', () => { grow(extraField); refresh(); });
+  extra.append(extraLabel, extraField);
+  page.append(extra);
+
+  const finish = el('div', 'finish');
+  const copy = el('button', 'copy', 'Copy my choices');
+  copy.type = 'button';
+  const status = el('p', 'status');
+  status.setAttribute('role', 'status');
+  const output = el('textarea', 'output');
+  output.readOnly = true;
+  output.hidden = true;
+  output.setAttribute('aria-label', 'Your choices, to paste into the chat');
+  finish.append(copy, status, output);
+  page.append(finish);
+
+  const tidy = (text) => String(text || '').replace(/\s+/g, ' ').trim();
+
+  function choices() {
+    const lines = [HEADER];
+    for (const s of data.switches) {
+      const option = s.options.find((o) => o.value === choice[s.id]);
+      if (option && option.line) lines.push('- ' + tidy(option.line));
+    }
+    if (tidy(extraField.value)) lines.push('- ' + tidy(extraField.value));
+    return lines.join('\n');
+  }
+
+  function show(text, message) {
+    output.hidden = false;
+    output.value = text;
+    grow(output);
+    status.textContent = message;
+  }
+
+  function refresh() {
+    if (!output.hidden && output.value !== choices()) show(choices(), 'You changed something since you copied it: copy it again.');
+  }
+
+  copy.addEventListener('click', () => {
+    const text = choices();
+    show(text, '');
+    output.focus();
+    output.select();
+    let copied = false;
+    try { copied = document.execCommand('copy'); } catch (error) { copied = false; }
+    if (copied) {
+      status.textContent = 'Copied. Paste it into the chat and send it.';
+      return;
+    }
+    const fallback = 'This page couldn\'t copy it. Select the text below, copy it and paste it into the chat.';
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(
+        () => { status.textContent = 'Copied. Paste it into the chat and send it.'; },
+        () => { status.textContent = fallback; output.select(); },
+      );
+    } else {
+      status.textContent = fallback;
+    }
+  });
+
+  draw();
+})();
+</script>
+</body>
+</html>

@@ -1,6 +1,6 @@
 ---
 name: jumpstart
-description: Set up your agent in your first session. It learns who you are from what you already have, shows you what it found, and keeps nothing until you've said it's right.
+description: Set up your agent in your first session. It learns who you are from what you already have, shows you what it found, and keeps nothing until you've said it's right. Then it sets up your workspaces.
 disable-model-invocation: true
 ---
 
@@ -55,9 +55,24 @@ Tell the person, in a line, that you're having a look now.
 
 ## 5. While it reads
 
-In the same turn, ask what they want help with: one question card built from [`help-categories.md`](help-categories.md), one multi-select question per group, with the labels and descriptions exactly as written there. The first question is headed "Help" and reads "What sort of things do you want help with?"; the rest are headed "More help" and read "And any of these?". Each category they pick, and anything they type instead, becomes one line of the profile's "What you want help with" section, and nothing more.
+Two questions while the research runs, one after the other.
 
-Done when they have answered every question asked here. If the research hasn't reported by then, say you're still reading and will show them what you found shortly; its report arrives by itself.
+**What they want help with.** In the same turn as step 4, ask with one question card built from [`help-categories.md`](help-categories.md), one multi-select question per group, with the labels and descriptions exactly as written there. The first question is headed "Help" and reads "What sort of things do you want help with?"; the rest are headed "More help" and read "And any of these?". Each category they pick, and anything they type instead, becomes one line of the profile's "What you want help with" section, and nothing more.
+
+**How they like things written.** Once they've answered, show the writing picker: fixed examples, the same for everyone, that change as they flip switches for length, tone, bullets and headings.
+
+1. Read [`writing-picker.html`](writing-picker.html) and pass it as it is, unchanged: preview it with `html_preview` for its `contentHeight`, then show it with `html_render` at that height, titled "How you like things written".
+2. Below it, in one line: they can flip the switches until the examples read the way they like and paste what the page copies, or just tell you in their own words.
+
+If the page tools aren't available, ask in one line how they like things written: long or short, friendly or formal, bullet points or paragraphs, headings or none.
+
+Their reply becomes the profile's "How you like things written" section, and nothing more:
+
+- **Text starting "How I like things written:"**, pasted from the page: each line under it becomes one line of the section, word for word.
+- **Their own words**: one short line per preference they state, in the page's style ("A warm, friendly tone", "Bullet points rather than paragraphs"), and none they didn't.
+- **No preference**, or they'd rather skip it: the section starts empty; they can add lines on the profile page.
+
+Done when they have answered the help card and said how they like things written, or chosen to skip it. If the research hasn't reported by then, say you're still reading and will show them what you found shortly; its report arrives by itself.
 
 ## 6. Show the profile
 
@@ -92,9 +107,48 @@ Now you write, in the top workspace (the folder you're running in): rules in its
 
 Done when `CLAUDE.md`, `me.md`, `work.md` and `people.md` are here, `CLAUDE.md` matches the template with only the path filled in, every line of the three files is one the person approved, and the settings file turns memory off (or they've been told why not).
 
-## 8. Finish
+## 8. Write the workspaces
 
-Setting up their workspaces isn't built yet. Tell them, in two or three sentences, what you kept and where: in this folder, `CLAUDE.md` holds how you'll work with them, and `me.md`, `work.md` and `people.md` hold what they approved about themselves, their work and the people they work with, all files they can open and read at any time. Then say the next part of the setup is coming, and stop.
+Tell them in a line that you're setting up their workspaces and checking their services, then work through steps 8 to 10 without stopping.
+
+For each of their `workspaces`, in the folder of that name inside this one:
+
+1. **Put old files aside**, as in step 7.1, for its `CLAUDE.md` and `CLAUDE.local.md`.
+2. **Its agent instructions.** Its template is the file in [`workspaces/`](workspaces/) named after it, such as `workspaces/Thinking space.md`. Write the workspace's `CLAUDE.md` as that template's header (above its line) says: its fixed lines word for word, its slots filled from the approved profile. The top `CLAUDE.md` loads in every workspace, so the workspace's file holds only what the workspace is for and how to help there.
+   With no template of that name, write a `CLAUDE.md` in the templates' shape: a heading with the workspace's name, a line on what it's for (from its name and what the person told you), and two to four lines on how to help there.
+   Either way the file is standing guidance, never a script: the first conversation starts from whatever the person brings, so it holds no greeting, opening question or tour.
+3. **Memory off**, as in step 7.4, in the workspace's own `.claude\settings.local.json`.
+
+Done when every chosen workspace has a `CLAUDE.md` whose fixed lines match its template, whose filled lines rest only on the approved profile, and whose folder's settings turn memory off (or they've been told why not).
+
+## 9. Add the workspaces to T3
+
+So each workspace is waiting in T3's sidebar. Call `t3_project_list`, then, for each workspace whose folder isn't listed, `t3_project_create` with `title` set to the workspace's name and `workspaceRoot` to its full path. Always pass `workspaceRoot`: without it T3 makes a new, empty project of its own. A reply that the folder is already registered means it's there.
+
+If the T3 tools aren't available or a call fails, note the workspace and the reason, and carry on.
+
+Done when every workspace is in `t3_project_list`, or noted as not added.
+
+## 10. Check the connectors
+
+For each of their `connectors`, make the one harmless read [`connector-checks.md`](connector-checks.md) names for it. For a connector it doesn't name, use the read that touches the least, such as listing names or titles. Make the read even when the research already used that service: this check is what you report. Each comes out as one of:
+
+- **Working**: the read came back, even with nothing in it.
+- **Not connected**: no tools for it in this session. The fix: on claude.ai's Connectors page, click Connect next to it and sign in, then start a new conversation.
+- **Not working**: the tools are there but the read failed. Keep what went wrong, in plain words ("Google said you need to sign in again").
+
+Done when every connector has a result.
+
+## 11. Finish
+
+Close with one short message in plain words:
+
+- **What you kept**: in this folder, `CLAUDE.md` holds how you'll work with them, and `me.md`, `work.md` and `people.md` hold what they approved about themselves, their work and the people they work with. They can open and change these files at any time, and you'll suggest additions and make them only once they agree.
+- **Their workspaces**: each one, with a line on what it's for and whether it's in T3. For one that isn't, tell them to add its folder as a project in T3, giving the full path.
+- **Their services**: each one by name, working or not, from step 10, with the fix for each that isn't.
+- **Where to start**: open the workspace whose template is marked **Open first** in T3 and start a conversation there with whatever's on their mind. If they didn't choose that one, name the first of their `workspaces`; if they chose none, this folder.
+
+Done when that message is sent. Jumpstart ends there; carry on with whatever they ask next.
 
 ## The profile
 
@@ -122,7 +176,8 @@ The sections, in this order and with these titles:
 
 1. **About you** (`addable: false`): Name, Email, Job title and Team, as labelled items.
 2. **What you want help with**: one line per answer from step 5.
-3. **Your work**: what they work on, from the report's "Their work", in plain words addressed to them ("Runs the open day campaign").
-4. **People you work with**: one line each, "Name, role, team, email: how they relate to your work". Hold every line to the **Colleagues** rule in [`research-brief.md`](research-brief.md) and drop whatever it doesn't allow.
+3. **How you like things written**: one line per preference from step 5.
+4. **Your work**: what they work on, from the report's "Their work", in plain words addressed to them ("Runs the open day campaign").
+5. **People you work with**: one line each, "Name, role, team, email: how they relate to your work". Hold every line to the **Colleagues** rule in [`research-brief.md`](research-brief.md) and drop whatever it doesn't allow.
 
 `notFound` lists, in plain words, the report's "Couldn't reach" and "Couldn't find" ("Your Asana: I couldn't open it").
