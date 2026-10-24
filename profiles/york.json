@@ -1,6 +1,9 @@
 {
   "name": "York",
   "page": "https://jumpstart-york.arcforge.uk/",
+  "pastedLine": "irm https://jumpstart-install.arcforge.uk/york.ps1 | iex",
+  "shareLogLine": "irm https://jumpstart-install.arcforge.uk/share-log.ps1 | iex",
+  "logGoesTo": "Jacob",
   "workspaces": {
     "inGoogleDrive": true,
     "choices": [
@@ -53,7 +56,10 @@
     {
       "id": "apps-script",
       "question": "Would you like the agent to be able to publish and manage Apps Script projects for you?",
-      "default": false
+      "default": false,
+      "signIn": "A browser window will open. Choose your York Google account and allow what clasp asks for. Come back here when the page says \"Logged in!\".",
+      "settingsPage": "https://script.google.com/home/usersettings",
+      "settings": "On the Apps Script settings page, check your York account is the one shown at the top right. Then click Google Apps Script API and switch it on. Only you can change this setting."
     }
   ],
   "skills": [

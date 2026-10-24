@@ -51,7 +51,7 @@ import * as ui from './ui.js';
  * @returns {Promise<T3Result>}
  */
 export async function installT3(channel, context) {
-  const { places, machine, downloads, log, attended } = context;
+  const { places, machine, downloads, keepDownloads, log, attended } = context;
   const manifest = await loadManifest(downloads);
   const entry = /** @type {T3Entry | undefined} */ (/** @type {unknown} */ (manifest.tools.find((tool) => tool.id === 't3')));
   if (!entry) return { row: 'Not installed: the list of versions has no entry for it', installed: false, opened: false };
@@ -84,7 +84,8 @@ export async function installT3(channel, context) {
           throw new NotInstalled(`its installer stopped with code ${ran.code}`);
         }
       } finally {
-        if (!downloads) await rm(file, { force: true });
+        if (keepDownloads) say(`kept ${file}`);
+        else await rm(file, { force: true });
       }
       if (!(await exists(program))) {
         say(`${program} isn't there after the install`);

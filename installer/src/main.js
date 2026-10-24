@@ -16,12 +16,15 @@ import { parseArgs } from 'node:util';
 import { openLog } from './log.js';
 import { checkClaude } from './claude.js';
 import { walkThroughConnectors } from './connectors.js';
+import { setUpExtraTools } from './extra-tools.js';
 import { setUpGitHub } from './github.js';
 import { tryToOpen } from './open-page.js';
 import { findPlaces } from './places.js';
 import { openMachine } from './machine.js';
+import { switchOffAutoMemory } from './memory.js';
 import { loadProfile } from './profile.js';
 import { answersFrom, askQuestions } from './questions.js';
+import { installSkills } from './skills.js';
 import { messageOf, Stop } from './stop.js';
 import { installT3 } from './t3.js';
 import { installTools } from './tools.js';
@@ -67,13 +70,15 @@ async function main() {
   }
 
   const places = findPlaces(options.home);
-  const log = openLog(places.logs);
+  const log = openLog(places.logs, { debug: options.debug });
   log.write(`Installer started with Node ${process.version}`);
   log.write(`Profile: ${options.profile}`);
   log.write(`Debug: ${options.debug ? 'on' : 'off'}`);
   log.write(`Home: ${places.home}`);
   if (options.answers) log.write(`Answers from: ${options.answers}`);
   if (options.downloads) log.write(`Downloads from: ${options.downloads}`);
+  const machine = openMachine(places, log);
+  if (options.debug) await logUserPath(machine, log, 'before');
 
   try {
     const profile = await loadProfile(options.profile);
@@ -92,30 +97,35 @@ async function main() {
     await writeSettings(places.settings, settings);
     log.write(`Settings written to ${places.settings}`);
 
-    const machine = openMachine(places);
-    const context = { places, machine, downloads: options.downloads, log, attended: !unattended };
-    const tools = await installTools(context);
-    const github = await setUpGitHub(profile, choices.github, context);
-    // After the other tools and their PATH entries: T3 reads PATH only when it starts.
-    const t3 = await installT3(choices.channel, context);
-    const claude = await checkClaude({ ...context, t3 });
+    const tools = await installTools({ places, machine, downloads: options.downloads, keepDownloads: options.debug, log });
+    const github = await setUpGitHub(profile, choices.github, { attended: !unattended, places, machine, downloads: options.downloads, log });
+    const skills = await installSkills(profile, { places, machine, downloads: options.downloads, log });
+    const memory = await switchOffAutoMemory({ places, machine, log });
+    const connectors = await walkThroughConnectors(profile, choices.connectors, { attended: !unattended, log });
+    const extraTools = await setUpExtraTools(profile, choices.extraTools, { places, machine, downloads: options.downloads, keepDownloads: options.debug, log, attended: !unattended });
+    // Last of the installs, after every other tool and its PATH entry: T3 reads PATH only when it starts.
+    const t3 = await installT3(choices.channel, { places, machine, downloads: options.downloads, keepDownloads: options.debug, log, attended: !unattended });
+    const claude = await checkClaude({ places, machine, downloads: options.downloads, log, attended: !unattended, t3 });
     settings.email = claude.email;
     await writeSettings(places.settings, settings);
     log.write(`Signed-in email written to settings: ${claude.email ?? 'none'}`);
-    const connectors = await walkThroughConnectors(profile, choices.connectors, { attended: !unattended, log });
 
     /** @type {[string, string][]} */
     const checklist = [
       ['Profile', profile.name],
       ...tools,
+      ...extraTools,
       ['T3 Code', t3.row],
       ['Claude Code', claude.row],
+      ['Skills', skills.line],
+      ['Memory', memory],
       ['Workspaces', 'None created'],
       ['Connectors', connectors],
       ['GitHub', github],
     ];
+    if (skills.rows.length > 0) ui.summary(skills.rows, 'Skills');
     ui.summary(checklist, 'Checklist');
-    for (const [label, value] of checklist) log.write(`Checklist: ${label}: ${value}`);
+    for (const [label, value] of [...skills.rows, ...checklist]) log.write(`Checklist: ${label}: ${value}`);
     ui.step(`Log: ${log.path}`);
 
     ui.finish('Done.');
@@ -129,7 +139,18 @@ async function main() {
     ui.problem(error.message);
     log.write(`Stopped: ${error.message}`);
     return 1;
+  } finally {
+    if (options.debug) await logUserPath(machine, log, 'after');
   }
+}
+
+/**
+ * For a debug run's log, whichever way the run ends.
+ * @param {import('./machine.js').Machine} machine @param {import('./log.js').Log} log @param {string} when
+ */
+async function logUserPath(machine, log, when) {
+  const entries = await machine.userPath().catch((error) => [`(couldn't be read: ${messageOf(error)})`]);
+  log.detail([`User PATH ${when}:`, ...entries.map((entry) => `  ${entry}`)].join('\n'));
 }
 
 process.exitCode = await main();

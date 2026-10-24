@@ -1,4 +1,8 @@
 {
+  "skillsCli": {
+    "package": "skills",
+    "version": "1.7.4"
+  },
   "tools": [
     {
       "id": "node",
@@ -65,9 +69,36 @@
       }
     },
     {
+      "id": "clasp",
+      "name": "clasp",
+      "version": "3.4.1",
+      "when": "apps-script",
+      "downloads": {
+        "x64": {
+          "url": "https://registry.npmjs.org/@google/clasp/-/clasp-3.4.1.tgz",
+          "sha256": "5efb98b01f2860434ac8261106699714138a5e3cd77b49c379c4a82792c18f5e"
+        },
+        "arm64": {
+          "url": "https://registry.npmjs.org/@google/clasp/-/clasp-3.4.1.tgz",
+          "sha256": "5efb98b01f2860434ac8261106699714138a5e3cd77b49c379c4a82792c18f5e"
+        }
+      },
+      "install": {
+        "how": "npm",
+        "folder": "npm",
+        "path": ["."],
+        "check": "clasp.cmd"
+      },
+      "signIn": {
+        "run": ["login"],
+        "check": ["show-authorized-user"],
+        "signedInAs": "You are logged in as (.+?)\\.?\\s*$"
+      }
+    },
+    {
       "id": "t3",
       "name": "T3 Code",
-      "ownStep": true,
+      "when": "t3",
       "channels": {
         "stable": {
           "feed": "https://github.com/pingdotgg/t3code/releases/latest/download/latest.yml",
@@ -96,7 +127,7 @@
     {
       "id": "claude",
       "name": "Claude Code",
-      "ownStep": true,
+      "when": "t3",
       "install": {
         "folder": ".local/bin",
         "check": "claude.exe"

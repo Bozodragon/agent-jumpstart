@@ -80,9 +80,12 @@ export function run(args) {
   });
 }
 
-/** @param {{ home: string, downloads: string, answersFile: string }} where @param {string} profile */
-export function runWith(where, profile) {
-  return run(['--profile', profile, '--home', where.home, '--answers', where.answersFile, '--downloads', where.downloads]);
+/**
+ * @param {{ home: string, downloads: string, answersFile: string }} where @param {string} profile
+ * @param {string[]} [extra] more flags, such as `--debug`
+ */
+export function runWith(where, profile, extra = []) {
+  return run(['--profile', profile, ...extra, '--home', where.home, '--answers', where.answersFile, '--downloads', where.downloads]);
 }
 
 /** @param {string} home */
@@ -135,8 +138,8 @@ export function fakeMachine(home) {
     /**
      * Keyed by the program's file name, optionally followed by its arguments
      * (`"node.exe --version"`); the longer key wins. Runs with no reply succeed with no output.
-     * A reply may also list files the run leaves, relative to the home (`creates`), and a list
-     * of replies is given in turn, the last one repeating.
+     * A list answers successive runs with that key in turn, and its last reply repeats.
+     * A reply may also list files the run leaves, relative to the home (`creates`).
      * @param {Record<string, Reply | Reply[]>} replies
      */
     setReplies: (replies) => writeJson('replies.json', replies),
