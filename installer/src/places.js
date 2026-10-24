@@ -9,6 +9,9 @@ import { join } from 'node:path';
  * @property {string} state The installer's own folder in local AppData.
  * @property {string} settings The settings file Jumpstart reads.
  * @property {string} logs The folder of dated logs.
+ * @property {string} programs Where per-user programs go (`%LOCALAPPDATA%\Programs`).
+ * @property {string} [fakeMachine] Set only with a home override: the folder that stands in
+ *   for the rest of the machine (user environment, programs run). See machine.js.
  * @property {string[]} driveRoots The roots of the drive letters to look on for a streamed Google Drive.
  */
 
@@ -27,5 +30,14 @@ export function findPlaces(homeOverride) {
     : (process.env.LOCALAPPDATA ?? join(home, 'AppData', 'Local'));
   const state = join(localAppData, 'agent-jumpstart');
   const driveRoots = homeOverride ? [] : [...driveLetters].map((letter) => `${letter}:\\`);
-  return { home, localAppData, state, settings: join(state, 'settings.json'), logs: join(state, 'logs'), driveRoots };
+  return {
+    home,
+    localAppData,
+    state,
+    settings: join(state, 'settings.json'),
+    logs: join(state, 'logs'),
+    driveRoots,
+    programs: join(localAppData, 'Programs'),
+    ...(homeOverride ? { fakeMachine: join(home, 'fake-machine') } : {}),
+  };
 }

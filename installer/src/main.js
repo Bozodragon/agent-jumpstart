@@ -15,11 +15,14 @@ import { dirname } from 'node:path';
 import { parseArgs } from 'node:util';
 import { openLog } from './log.js';
 import { walkThroughConnectors } from './connectors.js';
+import { setUpGitHub } from './github.js';
 import { tryToOpen } from './open-page.js';
 import { findPlaces } from './places.js';
+import { openMachine } from './machine.js';
 import { loadProfile } from './profile.js';
 import { answersFrom, askQuestions } from './questions.js';
 import { messageOf, Stop } from './stop.js';
+import { installTools } from './tools.js';
 import * as ui from './ui.js';
 
 /** @returns {{ profile: string, debug: boolean, home?: string, answers?: string, downloads?: string }} */
@@ -81,14 +84,18 @@ async function main() {
     await writeFile(places.settings, `${JSON.stringify(settings, null, 2)}\n`);
     log.write(`Settings written to ${places.settings}`);
 
+    const machine = openMachine(places);
+    const tools = await installTools({ places, machine, downloads: options.downloads, log });
+    const github = await setUpGitHub(profile, choices.github, { attended: !unattended, places, machine, downloads: options.downloads, log });
     const connectors = await walkThroughConnectors(profile, choices.connectors, { attended: !unattended, log });
 
     /** @type {[string, string][]} */
     const checklist = [
       ['Profile', profile.name],
-      ['Tools', 'Nothing was installed: this version installs nothing yet'],
+      ...tools,
       ['Workspaces', 'None created'],
       ['Connectors', connectors],
+      ['GitHub', github],
     ];
     ui.summary(checklist, 'Checklist');
     for (const [label, value] of checklist) log.write(`Checklist: ${label}: ${value}`);
