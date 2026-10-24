@@ -14,7 +14,9 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { parseArgs } from 'node:util';
 import { openLog } from './log.js';
+import { checkClaude } from './claude.js';
 import { walkThroughConnectors } from './connectors.js';
+import { setUpExtraTools } from './extra-tools.js';
 import { setUpGitHub } from './github.js';
 import { tryToOpen } from './open-page.js';
 import { findPlaces } from './places.js';
@@ -24,6 +26,7 @@ import { loadProfile } from './profile.js';
 import { answersFrom, askQuestions } from './questions.js';
 import { installSkills } from './skills.js';
 import { messageOf, Stop } from './stop.js';
+import { installT3 } from './t3.js';
 import { installTools } from './tools.js';
 import * as ui from './ui.js';
 
@@ -49,6 +52,12 @@ async function readAnswers(path) {
   } catch (error) {
     throw new Stop(`The answers file ${path} couldn't be read: ${messageOf(error)}`);
   }
+}
+
+/** @param {string} path @param {Record<string, unknown>} settings */
+async function writeSettings(path, settings) {
+  await mkdir(dirname(path), { recursive: true });
+  await writeFile(path, `${JSON.stringify(settings, null, 2)}\n`);
 }
 
 async function main() {
@@ -83,9 +92,9 @@ async function main() {
 
     const choices = await askQuestions(profile, places, unattended ? answersFrom(answers) : ui.ask, log);
 
+    /** @type {Record<string, unknown>} */
     const settings = { profile: profile.id, ...choices };
-    await mkdir(dirname(places.settings), { recursive: true });
-    await writeFile(places.settings, `${JSON.stringify(settings, null, 2)}\n`);
+    await writeSettings(places.settings, settings);
     log.write(`Settings written to ${places.settings}`);
 
     const tools = await installTools({ places, machine, downloads: options.downloads, keepDownloads: options.debug, log });
@@ -93,11 +102,21 @@ async function main() {
     const skills = await installSkills(profile, { places, machine, downloads: options.downloads, log });
     const memory = await switchOffAutoMemory({ places, machine, log });
     const connectors = await walkThroughConnectors(profile, choices.connectors, { attended: !unattended, log });
+    const extraTools = await setUpExtraTools(profile, choices.extraTools, { places, machine, downloads: options.downloads, keepDownloads: options.debug, log, attended: !unattended });
+    // Last of the installs, after every other tool and its PATH entry: T3 reads PATH only when it starts.
+    const t3 = await installT3(choices.channel, { places, machine, downloads: options.downloads, keepDownloads: options.debug, log, attended: !unattended });
+    const claude = await checkClaude({ places, machine, downloads: options.downloads, log, attended: !unattended, t3 });
+    settings.email = claude.email;
+    await writeSettings(places.settings, settings);
+    log.write(`Signed-in email written to settings: ${claude.email ?? 'none'}`);
 
     /** @type {[string, string][]} */
     const checklist = [
       ['Profile', profile.name],
       ...tools,
+      ...extraTools,
+      ['T3 Code', t3.row],
+      ['Claude Code', claude.row],
       ['Skills', skills.line],
       ['Memory', memory],
       ['Workspaces', 'None created'],

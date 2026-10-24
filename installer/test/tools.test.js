@@ -46,7 +46,8 @@ async function supplyDownloads(where, ids) {
   const workshop = join(where.downloads, '..', 'workshop');
   await mkdir(workshop, { recursive: true });
   for (const tool of manifest.tools) {
-    if (ids && !ids.includes(tool.id)) continue;
+    // T3 isn't pinned, so it has no download here (t3.test.js supplies its own).
+    if (!tool.downloads || (ids && !ids.includes(tool.id))) continue;
     const built = await standIn(workshop, tool);
     const bytes = await readFile(built);
     await writeFile(join(where.downloads, basename(built)), bytes);
@@ -72,7 +73,8 @@ test('Node, Git and gh install per user from checked downloads, with their folde
   const result = await runWith(where, 'default');
 
   assert.equal(result.code, 0, result.stderr);
-  for (const tool of manifest.tools) checklistSays(result.stdout, tool.name, tool.version);
+  // Tools with `when` (an extra tool's, or T3's) are installed by their own step.
+  for (const tool of manifest.tools.filter((/** @type {any} */ tool) => !tool.when)) checklistSays(result.stdout, tool.name, tool.version);
 
   assert.ok(await exists(join(programs, 'nodejs', 'node.exe')), 'node.exe unpacked without its top folder');
   assert.ok(await exists(join(programs, 'nodejs', 'npm.cmd')));
