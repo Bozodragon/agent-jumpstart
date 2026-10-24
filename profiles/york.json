@@ -5,6 +5,7 @@
   "shareLogLine": "irm https://jumpstart-install.arcforge.uk/share-log.ps1 | iex",
   "logGoesTo": "Jacob",
   "workspaces": {
+    "top": "Claude",
     "inGoogleDrive": true,
     "choices": [
       {

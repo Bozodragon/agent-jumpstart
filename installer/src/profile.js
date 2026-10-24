@@ -13,8 +13,10 @@ const profilesFolder = fileURLToPath(new URL('../../profiles/', import.meta.url)
  * @property {string} [pastedLine] The one line the setup page tells a person to paste into PowerShell.
  * @property {string} [shareLogLine] The line the setup page gives for copying the newest installer log.
  * @property {string} [logGoesTo] Who the setup page says to send the log to, as it reads after "send it to".
- * @property {{ inGoogleDrive: boolean, defaultLocation?: string, choices: Choice[] }} workspaces
- *   `defaultLocation` is the folder, within the user's profile folder, offered for workspaces when they aren't in Google Drive.
+ * @property {{ top: string, inGoogleDrive: boolean, defaultLocation?: string, choices: Choice[] }} workspaces
+ *   `top` is the top workspace's folder name, created in the confirmed location with the chosen
+ *   workspaces inside it. `defaultLocation` is the folder, within the user's profile folder,
+ *   offered for workspaces when they aren't in Google Drive.
  * @property {Choice[]} connectors
  * @property {string} [connectorsPage] The address of the page where the person connects the connectors they ticked.
  * @property {{ signUpPage: string, email: string }} [github] For the person who chooses to set up

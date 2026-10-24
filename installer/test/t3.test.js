@@ -1,14 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createHash } from 'node:crypto';
 import { access, mkdir, writeFile } from 'node:fs/promises';
 import { basename, dirname, join } from 'node:path';
-import { fakeMachine, makeHome, programsFolder, readManifest, readOnlyLog, readSettings, runWith } from './harness.js';
+import { fakeMachine, makeHome, programsFolder, readManifest, readOnlyLog, readSettings, runWith, supplyT3 } from './harness.js';
 
 /** @param {string} path */
 const exists = (path) => access(path).then(() => true, () => false);
-
-const arch = process.arch === 'arm64' ? 'arm64' : 'x64';
 
 /** T3's uninstall entry, where Windows keeps the installed version. */
 const uninstallKey = 'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\e9197887-efb3-55e0-985e-d6d3b5dd594a';
@@ -17,29 +14,6 @@ const uninstallKey = 'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninst
 const t3Program = (/** @type {'Beta' | 'Nightly'} */ brand) => join('AppData', 'Local', 'Programs', 't3code', `T3 Code (${brand}).exe`);
 const t3Shim = join('.t3', 'bin', 't3.cmd');
 const claudeProgram = join('.local', 'bin', 'claude.exe');
-
-/**
- * Puts a stand-in T3 installer in the downloads folder with the release feed
- * (`latest.yml` or `nightly.yml`) that names it, as T3's releases publish them.
- * @param {string} downloads @param {string} feedName @param {string} version
- * @param {{ wrongHash?: boolean }} [options]
- * @returns {Promise<string>} the installer's file name
- */
-async function supplyT3(downloads, feedName, version, { wrongHash = false } = {}) {
-  const lines = [`version: '${version}'`, 'files:'];
-  let ours = '';
-  for (const kind of ['x64', 'arm64']) {
-    const name = `T3-Code-${version}-${kind}.exe`;
-    const bytes = `stand-in for ${name}`;
-    await writeFile(join(downloads, name), bytes);
-    const sha512 = createHash('sha512').update(wrongHash ? 'something else' : bytes).digest('base64');
-    lines.push(`  - url: ${name}`, `    sha512: ${sha512}`, `    size: ${bytes.length}`);
-    if (kind === arch) ours = name;
-  }
-  lines.push(`releaseDate: '2026-10-22T20:41:35.907Z'`);
-  await writeFile(join(downloads, feedName), `${lines.join('\n')}\n`);
-  return ours;
-}
 
 /** @param {string} home @param {string[]} paths relative to the home */
 async function seed(home, paths) {

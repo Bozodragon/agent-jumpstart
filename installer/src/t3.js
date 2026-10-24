@@ -43,6 +43,7 @@ import * as ui from './ui.js';
  * @property {string} row The checklist's T3 Code line.
  * @property {boolean} installed Whether T3 is in place.
  * @property {boolean} opened Whether T3 has started at least once (its shim is there).
+ * @property {string} [shim] T3's command-line shim, which it writes when it starts.
  */
 
 /**
@@ -97,13 +98,13 @@ export async function installT3(channel, context) {
     if (!(error instanceof NotInstalled)) say(`failed: ${error instanceof Error ? error.stack : String(error)}`);
     const reason = error instanceof NotInstalled ? error.message : messageOf(error);
     say(`not installed: ${reason}`);
-    return { row: `Not installed: ${reason}`, installed: false, opened: await exists(shim) };
+    return { row: `Not installed: ${reason}`, installed: false, opened: await exists(shim), shim };
   }
 
   // The silent install starts T3 (--force-run); an install that was already there may never have been opened.
   const opened = await waitForFirstLaunch(shim, already ? 0 : machine.patience, { attended, say, name: entry.name });
   const state = [channel, ...(already ? ['already installed'] : []), ...(opened ? [] : ['not opened yet'])].join(', ');
-  return { row: `${release.version} (${state})`, installed: true, opened };
+  return { row: `${release.version} (${state})`, installed: true, opened, shim };
 }
 
 /**
