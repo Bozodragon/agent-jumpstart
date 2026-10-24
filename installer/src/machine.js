@@ -143,15 +143,30 @@ function realMachine() {
 }
 
 /**
- * Not for .cmd or .bat files: Node won't start those without a shell.
+ * Node won't start a .cmd or .bat file by itself, so those run through cmd.exe. The command line
+ * is built here, quoted for cmd, and passed as it is: anything cmd would still expand inside
+ * quotes (`%`, `!`, `"`, line breaks) is refused rather than escaped.
  * @param {string} file @param {string[]} args @returns {Promise<Ran>}
  */
 function runProgram(file, args) {
+  if (!/\.(cmd|bat)$/i.test(file)) return spawnAndWait(file, args, {});
+  const unsafe = [file, ...args].find((arg) => /["%!\r\n]/.test(arg));
+  if (unsafe !== undefined) return Promise.resolve({ code: -1, output: `can't pass ${unsafe} to ${basename(file)} safely` });
+  const line = [file, ...args].map((arg) => (arg === '' || /[\s&|<>^(),;=]/.test(arg) ? `"${arg}"` : arg)).join(' ');
+  // /d skips AutoRun commands; /s with the outer quotes keeps the line exactly as built.
+  return spawnAndWait(process.env.ComSpec ?? system32('cmd.exe'), ['/d', '/s', '/c', `"${line}"`], { windowsVerbatimArguments: true });
+}
+
+/**
+ * @param {string} file @param {string[]} args @param {import('node:child_process').SpawnOptions} options
+ * @returns {Promise<Ran>}
+ */
+function spawnAndWait(file, args, options) {
   return new Promise((resolve) => {
     let output = '';
-    const child = spawn(file, args, { windowsHide: true });
-    child.stdout.on('data', (chunk) => (output += chunk));
-    child.stderr.on('data', (chunk) => (output += chunk));
+    const child = spawn(file, args, { ...options, windowsHide: true });
+    child.stdout?.on('data', (chunk) => (output += chunk));
+    child.stderr?.on('data', (chunk) => (output += chunk));
     child.once('error', (error) => resolve({ code: -1, output: error.message }));
     child.once('close', (code) => resolve({ code: code ?? -1, output }));
   });

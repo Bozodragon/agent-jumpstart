@@ -15,7 +15,8 @@ const profilesFolder = fileURLToPath(new URL('../../profiles/', import.meta.url)
  * @property {Choice[]} connectors
  * @property {string} [connectorsPage] The address of the page where the person connects the connectors they ticked.
  * @property {{ id: string, question: string, default: boolean }[]} extraTools
- * @property {{ source: string, names?: string[] }[]} skills
+ * @property {{ source: string, names?: string[] }[]} skills Installed with the skills CLI. A source
+ *   given without names is the path to one skill (`owner/repo/path/to/skill`), named by its last part.
  */
 
 /** @typedef {{ name: string, default: boolean }} Choice */

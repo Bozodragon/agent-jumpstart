@@ -18,8 +18,10 @@ import { walkThroughConnectors } from './connectors.js';
 import { tryToOpen } from './open-page.js';
 import { findPlaces } from './places.js';
 import { openMachine } from './machine.js';
+import { switchOffAutoMemory } from './memory.js';
 import { loadProfile } from './profile.js';
 import { answersFrom, askQuestions } from './questions.js';
+import { installSkills } from './skills.js';
 import { messageOf, Stop } from './stop.js';
 import { installTools } from './tools.js';
 import * as ui from './ui.js';
@@ -85,17 +87,22 @@ async function main() {
 
     const machine = openMachine(places);
     const tools = await installTools({ places, machine, downloads: options.downloads, log });
+    const skills = await installSkills(profile, { places, machine, downloads: options.downloads, log });
+    const memory = await switchOffAutoMemory({ places, machine, log });
     const connectors = await walkThroughConnectors(profile, choices.connectors, { attended: !unattended, log });
 
     /** @type {[string, string][]} */
     const checklist = [
       ['Profile', profile.name],
       ...tools,
+      ['Skills', skills.line],
+      ['Memory', memory],
       ['Workspaces', 'None created'],
       ['Connectors', connectors],
     ];
+    if (skills.rows.length > 0) ui.summary(skills.rows, 'Skills');
     ui.summary(checklist, 'Checklist');
-    for (const [label, value] of checklist) log.write(`Checklist: ${label}: ${value}`);
+    for (const [label, value] of [...skills.rows, ...checklist]) log.write(`Checklist: ${label}: ${value}`);
     ui.step(`Log: ${log.path}`);
 
     ui.finish('Done.');
