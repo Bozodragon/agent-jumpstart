@@ -14,7 +14,7 @@ import { messageOf } from './stop.js';
 import * as ui from './ui.js';
 
 /** A reason a tool isn't installed, worded for the checklist. */
-class NotInstalled extends Error {}
+export class NotInstalled extends Error {}
 
 /**
  * @typedef {object} Context
@@ -25,7 +25,8 @@ class NotInstalled extends Error {}
  */
 
 /**
- * Installs every tool in the manifest, in order.
+ * Installs every tool in the manifest, in order, except those installed at their own point in
+ * the run (`ownStep`).
  * @param {Context} context
  * @returns {Promise<[string, string][]>} checklist rows
  */
@@ -34,7 +35,7 @@ export async function installTools(context) {
   context.log.write(`Versions from: ${manifest.source}`);
   /** @type {[string, string][]} */
   const rows = [];
-  for (const tool of manifest.tools) rows.push([tool.name, await installTool(tool, context)]);
+  for (const tool of manifest.tools) if (!tool.ownStep) rows.push([tool.name, await installTool(tool, context)]);
   return rows;
 }
 
@@ -95,7 +96,7 @@ export async function installTool(tool, { places, machine, downloads, log }) {
 }
 
 /** @param {string} path */
-const exists = (path) => access(path).then(() => true, () => false);
+export const exists = (path) => access(path).then(() => true, () => false);
 
 /** @param {import('./machine.js').Machine} machine @param {string} program @param {string} version */
 async function reportsVersion(machine, program, version) {
@@ -116,11 +117,11 @@ async function addToPath(tool, folder, machine, say) {
 }
 
 /**
- * @param {import('./manifest.js').Download} download
+ * @param {{ url: string }} download
  * @param {{ downloads?: string, saveIn: string, say: (line: string) => void }} where
  * @returns {Promise<string>} the file
  */
-async function obtain({ url }, { downloads, saveIn, say }) {
+export async function obtain({ url }, { downloads, saveIn, say }) {
   const name = basename(new URL(url).pathname);
   if (downloads) {
     const file = join(downloads, name);

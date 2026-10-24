@@ -46,7 +46,7 @@ async function supplyDownloads(where, ids) {
   const workshop = join(where.downloads, '..', 'workshop');
   await mkdir(workshop, { recursive: true });
   for (const tool of manifest.tools) {
-    if (ids && !ids.includes(tool.id)) continue;
+    if (tool.ownStep || (ids && !ids.includes(tool.id))) continue;
     const built = await standIn(workshop, tool);
     const bytes = await readFile(built);
     await writeFile(join(where.downloads, basename(built)), bytes);
@@ -72,7 +72,7 @@ test('Node, Git and gh install per user from checked downloads, with their folde
   const result = await runWith(where, 'default');
 
   assert.equal(result.code, 0, result.stderr);
-  for (const tool of manifest.tools) checklistSays(result.stdout, tool.name, tool.version);
+  for (const tool of manifest.tools.filter((/** @type {any} */ tool) => !tool.ownStep)) checklistSays(result.stdout, tool.name, tool.version);
 
   assert.ok(await exists(join(programs, 'nodejs', 'node.exe')), 'node.exe unpacked without its top folder');
   assert.ok(await exists(join(programs, 'nodejs', 'npm.cmd')));

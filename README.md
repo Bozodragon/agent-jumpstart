@@ -7,7 +7,7 @@ Sets a team member up with an agent: the **Installer** puts everything on their 
 | `bootstrap/` | The four PowerShell files people paste the address of, and the script that builds the Portall item they're published from. |
 | `installer/` | The Node program the pasted line runs. It reads a profile, asks its questions, installs the tools and prints a checklist. |
 | `profiles/` | One JSON file per profile (`york`, `default`): the workspace, connector, extra-tool and skill lists, which are ticked by default, whether workspaces live in Google Drive, and the setup page's address. Adapting the setup for a new team is an edit here, not to the code. |
-| `manifest.json` | The pinned version, download address and SHA-256 of each tool the installer installs (Node, Git, the GitHub CLI). Bumping a version is an edit here. |
+| `manifest.json` | The pinned version, download address and SHA-256 of each tool the installer installs (Node, Git, the GitHub CLI). Bumping a version is an edit here. T3 Code isn't pinned: its entry names the release feeds the installer follows for each channel, and the build is checked against the SHA-512 T3 publishes in them. |
 | `skills/` | Skills the installer installs from this repo, such as `jumpstart`. |
 | `page/` | The setup page, one source rendered per profile. |
 
@@ -43,7 +43,7 @@ It writes `settings.json` and a dated log under `%LOCALAPPDATA%\agent-jumpstart\
 
 - `--home <folder>` uses that folder as the user's profile folder, with local AppData inside it. Nothing outside it is touched: changes to the user PATH and environment, and the programs it would run (such as Git's installer), are recorded under `<folder>\fake-machine\` instead.
 - `--answers <file>` answers every question from a JSON file. Nothing is asked and no browser is opened. Its keys are the settings file's: `googleDriveFolder` (Google Drive profiles) or `workspacesLocation` (others), `channel` (`stable` or `nightly`), `github` (true or false), and `workspaces`, `connectors` and `extraTools` (lists of names, or of ids for extra tools, from the profile). A key left out takes its default, as pressing Enter would.
-- `--downloads <folder>` takes downloads from that folder instead of the internet. A `manifest.json` there replaces the pinned one, so a test's stand-in files can pass the checksum check.
+- `--downloads <folder>` takes downloads from that folder instead of the internet. A `manifest.json` there replaces the pinned one, so a test's stand-in files can pass the checksum check. T3's release feed (`latest.yml` or `nightly.yml`) and GitHub's release list (`releases`) are taken from there too.
 
 ## Testing
 

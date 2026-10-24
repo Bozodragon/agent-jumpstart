@@ -14,6 +14,9 @@ const pinned = fileURLToPath(new URL('../../manifest.json', import.meta.url));
  * @property {string} version As the tool's own `--version` prints it.
  * @property {Partial<Record<string, Download>>} downloads By processor (`x64`, `arm64`).
  * @property {Install} install
+ * @property {boolean} [ownStep] Installed at its own point in the run by the module that owns
+ *   it, not by the tools loop (T3 must come after the others' PATH entries). Such an entry
+ *   keeps `id` and `name`; the rest of its shape is its module's.
  */
 
 /** @typedef {{ url: string, sha256: string }} Download */

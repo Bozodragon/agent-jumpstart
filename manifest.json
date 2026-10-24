@@ -63,6 +63,44 @@
         "path": ["bin"],
         "check": "bin/gh.exe"
       }
+    },
+    {
+      "id": "t3",
+      "name": "T3 Code",
+      "ownStep": true,
+      "channels": {
+        "stable": {
+          "feed": "https://github.com/pingdotgg/t3code/releases/latest/download/latest.yml",
+          "download": "https://github.com/pingdotgg/t3code/releases/download/v{version}/{file}",
+          "program": "T3 Code (Beta).exe"
+        },
+        "nightly": {
+          "releases": "https://api.github.com/repos/pingdotgg/t3code/releases?per_page=30",
+          "tag": "^v\\d+\\.\\d+\\.\\d+-nightly\\.\\d+\\.\\d+$",
+          "feed": "https://github.com/pingdotgg/t3code/releases/download/{tag}/nightly.yml",
+          "download": "https://github.com/pingdotgg/t3code/releases/download/{tag}/{file}",
+          "program": "T3 Code (Nightly).exe"
+        }
+      },
+      "files": {
+        "x64": "-x64\\.exe$",
+        "arm64": "-arm64\\.exe$"
+      },
+      "install": {
+        "folder": "t3code",
+        "arguments": ["/S", "--force-run"],
+        "versionIn": "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\e9197887-efb3-55e0-985e-d6d3b5dd594a",
+        "firstLaunchLeaves": ".t3/bin/t3.cmd"
+      }
+    },
+    {
+      "id": "claude",
+      "name": "Claude Code",
+      "ownStep": true,
+      "install": {
+        "folder": ".local/bin",
+        "check": "claude.exe"
+      }
     }
   ]
 }

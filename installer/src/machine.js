@@ -10,9 +10,13 @@
 //   <home>/fake-machine/replies.json      written by a test: what a run returns, keyed by the
 //                                         file name, or the file name and its arguments
 //                                         ("gh.exe auth status"). No reply means code 0, no output.
+//                                         A reply may list files to create, relative to the home
+//                                         ("creates": [...]), standing in for what the program
+//                                         leaves behind. A list of replies is given in turn, the
+//                                         last one repeating.
 import { spawn } from 'node:child_process';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
-import { basename, join } from 'node:path';
+import { basename, dirname, join, relative, resolve } from 'node:path';
 
 /**
  * @typedef {object} Machine
@@ -26,13 +30,18 @@ import { basename, join } from 'node:path';
  * @property {(file: string, args: string[]) => Promise<number>} runOnScreen Runs a program in the
  *   person's window, so they see what it prints and can answer it, and waits for it. Returns its
  *   exit code, or -1 if it couldn't start.
+ * @property {number} patience How long, in milliseconds, to wait for what a program does after
+ *   it has returned, such as an app it started opening. None for the fake, which does everything
+ *   a program does before the run returns.
  */
 
 /** @typedef {{ code: number, output: string }} Ran */
 
+/** @typedef {Partial<Ran> & { creates?: string[] }} Reply What a fake run returns and leaves behind. */
+
 /** @param {import('./places.js').Places} places @returns {Machine} */
 export function openMachine(places) {
-  return places.fakeMachine ? fakeMachine(places.fakeMachine) : realMachine();
+  return places.fakeMachine ? fakeMachine(places.fakeMachine, places.home) : realMachine();
 }
 
 /** @param {string} entry */
@@ -47,8 +56,8 @@ const includesFolder = (entries, folder) => entries.some((entry) => sameFolder(e
 /** @param {string} raw */
 const splitPath = (raw) => raw.split(';').filter((entry) => entry.trim() !== '');
 
-/** @param {string} folder @returns {Machine} */
-function fakeMachine(folder) {
+/** @param {string} folder @param {string} home @returns {Machine} */
+function fakeMachine(folder, home) {
   /** @param {string} name @param {unknown} empty */
   const read = async (name, empty) => {
     try {
@@ -67,6 +76,7 @@ function fakeMachine(folder) {
   const environment = () => read('environment.json', {});
 
   return {
+    patience: 0,
     async userPath() {
       return splitPath((await environment()).Path ?? '');
     },
@@ -88,12 +98,27 @@ function fakeMachine(folder) {
     },
   };
 
-  /** @param {string} file @param {string[]} args @param {object} record @returns {Promise<Ran>} */
+  /** @param {string} file @param {string[]} args @param {{ file: string, args: string[], onScreen?: boolean }} record @returns {Promise<Ran>} */
   async function reply(file, args, record) {
-    await write('runs.json', [...(await read('runs.json', [])), record]);
-    /** @type {Record<string, Partial<Ran>>} */
+    /** @type {{ file: string, args: string[] }[]} */
+    const runs = [...(await read('runs.json', [])), record];
+    await write('runs.json', runs);
+    /** @type {Record<string, Reply | Reply[]>} */
     const replies = await read('replies.json', {});
-    const found = replies[[basename(file), ...args].join(' ')] ?? replies[basename(file)] ?? {};
+    /** @param {{ file: string, args: string[] }} run */
+    const fullKey = (run) => [basename(run.file), ...run.args].join(' ');
+    const key = fullKey(record) in replies ? fullKey : (/** @type {{ file: string }} */ run) => basename(run.file);
+    let found = replies[key(record)] ?? {};
+    if (Array.isArray(found)) {
+      const turn = runs.filter((run) => key(run) === key(record)).length - 1;
+      found = found[Math.min(turn, found.length - 1)] ?? {};
+    }
+    for (const path of found.creates ?? []) {
+      const target = resolve(home, path);
+      if (relative(home, target).startsWith('..')) throw new Error(`a fake run can't create ${path}: it's outside the home`);
+      await mkdir(dirname(target), { recursive: true });
+      await writeFile(target, `left by a fake run of ${basename(file)}`);
+    }
     return { code: found.code ?? 0, output: found.output ?? '' };
   }
 }
@@ -150,6 +175,7 @@ function realMachine() {
       if (code !== 0) throw new Error(`${name} couldn't be set: ${output.trim()}`);
       process.env[name] = value;
     },
+    patience: 120_000,
     run: runProgram,
     runOnScreen(file, args) {
       return new Promise((resolve) => {

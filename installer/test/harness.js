@@ -17,6 +17,8 @@ export async function readProfile(name) {
 
 /** @typedef {'signed-in' | 'signed-out' | 'missing'} GoogleDriveState */
 
+/** @typedef {{ code?: number, output?: string, creates?: string[] }} Reply What a faked program run returns and leaves behind. */
+
 /**
  * A temporary home with an answers file and an empty downloads folder,
  * removed when the test ends. Like a York laptop, it has Google Drive for
@@ -126,14 +128,16 @@ export function fakeMachine(home) {
     environment: () => readJson('environment.json'),
     /** @returns {Promise<string[]>} the user PATH, one entry per item */
     userPath: async () => ((await readJson('environment.json')).Path ?? '').split(';').filter(Boolean),
-    /** @returns {Promise<{ file: string, args: string[] }[]>} */
+    /** @returns {Promise<{ file: string, args: string[], onScreen?: boolean }[]>} */
     runs: () => readJson('runs.json', []),
     /** @param {Record<string, string>} variables */
     setEnvironment: (variables) => writeJson('environment.json', variables),
     /**
      * Keyed by the program's file name, optionally followed by its arguments
      * (`"node.exe --version"`); the longer key wins. Runs with no reply succeed with no output.
-     * @param {Record<string, { code?: number, output?: string }>} replies
+     * A reply may also list files the run leaves, relative to the home (`creates`), and a list
+     * of replies is given in turn, the last one repeating.
+     * @param {Record<string, Reply | Reply[]>} replies
      */
     setReplies: (replies) => writeJson('replies.json', replies),
   };
