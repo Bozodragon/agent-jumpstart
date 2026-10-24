@@ -55,9 +55,24 @@ Tell the person, in a line, that you're having a look now.
 
 ## 5. While it reads
 
-In the same turn, ask what they want help with: one question card built from [`help-categories.md`](help-categories.md), one multi-select question per group, with the labels and descriptions exactly as written there. The first question is headed "Help" and reads "What sort of things do you want help with?"; the rest are headed "More help" and read "And any of these?". Each category they pick, and anything they type instead, becomes one line of the profile's "What you want help with" section, and nothing more.
+Two questions while the research runs, one after the other.
 
-Done when they have answered every question asked here. If the research hasn't reported by then, say you're still reading and will show them what you found shortly; its report arrives by itself.
+**What they want help with.** In the same turn as step 4, ask with one question card built from [`help-categories.md`](help-categories.md), one multi-select question per group, with the labels and descriptions exactly as written there. The first question is headed "Help" and reads "What sort of things do you want help with?"; the rest are headed "More help" and read "And any of these?". Each category they pick, and anything they type instead, becomes one line of the profile's "What you want help with" section, and nothing more.
+
+**How they like things written.** Once they've answered, show the writing picker: fixed examples, the same for everyone, that change as they flip switches for length, tone, bullets and headings.
+
+1. Read [`writing-picker.html`](writing-picker.html) and pass it as it is, unchanged: preview it with `html_preview` for its `contentHeight`, then show it with `html_render` at that height, titled "How you like things written".
+2. Below it, in one line: they can flip the switches until the examples read the way they like and paste what the page copies, or just tell you in their own words.
+
+If the page tools aren't available, ask in one line how they like things written: long or short, friendly or formal, bullet points or paragraphs, headings or none.
+
+Their reply becomes the profile's "How you like things written" section, and nothing more:
+
+- **Text starting "How I like things written:"**, pasted from the page: each line under it becomes one line of the section, word for word.
+- **Their own words**: one short line per preference they state, in the page's style ("A warm, friendly tone", "Bullet points rather than paragraphs"), and none they didn't.
+- **No preference**, or they'd rather skip it: the section starts empty; they can add lines on the profile page.
+
+Done when they have answered the help card and said how they like things written, or chosen to skip it. If the research hasn't reported by then, say you're still reading and will show them what you found shortly; its report arrives by itself.
 
 ## 6. Show the profile
 
@@ -161,7 +176,8 @@ The sections, in this order and with these titles:
 
 1. **About you** (`addable: false`): Name, Email, Job title and Team, as labelled items.
 2. **What you want help with**: one line per answer from step 5.
-3. **Your work**: what they work on, from the report's "Their work", in plain words addressed to them ("Runs the open day campaign").
-4. **People you work with**: one line each, "Name, role, team, email: how they relate to your work". Hold every line to the **Colleagues** rule in [`research-brief.md`](research-brief.md) and drop whatever it doesn't allow.
+3. **How you like things written**: one line per preference from step 5.
+4. **Your work**: what they work on, from the report's "Their work", in plain words addressed to them ("Runs the open day campaign").
+5. **People you work with**: one line each, "Name, role, team, email: how they relate to your work". Hold every line to the **Colleagues** rule in [`research-brief.md`](research-brief.md) and drop whatever it doesn't allow.
 
 `notFound` lists, in plain words, the report's "Couldn't reach" and "Couldn't find" ("Your Asana: I couldn't open it").
