@@ -29,6 +29,7 @@ import { messageOf, Stop } from './stop.js';
 import { installT3 } from './t3.js';
 import { installTools } from './tools.js';
 import * as ui from './ui.js';
+import { addToT3, createWorkspaces, topWorkspaceIn } from './workspaces.js';
 
 /** @returns {{ profile: string, debug: boolean, home?: string, answers?: string, downloads?: string }} */
 function readOptions() {
@@ -92,10 +93,13 @@ async function main() {
 
     const choices = await askQuestions(profile, places, unattended ? answersFrom(answers) : ui.ask, log);
 
+    const topWorkspace = topWorkspaceIn(profile, choices.workspacesLocation);
     /** @type {Record<string, unknown>} */
-    const settings = { profile: profile.id, ...choices };
+    const settings = { profile: profile.id, ...choices, topWorkspace };
     await writeSettings(places.settings, settings);
     log.write(`Settings written to ${places.settings}`);
+
+    const workspaces = await createWorkspaces(topWorkspace, choices.workspaces, log);
 
     const tools = await installTools({ places, machine, downloads: options.downloads, keepDownloads: options.debug, log });
     const github = await setUpGitHub(profile, choices.github, { attended: !unattended, places, machine, downloads: options.downloads, log });
@@ -105,6 +109,8 @@ async function main() {
     const extraTools = await setUpExtraTools(profile, choices.extraTools, { places, machine, downloads: options.downloads, keepDownloads: options.debug, log, attended: !unattended });
     // Last of the installs, after every other tool and its PATH entry: T3 reads PATH only when it starts.
     const t3 = await installT3(choices.channel, { places, machine, downloads: options.downloads, keepDownloads: options.debug, log, attended: !unattended });
+    // After T3's first start, which leaves the command-line shim that adds a project.
+    const workspacesLine = await addToT3(workspaces, t3, { machine, log });
     const claude = await checkClaude({ places, machine, downloads: options.downloads, log, attended: !unattended, t3 });
     settings.email = claude.email;
     await writeSettings(places.settings, settings);
@@ -119,13 +125,14 @@ async function main() {
       ['Claude Code', claude.row],
       ['Skills', skills.line],
       ['Memory', memory],
-      ['Workspaces', 'None created'],
+      ['Workspaces', workspacesLine],
       ['Connectors', connectors],
       ['GitHub', github],
     ];
     if (skills.rows.length > 0) ui.summary(skills.rows, 'Skills');
+    ui.summary(workspaces.rows, 'Workspaces');
     ui.summary(checklist, 'Checklist');
-    for (const [label, value] of [...skills.rows, ...checklist]) log.write(`Checklist: ${label}: ${value}`);
+    for (const [label, value] of [...skills.rows, ...workspaces.rows, ...checklist]) log.write(`Checklist: ${label}: ${value}`);
     ui.step(`Log: ${log.path}`);
 
     ui.finish('Done.');

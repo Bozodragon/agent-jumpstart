@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Renders the setup page once per profile from page/template.html, filling in that
-// profile's pastedLine, shareLogLine and logGoesTo, and checks each page shows its own
-// line to paste exactly once.
+// profile's pastedLine, shareLogLine, logGoesTo and top workspace's name, and checks each
+// page shows its own line to paste exactly once.
 //
 //   node page/build.js [<folder>]       write <folder>/<profile>/index.html (default: dist/page)
 //   node page/build.js --publish        render, then publish each page as a public Portall
@@ -16,7 +16,8 @@ import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 
 const repo = fileURLToPath(new URL('..', import.meta.url));
-const fields = /** @type {const} */ (['pastedLine', 'shareLogLine', 'logGoesTo']);
+/** Each placeholder, and where in a profile its text is (`workspaces.top` is the key `top` inside `workspaces`). */
+const fields = { pastedLine: 'pastedLine', shareLogLine: 'shareLogLine', logGoesTo: 'logGoesTo', topWorkspace: 'workspaces.top' };
 
 const { values, positionals } = parseArgs({ options: { publish: { type: 'boolean', default: false } }, allowPositionals: true });
 const out = positionals[0] ?? join(repo, 'dist', 'page');
@@ -43,9 +44,10 @@ function fail(message) {
 function render(template, id, profile, otherLines) {
   /** @type {Record<string, string>} */
   const filled = {};
-  for (const field of fields) {
-    const value = profile[field];
-    if (typeof value !== 'string' || value === '') fail(`profiles/${id}.json needs "${field}" for its setup page.`);
+  for (const [field, key] of Object.entries(fields)) {
+    /** @type {unknown} */
+    const value = key.split('.').reduce((/** @type {any} */ inside, part) => inside?.[part], profile);
+    if (typeof value !== 'string' || value === '') fail(`profiles/${id}.json needs "${key}" for its setup page.`);
     filled[field] = value;
   }
   const html = template.replace(/\{\{(\w+)\}\}/g, (whole, name) => (name in filled ? escape(filled[name]) : whole));

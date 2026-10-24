@@ -2,9 +2,10 @@
 // three overrides, so tests see only what it leaves behind.
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { mkdtemp, mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 export const repo = fileURLToPath(new URL('../..', import.meta.url));
@@ -157,6 +158,62 @@ export async function makeZip(folder, zipFile) {
   await new Promise((resolve, reject) => {
     execFile(tar, ['-a', '-cf', zipFile, '-C', folder, ...entries], (error) => (error ? reject(error) : resolve(undefined)));
   });
+}
+
+/**
+ * Puts a stand-in T3 installer in the downloads folder with the release feed
+ * (`latest.yml` or `nightly.yml`) that names it, as T3's releases publish them.
+ * @param {string} downloads @param {string} feedName @param {string} version
+ * @param {{ wrongHash?: boolean }} [options]
+ * @returns {Promise<string>} the installer's file name, for this computer's processor
+ */
+export async function supplyT3(downloads, feedName, version, { wrongHash = false } = {}) {
+  const arch = process.arch === 'arm64' ? 'arm64' : 'x64';
+  const lines = [`version: '${version}'`, 'files:'];
+  let ours = '';
+  for (const kind of ['x64', 'arm64']) {
+    const name = `T3-Code-${version}-${kind}.exe`;
+    const bytes = `stand-in for ${name}`;
+    await writeFile(join(downloads, name), bytes);
+    const sha512 = createHash('sha512').update(wrongHash ? 'something else' : bytes).digest('base64');
+    lines.push(`  - url: ${name}`, `    sha512: ${sha512}`, `    size: ${bytes.length}`);
+    if (kind === arch) ours = name;
+  }
+  lines.push(`releaseDate: '2026-10-22T20:41:35.907Z'`);
+  await writeFile(join(downloads, feedName), `${lines.join('\n')}\n`);
+  return ours;
+}
+
+/**
+ * What T3's stable installer leaves, relative to the home: its program, and the command-line
+ * shim T3 writes each time it starts (so its being there means T3 has been opened).
+ */
+export const t3Leaves = {
+  program: join('AppData', 'Local', 'Programs', 't3code', 'T3 Code (Beta).exe'),
+  shim: join('.t3', 'bin', 't3.cmd'),
+};
+
+/**
+ * The projects T3 Code would list after the run, as the person sees them in its sidebar: a
+ * folder and a title. T3 keeps the list in a database in the home (`.t3\userdata`); on the
+ * fake machine, each `project add <folder> --title <title>` run through T3's own shim in the
+ * home stands for an entry in it. T3 lists a folder only once (it refuses to add one it
+ * already has), so a folder added again is still one project. Only for tests whose replies
+ * let those runs succeed.
+ * @param {string} home
+ * @returns {Promise<{ folder: string, title: string }[]>}
+ */
+export async function t3Projects(home) {
+  const shim = join(home, t3Leaves.shim);
+  /** @type {Map<string, { folder: string, title: string }>} */
+  const projects = new Map();
+  for (const { file, args } of await fakeMachine(home).runs()) {
+    if (file !== shim || args[0] !== 'project' || args[1] !== 'add') continue;
+    const title = args.includes('--title') ? args[args.indexOf('--title') + 1] : basename(args[2]);
+    const key = args[2].toLowerCase();
+    if (!projects.has(key)) projects.set(key, { folder: args[2], title });
+  }
+  return [...projects.values()];
 }
 
 /** @param {string} home */
