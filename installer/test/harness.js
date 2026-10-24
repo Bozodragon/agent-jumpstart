@@ -78,9 +78,12 @@ export function run(args) {
   });
 }
 
-/** @param {{ home: string, downloads: string, answersFile: string }} where @param {string} profile */
-export function runWith(where, profile) {
-  return run(['--profile', profile, '--home', where.home, '--answers', where.answersFile, '--downloads', where.downloads]);
+/**
+ * @param {{ home: string, downloads: string, answersFile: string }} where @param {string} profile
+ * @param {string[]} [extra] more flags, such as `--debug`
+ */
+export function runWith(where, profile, extra = []) {
+  return run(['--profile', profile, ...extra, '--home', where.home, '--answers', where.answersFile, '--downloads', where.downloads]);
 }
 
 /** @param {string} home */

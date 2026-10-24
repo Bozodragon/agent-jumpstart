@@ -2,10 +2,9 @@
 // downloads folder), checks it against its pinned checksum, puts it under
 // %LOCALAPPDATA%\Programs and its folders on the user PATH. A tool that can't be installed is
 // reported in the checklist with the reason; it never stops the run.
-import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { createReadStream, createWriteStream } from 'node:fs';
-import { access, mkdir, readdir, rename, rm } from 'node:fs/promises';
+import { access, copyFile, mkdir, readdir, rename, rm } from 'node:fs/promises';
 import { basename, dirname, join } from 'node:path';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
@@ -20,7 +19,10 @@ class NotInstalled extends Error {}
  * @typedef {object} Context
  * @property {import('./places.js').Places} places
  * @property {import('./machine.js').Machine} machine
- * @property {string} [downloads] The downloads-folder override.
+ * @property {string} [downloads] The downloads-folder override. It stands in for the internet
+ *   only: what's taken from it is still copied into the installer's own downloads folder.
+ * @property {boolean} [keepDownloads] Leave the downloads in the installer's own folder after
+ *   use (a debug run) rather than deleting them.
  * @property {{ write(line: string): void }} log
  */
 
@@ -43,7 +45,7 @@ export async function installTools(context) {
  * @param {Context} context
  * @returns {Promise<string>} the version installed, or why it isn't
  */
-export async function installTool(tool, { places, machine, downloads, log }) {
+export async function installTool(tool, { places, machine, downloads, keepDownloads, log }) {
   const say = (/** @type {string} */ line) => log.write(`${tool.name}: ${line}`);
   ui.step(`Installing ${tool.name} ${tool.version}`);
   const folder = join(places.programs, tool.install.folder);
@@ -62,7 +64,7 @@ export async function installTool(tool, { places, machine, downloads, log }) {
     try {
       await checkSum(file, download.sha256, say);
       if (tool.install.how === 'zip') {
-        await unpack(file, folder, tool.install.check, join(places.state, 'unpacking'), say);
+        await unpack(file, folder, tool.install.check, { scratch: join(places.state, 'unpacking'), machine, say });
         say(`unpacked to ${folder}`);
       } else {
         const args = (tool.install.arguments ?? []).map((arg) => arg.replaceAll('{folder}', folder));
@@ -74,7 +76,8 @@ export async function installTool(tool, { places, machine, downloads, log }) {
         }
       }
     } finally {
-      if (!downloads) await rm(file, { force: true });
+      if (keepDownloads) say(`kept ${file}`);
+      else await rm(file, { force: true });
     }
 
     // A per-user program can be blocked from running (AppLocker), so prove it runs.
@@ -122,17 +125,20 @@ async function addToPath(tool, folder, machine, say) {
  */
 async function obtain({ url }, { downloads, saveIn, say }) {
   const name = basename(new URL(url).pathname);
+  const file = join(saveIn, name);
   if (downloads) {
-    const file = join(downloads, name);
-    if (!(await exists(file))) {
-      say(`${file} isn't there`);
+    const source = join(downloads, name);
+    if (!(await exists(source))) {
+      say(`${source} isn't there`);
       throw new NotInstalled("it wasn't in the downloads folder");
     }
-    say(`taking ${file}`);
+    say(`taking ${source}`);
+    await mkdir(saveIn, { recursive: true });
+    await copyFile(source, file);
+    say(`downloaded to ${file}`);
     return file;
   }
   await mkdir(saveIn, { recursive: true });
-  const file = join(saveIn, name);
   say(`downloading ${url}`);
   try {
     const response = await fetch(url);
@@ -144,6 +150,7 @@ async function obtain({ url }, { downloads, saveIn, say }) {
     say(`download failed: ${messageOf(cause)}`);
     throw new NotInstalled(`it couldn't be downloaded (${messageOf(cause)})`);
   }
+  say(`downloaded to ${file}`);
   return file;
 }
 
@@ -163,19 +170,18 @@ async function checkSum(file, expected, say) {
  * Unpacks with Windows' own tar (in System32 since Windows 10), into a scratch folder first,
  * then swaps it in for any earlier copy.
  * @param {string} zip @param {string} folder @param {string} check the program it must hold
- * @param {string} scratch @param {(line: string) => void} say
+ * @param {{ scratch: string, machine: import('./machine.js').Machine, say: (line: string) => void }} how
  */
-async function unpack(zip, folder, check, scratch, say) {
+async function unpack(zip, folder, check, { scratch, machine, say }) {
   await rm(scratch, { recursive: true, force: true });
   await mkdir(scratch, { recursive: true });
   try {
     const tar = join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'tar.exe');
-    await new Promise((resolve, reject) => {
-      execFile(tar, ['-xf', zip, '-C', scratch], (error, _stdout, stderr) => (error ? reject(new Error(stderr.trim() || error.message)) : resolve(undefined)));
-    }).catch((error) => {
-      say(`tar: ${messageOf(error)}`);
+    const ran = await machine.runHere(tar, ['-xf', zip, '-C', scratch]);
+    if (ran.code !== 0) {
+      say(`tar: ${ran.output.trim()}`);
       throw new NotInstalled("the download couldn't be unpacked");
-    });
+    }
     // Node's zip wraps everything in one top folder; gh's doesn't.
     const entries = await readdir(scratch);
     const candidates = entries.length === 1 ? [scratch, join(scratch, entries[0])] : [scratch];

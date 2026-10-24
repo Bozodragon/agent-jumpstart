@@ -9,6 +9,9 @@
 //   <home>/fake-machine/replies.json      written by a test: what a run returns, keyed by the
 //                                         file name, or the file name and its arguments
 //                                         ("gh.exe auth status"). No reply means code 0, no output.
+//
+// Every program the installer runs goes through `run` (or `runHere`), real or fake, so a debug
+// run's log holds each one with its exit code and full output, and nothing else has to log it.
 import { spawn } from 'node:child_process';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { basename, join } from 'node:path';
@@ -22,14 +25,37 @@ import { basename, join } from 'node:path';
  *   environment variable, seen by programs started afterwards.
  * @property {(file: string, args: string[]) => Promise<Ran>} run Runs a program and waits for it.
  *   Never throws: a program that couldn't start gives code -1 and the reason as its output.
+ * @property {(file: string, args: string[]) => Promise<Ran>} runHere Like `run`, but always runs
+ *   the program for real, even on the fake machine. Only for programs that change nothing but
+ *   the installer's own folders, such as tar.exe unpacking a download into its scratch folder.
  */
+
+/** @typedef {(file: string, args: string[]) => Promise<Ran>} Runner */
 
 /** @typedef {{ code: number, output: string }} Ran */
 
-/** @param {import('./places.js').Places} places @returns {Machine} */
-export function openMachine(places) {
-  return places.fakeMachine ? fakeMachine(places.fakeMachine) : realMachine();
+/**
+ * @param {import('./places.js').Places} places
+ * @param {import('./log.js').Log} log
+ * @returns {Machine}
+ */
+export function openMachine(places, log) {
+  // Logged before it starts as well as after, so a program that never returns still shows.
+  /** @param {Runner} run @returns {Runner} */
+  const logged = (run) => async (file, args) => {
+    log.detail(`Running: ${[file, ...args].map(quoted).join(' ')}`);
+    const ran = await run(file, args);
+    const output = ran.output.trimEnd();
+    log.detail(`Ran: ${basename(file)} (code ${ran.code})`);
+    log.detail(output ? output.split(/\r?\n/).map((line) => `  | ${line}`).join('\n') : '  (no output)');
+    return ran;
+  };
+  const machine = places.fakeMachine ? fakeMachine(places.fakeMachine, logged) : realMachine(logged(runProgram));
+  return { ...machine, runHere: logged(runProgram) };
 }
+
+/** @param {string} arg */
+const quoted = (arg) => (/[\s"]/.test(arg) ? `"${arg}"` : arg);
 
 /** @param {string} entry */
 const sameFolder = (entry) => expand(entry).replace(/[\\/]+$/, '').toLowerCase();
@@ -43,8 +69,12 @@ const includesFolder = (entries, folder) => entries.some((entry) => sameFolder(e
 /** @param {string} raw */
 const splitPath = (raw) => raw.split(';').filter((entry) => entry.trim() !== '');
 
-/** @param {string} folder @returns {Machine} */
-function fakeMachine(folder) {
+/**
+ * @param {string} folder
+ * @param {(run: Runner) => Runner} logged
+ * @returns {Omit<Machine, 'runHere'>}
+ */
+function fakeMachine(folder, logged) {
   /** @param {string} name @param {unknown} empty */
   const read = async (name, empty) => {
     try {
@@ -76,13 +106,13 @@ function fakeMachine(folder) {
     async setUserVariable(name, value) {
       await write('environment.json', { ...(await environment()), [name]: value });
     },
-    async run(file, args) {
+    run: logged(async (file, args) => {
       await write('runs.json', [...(await read('runs.json', [])), { file, args }]);
       /** @type {Record<string, Partial<Ran>>} */
       const replies = await read('replies.json', {});
       const reply = replies[[basename(file), ...args].join(' ')] ?? replies[basename(file)] ?? {};
       return { code: reply.code ?? 0, output: reply.output ?? '' };
-    },
+    }),
   };
 }
 
@@ -93,9 +123,10 @@ const system32 = (name) => join(process.env.SystemRoot ?? 'C:\\Windows', 'System
  * The real user environment lives in HKCU\Environment. It's read and written with reg.exe
  * and setx.exe rather than PowerShell, because Constrained Language Mode blocks the .NET
  * calls PowerShell would need, and these are ordinary programs in System32.
- * @returns {Machine}
+ * @param {Runner} runProgram the logged runner, so reg.exe and setx.exe are logged too
+ * @returns {Omit<Machine, 'runHere'>}
  */
-function realMachine() {
+function realMachine(runProgram) {
   const reg = system32('reg.exe');
 
   /** @param {string} name @returns {Promise<string | undefined>} */
