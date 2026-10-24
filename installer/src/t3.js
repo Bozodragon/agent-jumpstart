@@ -14,7 +14,7 @@ import { pipeline } from 'node:stream/promises';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { loadManifest } from './manifest.js';
 import { messageOf } from './stop.js';
-import { exists, NotInstalled, obtain } from './tools.js';
+import { change, exists, NotInstalled, obtain } from './tools.js';
 import * as ui from './ui.js';
 
 /**
@@ -62,6 +62,7 @@ export async function installT3(channel, context) {
 
   let release;
   let already = false;
+  let changed = change.installed;
   try {
     const where = entry.channels[channel];
     if (!where) throw new NotInstalled(`the list of versions has no ${channel} channel`);
@@ -70,10 +71,14 @@ export async function installT3(channel, context) {
 
     const program = join(places.programs, entry.install.folder, where.program);
     const installed = await installedVersion(machine, entry.install.versionIn);
-    if ((await exists(program)) && installed === release.version) {
+    const programThere = await exists(program);
+    if (programThere && installed === release.version) {
       say(`${release.version} is already in ${program}`);
       already = true;
+      changed = change.upToDate;
     } else {
+      if (installed && installed !== release.version) changed = change.updatedFrom(installed);
+      else if (installed || programThere) changed = change.reinstalled;
       if (installed) say(`replacing ${installed}`);
       const file = await obtain({ url: release.url }, { downloads, saveIn: join(places.state, 'downloads'), say });
       try {
@@ -103,7 +108,7 @@ export async function installT3(channel, context) {
 
   // The silent install starts T3 (--force-run); an install that was already there may never have been opened.
   const opened = await waitForFirstLaunch(shim, already ? 0 : machine.patience, { attended, say, name: entry.name });
-  const state = [channel, ...(already ? ['already installed'] : []), ...(opened ? [] : ['not opened yet'])].join(', ');
+  const state = [channel, changed, ...(opened ? [] : ['not opened yet'])].join(', ');
   return { row: `${release.version} (${state})`, installed: true, opened, shim };
 }
 

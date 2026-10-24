@@ -86,7 +86,7 @@ test("clasp's browser sign-in runs in the person's window and the installer wait
   const result = await runWith(where, 'york');
 
   assert.equal(result.code, 0, result.stdout + result.stderr);
-  checklistSays(result.stdout, 'clasp', `${clasp.version}, signed in as a.person@york.ac.uk`);
+  checklistSays(result.stdout, 'clasp', `${clasp.version} (installed), signed in as a.person@york.ac.uk`);
   assert.ok(result.stdout.includes(appsScript.signIn.slice(0, 40)), result.stdout);
   const claspRuns = (await machine.runs()).filter((run) => basename(run.file) === 'clasp.cmd' && run.args[0] !== '--version');
   assert.deepEqual(
@@ -123,7 +123,7 @@ test("a sign-in that doesn't finish leaves clasp installed and the checklist say
   const result = await runWith(where, 'york');
 
   assert.equal(result.code, 0, result.stdout + result.stderr);
-  checklistSays(result.stdout, 'clasp', `${clasp.version}, not signed in`);
+  checklistSays(result.stdout, 'clasp', `${clasp.version} (installed), not signed in`);
 });
 
 test('on a re-run with clasp at the pinned version and signed in, nothing is reinstalled, signed in again or asked again', async (t) => {
@@ -143,7 +143,7 @@ test('on a re-run with clasp at the pinned version and signed in, nothing is rei
   const result = await runWith(where, 'york');
 
   assert.equal(result.code, 0, result.stdout + result.stderr);
-  checklistSays(result.stdout, 'clasp', `${clasp.version} (already installed), signed in as a.person@york.ac.uk`);
+  checklistSays(result.stdout, 'clasp', `${clasp.version} (already up to date), signed in as a.person@york.ac.uk`);
   const runs = await machine.runs();
   assert.deepEqual(runs.filter((run) => basename(run.file) === 'npm.cmd' || run.args[0] === 'login'), []);
   assert.ok(!result.stdout.includes(appsScript.settingsPage), result.stdout);

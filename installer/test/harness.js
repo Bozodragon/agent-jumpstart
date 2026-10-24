@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { mkdtemp, mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { access, mkdtemp, mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -65,6 +65,15 @@ export async function fakeGoogleDrive(home, state) {
 /** @param {string} home */
 export async function readSettings(home) {
   return JSON.parse(await readFile(join(stateFolder(home), 'settings.json'), 'utf8'));
+}
+
+/**
+ * Leaves a settings file as an earlier run would have, so the next run is a re-run.
+ * @param {string} home @param {Record<string, unknown>} settings
+ */
+export async function seedSettings(home, settings) {
+  await mkdir(stateFolder(home), { recursive: true });
+  await writeFile(join(stateFolder(home), 'settings.json'), `${JSON.stringify(settings, null, 2)}\n`);
 }
 
 /**
@@ -221,4 +230,56 @@ export async function readOnlyLog(home) {
   const logs = await readdir(join(stateFolder(home), 'logs'));
   assert.equal(logs.length, 1);
   return { name: logs[0], text: await readFile(join(stateFolder(home), 'logs', logs[0]), 'utf8') };
+}
+
+/** @param {string} path */
+export const exists = (path) => access(path).then(() => true, () => false);
+
+/** The file name a download's address ends in: what the downloads folder holds it as. @param {string} url */
+export const fileName = (url) => basename(new URL(url).pathname);
+
+/**
+ * Stand-ins for the vendors' downloads, shaped like the real ones: Node's zip has one
+ * top folder, gh's has `bin\gh.exe`, and Git's installer is a file the fake machine "runs".
+ * @param {string} folder where to build them
+ * @param {any} tool a manifest entry
+ * @returns {Promise<string>} the file, named as the vendor names it
+ */
+async function standIn(folder, tool) {
+  const name = fileName(tool.downloads[process.arch].url);
+  const file = join(folder, name);
+  if (tool.install.how === 'installer') {
+    await writeFile(file, `stand-in for ${name}`);
+    return file;
+  }
+  const contents = join(folder, `${tool.id}-contents`);
+  const inner = tool.id === 'node' ? join(contents, name.replace(/\.zip$/, '')) : contents;
+  const check = join(inner, tool.install.check);
+  await mkdir(join(check, '..'), { recursive: true });
+  await writeFile(check, 'stand-in');
+  await writeFile(join(inner, tool.id === 'node' ? 'npm.cmd' : 'LICENSE'), 'stand-in');
+  await makeZip(contents, file);
+  return file;
+}
+
+/**
+ * Fills the downloads folder with stand-ins and a copy of the pinned manifest whose
+ * checksums are the stand-ins', so the run can succeed without the vendors' files.
+ * @param {{ downloads: string }} where
+ * @param {string[]} [ids] which tools to supply (default all)
+ */
+export async function supplyDownloads(where, ids) {
+  const manifest = await readManifest();
+  const workshop = join(where.downloads, '..', 'workshop');
+  await mkdir(workshop, { recursive: true });
+  for (const tool of manifest.tools) {
+    // T3 isn't pinned, so it has no download here (supplyT3 gives it its own).
+    if (!tool.downloads || (ids && !ids.includes(tool.id))) continue;
+    const built = await standIn(workshop, tool);
+    const bytes = await readFile(built);
+    await writeFile(join(where.downloads, basename(built)), bytes);
+    tool.downloads[process.arch].sha256 = createHash('sha256').update(bytes).digest('hex');
+  }
+  await writeFile(join(where.downloads, 'manifest.json'), JSON.stringify(manifest));
+  return manifest;
 }
