@@ -193,8 +193,10 @@ function realMachine(runProgram) {
     },
     run: runProgram,
     runOnScreen(file, args) {
+      const how = startable(file, args);
+      if ('refused' in how) return Promise.resolve(-1);
       return new Promise((resolve) => {
-        const child = spawn(file, args, { stdio: 'inherit' });
+        const child = spawn(how.file, how.args, { ...how.options, stdio: 'inherit' });
         child.once('error', () => resolve(-1));
         child.once('close', (code) => resolve(code ?? -1));
       });
@@ -203,15 +205,31 @@ function realMachine(runProgram) {
 }
 
 /**
- * Not for .cmd or .bat files: Node won't start those without a shell.
- * @param {string} file @param {string[]} args @returns {Promise<Ran>}
+ * Node won't start a .cmd or .bat file by itself, so those run through cmd.exe. The command line
+ * is built here, quoted for cmd, and passed as it is: anything cmd would still expand inside
+ * quotes (`%`, `!`, `"`, line breaks) is refused rather than escaped.
+ * @param {string} file @param {string[]} args
+ * @returns {{ file: string, args: string[], options: import('node:child_process').SpawnOptions } | { refused: string }}
  */
+function startable(file, args) {
+  if (!/\.(cmd|bat)$/i.test(file)) return { file, args, options: {} };
+  const unsafe = [file, ...args].find((arg) => /["%!\r\n]/.test(arg));
+  if (unsafe !== undefined) return { refused: `can't pass ${unsafe} to ${basename(file)} safely` };
+  const line = [file, ...args].map((arg) => (arg === '' || /[\s&|<>^(),;=]/.test(arg) ? `"${arg}"` : arg)).join(' ');
+  // /d skips AutoRun commands; /s with the outer quotes keeps the line exactly as built.
+  const cmd = process.env.ComSpec ?? system32('cmd.exe');
+  return { file: cmd, args: ['/d', '/s', '/c', `"${line}"`], options: { windowsVerbatimArguments: true } };
+}
+
+/** @param {string} file @param {string[]} args @returns {Promise<Ran>} */
 function runProgram(file, args) {
+  const how = startable(file, args);
+  if ('refused' in how) return Promise.resolve({ code: -1, output: how.refused });
   return new Promise((resolve) => {
     let output = '';
-    const child = spawn(file, args, { windowsHide: true });
-    child.stdout.on('data', (chunk) => (output += chunk));
-    child.stderr.on('data', (chunk) => (output += chunk));
+    const child = spawn(how.file, how.args, { ...how.options, windowsHide: true });
+    child.stdout?.on('data', (chunk) => (output += chunk));
+    child.stderr?.on('data', (chunk) => (output += chunk));
     child.once('error', (error) => resolve({ code: -1, output: error.message }));
     child.once('close', (code) => resolve({ code: code ?? -1, output }));
   });

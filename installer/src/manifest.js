@@ -19,6 +19,11 @@ const pinned = fileURLToPath(new URL('../../manifest.json', import.meta.url));
 /** @typedef {{ url: string, sha256: string }} Download */
 
 /**
+ * The skills CLI, run with npx at this version.
+ * @typedef {{ package: string, version: string }} SkillsCli
+ */
+
+/**
  * @typedef {object} Install
  * @property {'zip' | 'installer'} how A zip is unpacked into the folder (dropping a single top
  *   folder if it has one); an installer is run with `arguments`.
@@ -32,7 +37,7 @@ const pinned = fileURLToPath(new URL('../../manifest.json', import.meta.url));
  * A test (or an offline run) can put its own `manifest.json` in the downloads folder,
  * so its stand-in files can pass the checksum check.
  * @param {string | undefined} downloads
- * @returns {Promise<{ tools: Tool[], source: string }>}
+ * @returns {Promise<{ tools: Tool[], skillsCli: SkillsCli, source: string }>}
  */
 export async function loadManifest(downloads) {
   for (const source of downloads ? [join(downloads, 'manifest.json'), pinned] : [pinned]) {
@@ -50,7 +55,11 @@ export async function loadManifest(downloads) {
       throw new Stop(`The list of versions to install (${source}) isn't valid: ${messageOf(error)}`);
     }
     if (!Array.isArray(manifest.tools)) throw new Stop(`The list of versions to install (${source}) has no tools.`);
-    return { tools: manifest.tools, source };
+    const { skillsCli } = manifest;
+    if (typeof skillsCli?.package !== 'string' || typeof skillsCli?.version !== 'string') {
+      throw new Stop(`The list of versions to install (${source}) doesn't pin the skills CLI.`);
+    }
+    return { tools: manifest.tools, skillsCli, source };
   }
   throw new Error('unreachable');
 }

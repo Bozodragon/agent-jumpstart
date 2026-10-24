@@ -20,7 +20,8 @@ const profilesFolder = fileURLToPath(new URL('../../profiles/', import.meta.url)
  * @property {{ signUpPage: string, email: string }} [github] For the person who chooses to set up
  *   GitHub: the sign-up page, and which email to sign up with, in words ("your university email address").
  * @property {{ id: string, question: string, default: boolean }[]} extraTools
- * @property {{ source: string, names?: string[] }[]} skills
+ * @property {{ source: string, names?: string[] }[]} skills Installed with the skills CLI. A source
+ *   given without names is the path to one skill (`owner/repo/path/to/skill`), named by its last part.
  */
 
 /** @typedef {{ name: string, default: boolean }} Choice */
