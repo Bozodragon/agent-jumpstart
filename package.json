@@ -7,7 +7,9 @@
   ],
   "scripts": {
     "test": "node --test \"installer/test/**/*.test.js\"",
-    "typecheck": "tsc"
+    "typecheck": "tsc",
+    "build:portall": "node bootstrap/build.js",
+    "publish:portall": "node bootstrap/build.js && portall publish dist/portall --item jumpstart-install --public"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",

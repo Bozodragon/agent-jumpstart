@@ -44,6 +44,11 @@
       "default": false
     }
   ],
+  "connectorsPage": "https://claude.ai/customize/connectors",
+  "github": {
+    "signUpPage": "https://github.com/signup",
+    "email": "your university email address"
+  },
   "extraTools": [
     {
       "id": "apps-script",
