@@ -78,9 +78,12 @@ export function run(args) {
   });
 }
 
-/** @param {{ home: string, downloads: string, answersFile: string }} where @param {string} profile */
-export function runWith(where, profile) {
-  return run(['--profile', profile, '--home', where.home, '--answers', where.answersFile, '--downloads', where.downloads]);
+/**
+ * @param {{ home: string, downloads: string, answersFile: string }} where @param {string} profile
+ * @param {string[]} [extra] more flags, such as `--debug`
+ */
+export function runWith(where, profile, extra = []) {
+  return run(['--profile', profile, ...extra, '--home', where.home, '--answers', where.answersFile, '--downloads', where.downloads]);
 }
 
 /** @param {string} home */
@@ -126,14 +129,15 @@ export function fakeMachine(home) {
     environment: () => readJson('environment.json'),
     /** @returns {Promise<string[]>} the user PATH, one entry per item */
     userPath: async () => ((await readJson('environment.json')).Path ?? '').split(';').filter(Boolean),
-    /** @returns {Promise<{ file: string, args: string[] }[]>} */
+    /** @returns {Promise<{ file: string, args: string[], onScreen?: boolean }[]>} */
     runs: () => readJson('runs.json', []),
     /** @param {Record<string, string>} variables */
     setEnvironment: (variables) => writeJson('environment.json', variables),
     /**
      * Keyed by the program's file name, optionally followed by its arguments
      * (`"node.exe --version"`); the longer key wins. Runs with no reply succeed with no output.
-     * @param {Record<string, { code?: number, output?: string }>} replies
+     * A list answers successive runs with that key in turn, and its last reply repeats.
+     * @param {Record<string, Reply | Reply[]>} replies
      */
     setReplies: (replies) => writeJson('replies.json', replies),
   };
@@ -151,6 +155,8 @@ export async function makeZip(folder, zipFile) {
     execFile(tar, ['-a', '-cf', zipFile, '-C', folder, ...entries], (error) => (error ? reject(error) : resolve(undefined)));
   });
 }
+
+/** @typedef {{ code?: number, output?: string }} Reply */
 
 /** @param {string} home */
 export async function readOnlyLog(home) {

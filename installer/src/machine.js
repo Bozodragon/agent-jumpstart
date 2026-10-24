@@ -10,6 +10,14 @@
 //   <home>/fake-machine/replies.json      written by a test: what a run returns, keyed by the
 //                                         file name, or the file name and its arguments
 //                                         ("gh.exe auth status"). No reply means code 0, no output.
+//                                         A list of replies answers successive runs in turn
+//                                         (the last one repeats), e.g. a status before and
+//                                         after a sign-in.
+//
+// Every program the installer runs goes through `run`, `runHere` or `runOnScreen`, real or fake,
+// so a debug run's log holds each one with its exit code and full output (for `runOnScreen`,
+// the command and code only: its output goes to the person's window), and nothing else has to
+// log it.
 import { spawn } from 'node:child_process';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { basename, join } from 'node:path';
@@ -23,17 +31,50 @@ import { basename, join } from 'node:path';
  *   environment variable, seen by programs started afterwards.
  * @property {(file: string, args: string[]) => Promise<Ran>} run Runs a program and waits for it.
  *   Never throws: a program that couldn't start gives code -1 and the reason as its output.
+ * @property {(file: string, args: string[]) => Promise<Ran>} runHere Like `run`, but always runs
+ *   the program for real, even on the fake machine. Only for programs that change nothing but
+ *   the installer's own folders, such as tar.exe unpacking a download into its scratch folder.
  * @property {(file: string, args: string[]) => Promise<number>} runOnScreen Runs a program in the
  *   person's window, so they see what it prints and can answer it, and waits for it. Returns its
  *   exit code, or -1 if it couldn't start.
  */
 
+/** @typedef {(file: string, args: string[]) => Promise<Ran>} Runner */
+
 /** @typedef {{ code: number, output: string }} Ran */
 
-/** @param {import('./places.js').Places} places @returns {Machine} */
-export function openMachine(places) {
-  return places.fakeMachine ? fakeMachine(places.fakeMachine) : realMachine();
+/**
+ * @param {import('./places.js').Places} places
+ * @param {import('./log.js').Log} log
+ * @returns {Machine}
+ */
+export function openMachine(places, log) {
+  // Logged before it starts as well as after, so a program that never returns still shows.
+  /** @param {Runner} run @returns {Runner} */
+  const logged = (run) => async (file, args) => {
+    log.detail(`Running: ${[file, ...args].map(quoted).join(' ')}`);
+    const ran = await run(file, args);
+    const output = ran.output.trimEnd();
+    log.detail(`Ran: ${basename(file)} (code ${ran.code})`);
+    log.detail(output ? output.split(/\r?\n/).map((line) => `  | ${line}`).join('\n') : '  (no output)');
+    return ran;
+  };
+  // A program in the person's window writes straight to it: catching its output would take the
+  // real terminal away from it (gh auth login needs one), so only the command and code are logged.
+  /** @param {Machine['runOnScreen']} run @returns {Machine['runOnScreen']} */
+  const loggedOnScreen = (run) => async (file, args) => {
+    log.detail(`Running in the person's window: ${[file, ...args].map(quoted).join(' ')}`);
+    const code = await run(file, args);
+    log.detail(`Ran: ${basename(file)} (code ${code})`);
+    log.detail("  (its output went to the person's window, not the log)");
+    return code;
+  };
+  const machine = places.fakeMachine ? fakeMachine(places.fakeMachine, logged) : realMachine(logged(runProgram));
+  return { ...machine, runOnScreen: loggedOnScreen(machine.runOnScreen), runHere: logged(runProgram) };
 }
+
+/** @param {string} arg */
+const quoted = (arg) => (/[\s"]/.test(arg) ? `"${arg}"` : arg);
 
 /** @param {string} entry */
 const sameFolder = (entry) => expand(entry).replace(/[\\/]+$/, '').toLowerCase();
@@ -47,8 +88,12 @@ const includesFolder = (entries, folder) => entries.some((entry) => sameFolder(e
 /** @param {string} raw */
 const splitPath = (raw) => raw.split(';').filter((entry) => entry.trim() !== '');
 
-/** @param {string} folder @returns {Machine} */
-function fakeMachine(folder) {
+/**
+ * @param {string} folder
+ * @param {(run: Runner) => Runner} logged
+ * @returns {Omit<Machine, 'runHere'>}
+ */
+function fakeMachine(folder, logged) {
   /** @param {string} name @param {unknown} empty */
   const read = async (name, empty) => {
     try {
@@ -80,9 +125,7 @@ function fakeMachine(folder) {
     async setUserVariable(name, value) {
       await write('environment.json', { ...(await environment()), [name]: value });
     },
-    async run(file, args) {
-      return reply(file, args, { file, args });
-    },
+    run: logged((file, args) => reply(file, args, { file, args })),
     async runOnScreen(file, args) {
       return (await reply(file, args, { file, args, onScreen: true })).code;
     },
@@ -90,10 +133,22 @@ function fakeMachine(folder) {
 
   /** @param {string} file @param {string[]} args @param {object} record @returns {Promise<Ran>} */
   async function reply(file, args, record) {
-    await write('runs.json', [...(await read('runs.json', [])), record]);
-    /** @type {Record<string, Partial<Ran>>} */
+    /** @type {{ file: string, args: string[] }[]} */
+    const runs = await read('runs.json', []);
+    await write('runs.json', [...runs, record]);
+    /** @type {Record<string, Partial<Ran> | Partial<Ran>[]>} */
     const replies = await read('replies.json', {});
-    const found = replies[[basename(file), ...args].join(' ')] ?? replies[basename(file)] ?? {};
+    /** @param {string} key @param {(run: { file: string, args: string[] }) => string} keyOf */
+    const answer = (key, keyOf) => {
+      const found = replies[key];
+      if (!Array.isArray(found)) return found;
+      const earlier = runs.filter((run) => keyOf(run) === key).length;
+      return found[Math.min(earlier, found.length - 1)];
+    };
+    const found =
+      answer([basename(file), ...args].join(' '), (run) => [basename(run.file), ...run.args].join(' ')) ??
+      answer(basename(file), (run) => basename(run.file)) ??
+      {};
     return { code: found.code ?? 0, output: found.output ?? '' };
   }
 }
@@ -105,9 +160,10 @@ const system32 = (name) => join(process.env.SystemRoot ?? 'C:\\Windows', 'System
  * The real user environment lives in HKCU\Environment. It's read and written with reg.exe
  * and setx.exe rather than PowerShell, because Constrained Language Mode blocks the .NET
  * calls PowerShell would need, and these are ordinary programs in System32.
- * @returns {Machine}
+ * @param {Runner} runProgram the logged runner, so reg.exe and setx.exe are logged too
+ * @returns {Omit<Machine, 'runHere'>}
  */
-function realMachine() {
+function realMachine(runProgram) {
   const reg = system32('reg.exe');
 
   /** @param {string} name @returns {Promise<string | undefined>} */
@@ -152,8 +208,10 @@ function realMachine() {
     },
     run: runProgram,
     runOnScreen(file, args) {
+      const how = startable(file, args);
+      if ('refused' in how) return Promise.resolve(-1);
       return new Promise((resolve) => {
-        const child = spawn(file, args, { stdio: 'inherit' });
+        const child = spawn(how.file, how.args, { ...how.options, stdio: 'inherit' });
         child.once('error', () => resolve(-1));
         child.once('close', (code) => resolve(code ?? -1));
       });
@@ -162,15 +220,31 @@ function realMachine() {
 }
 
 /**
- * Not for .cmd or .bat files: Node won't start those without a shell.
- * @param {string} file @param {string[]} args @returns {Promise<Ran>}
+ * Node won't start a .cmd or .bat file by itself, so those run through cmd.exe. The command line
+ * is built here, quoted for cmd, and passed as it is: anything cmd would still expand inside
+ * quotes (`%`, `!`, `"`, line breaks) is refused rather than escaped.
+ * @param {string} file @param {string[]} args
+ * @returns {{ file: string, args: string[], options: import('node:child_process').SpawnOptions } | { refused: string }}
  */
+function startable(file, args) {
+  if (!/\.(cmd|bat)$/i.test(file)) return { file, args, options: {} };
+  const unsafe = [file, ...args].find((arg) => /["%!\r\n]/.test(arg));
+  if (unsafe !== undefined) return { refused: `can't pass ${unsafe} to ${basename(file)} safely` };
+  const line = [file, ...args].map((arg) => (arg === '' || /[\s&|<>^(),;=]/.test(arg) ? `"${arg}"` : arg)).join(' ');
+  // /d skips AutoRun commands; /s with the outer quotes keeps the line exactly as built.
+  const cmd = process.env.ComSpec ?? system32('cmd.exe');
+  return { file: cmd, args: ['/d', '/s', '/c', `"${line}"`], options: { windowsVerbatimArguments: true } };
+}
+
+/** @param {string} file @param {string[]} args @returns {Promise<Ran>} */
 function runProgram(file, args) {
+  const how = startable(file, args);
+  if ('refused' in how) return Promise.resolve({ code: -1, output: how.refused });
   return new Promise((resolve) => {
     let output = '';
-    const child = spawn(file, args, { windowsHide: true });
-    child.stdout.on('data', (chunk) => (output += chunk));
-    child.stderr.on('data', (chunk) => (output += chunk));
+    const child = spawn(how.file, how.args, { ...how.options, windowsHide: true });
+    child.stdout?.on('data', (chunk) => (output += chunk));
+    child.stderr?.on('data', (chunk) => (output += chunk));
     child.once('error', (error) => resolve({ code: -1, output: error.message }));
     child.once('close', (code) => resolve({ code: code ?? -1, output }));
   });

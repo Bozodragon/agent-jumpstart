@@ -14,14 +14,31 @@ const pinned = fileURLToPath(new URL('../../manifest.json', import.meta.url));
  * @property {string} version As the tool's own `--version` prints it.
  * @property {Partial<Record<string, Download>>} downloads By processor (`x64`, `arm64`).
  * @property {Install} install
+ * @property {string} [when] Set aside from the main run of installs: installed only by the
+ *   step this names (for an extra tool in the profile, its id, when ticked).
+ * @property {SignIn} [signIn] For a tool the person signs in to in the browser.
  */
 
 /** @typedef {{ url: string, sha256: string }} Download */
 
 /**
+ * @typedef {object} SignIn
+ * @property {string[]} run The tool's arguments that start its browser sign-in and wait for it.
+ * @property {string[]} check The tool's arguments that report who is signed in.
+ * @property {string} signedInAs A pattern `check`'s output matches when someone is signed
+ *   in; its first group is the account.
+ */
+
+/**
+ * The skills CLI, run with npx at this version.
+ * @typedef {{ package: string, version: string }} SkillsCli
+ */
+
+/**
  * @typedef {object} Install
- * @property {'zip' | 'installer'} how A zip is unpacked into the folder (dropping a single top
- *   folder if it has one); an installer is run with `arguments`.
+ * @property {'zip' | 'installer' | 'npm'} how A zip is unpacked into the folder (dropping a
+ *   single top folder if it has one); an installer is run with `arguments`; an npm package
+ *   (the downloaded .tgz) is installed globally with the folder as npm's prefix.
  * @property {string} folder Under `%LOCALAPPDATA%\Programs`.
  * @property {string[]} path Folders inside it to put on the user PATH.
  * @property {string} check The program inside it to run with `--version`.
@@ -32,7 +49,7 @@ const pinned = fileURLToPath(new URL('../../manifest.json', import.meta.url));
  * A test (or an offline run) can put its own `manifest.json` in the downloads folder,
  * so its stand-in files can pass the checksum check.
  * @param {string | undefined} downloads
- * @returns {Promise<{ tools: Tool[], source: string }>}
+ * @returns {Promise<{ tools: Tool[], skillsCli: SkillsCli, source: string }>}
  */
 export async function loadManifest(downloads) {
   for (const source of downloads ? [join(downloads, 'manifest.json'), pinned] : [pinned]) {
@@ -50,7 +67,11 @@ export async function loadManifest(downloads) {
       throw new Stop(`The list of versions to install (${source}) isn't valid: ${messageOf(error)}`);
     }
     if (!Array.isArray(manifest.tools)) throw new Stop(`The list of versions to install (${source}) has no tools.`);
-    return { tools: manifest.tools, source };
+    const { skillsCli } = manifest;
+    if (typeof skillsCli?.package !== 'string' || typeof skillsCli?.version !== 'string') {
+      throw new Stop(`The list of versions to install (${source}) doesn't pin the skills CLI.`);
+    }
+    return { tools: manifest.tools, skillsCli, source };
   }
   throw new Error('unreachable');
 }

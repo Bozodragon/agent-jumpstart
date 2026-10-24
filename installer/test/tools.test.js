@@ -72,7 +72,8 @@ test('Node, Git and gh install per user from checked downloads, with their folde
   const result = await runWith(where, 'default');
 
   assert.equal(result.code, 0, result.stderr);
-  for (const tool of manifest.tools) checklistSays(result.stdout, tool.name, tool.version);
+  // Tools with `when` (an extra tool's) are installed only when it's ticked.
+  for (const tool of manifest.tools.filter((/** @type {any} */ tool) => !tool.when)) checklistSays(result.stdout, tool.name, tool.version);
 
   assert.ok(await exists(join(programs, 'nodejs', 'node.exe')), 'node.exe unpacked without its top folder');
   assert.ok(await exists(join(programs, 'nodejs', 'npm.cmd')));
@@ -109,7 +110,8 @@ test('a download that fails its pinned checksum, or is missing, leaves that tool
   checklistSays(result.stdout, 'Git', "Not installed: the download didn't match its pinned checksum");
   checklistSays(result.stdout, 'GitHub CLI', "Not installed: it wasn't in the downloads folder");
   assert.equal(await exists(join(programsFolder(where.home), 'nodejs')), false);
-  assert.deepEqual(await machine.runs(), [], 'nothing was run');
+  // The skills CLI still runs (it may find a Git already there); no tool's installer or check does.
+  assert.deepEqual((await machine.runs()).filter((ran) => ran.file !== 'npx.cmd'), [], 'nothing was run');
   assert.deepEqual(await machine.userPath(), []);
   const log = await readOnlyLog(where.home);
   assert.match(log.text, /Node\.js: checksum [0-9a-f]{64} isn't the pinned/);

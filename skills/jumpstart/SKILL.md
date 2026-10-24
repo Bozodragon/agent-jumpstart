@@ -93,9 +93,23 @@ Then read their reply:
 
 Done when the person has approved the profile with no change outstanding.
 
-## 7. After approval
+## 7. Write the top workspace
 
-Writing their workspaces isn't built yet. Tell them their profile is ready, that nothing has been saved yet, and that the next part of the setup is coming. Stop.
+Now you write, in the top workspace (the folder you're running in): rules in its agent instructions, facts in three files beside them. The facts are the approved profile and nothing else: no finding the person didn't see or removed, no sources, no `notFound`.
+
+1. **Put old files aside.** If `CLAUDE.md`, `CLAUDE.local.md`, `me.md`, `people.md` or `work.md` is already here, rename it with " (before Jumpstart)" added to its name, such as `CLAUDE (before Jumpstart).md`. Nothing they had is lost, and old instructions stop loading. Tell them in one line which files you put aside.
+2. **The three files.** Write each in the person's voice, as they will open and read it: turn "you" and "your" into "I", "me" and "my", in headings and lines alike. Each starts with a title, then "Checked with [first name] on [date]." (such as 25 October 2026), then the profile's sections, each section's title as a heading over its lines as a bulleted list. Labelled items read "Label: text". A section with no lines keeps its heading.
+   - `me.md`, titled "About me": every section except "Your work" and "People you work with", in page order.
+   - `work.md`, titled "My work": the "Your work" section.
+   - `people.md`, titled "People I work with": the "People you work with" section. Hold every line, including any the person added, to the **Colleagues** rule in [`research-brief.md`](research-brief.md) once more; if you cut something from a line, tell them in one line.
+3. **The agent instructions.** Write `CLAUDE.md` from [`agent-instructions.md`](agent-instructions.md): everything below its line, word for word, with `[top workspace]` replaced by this folder's full path. Add nothing about the person: their facts live in the three files, which `CLAUDE.md` names in backticks so they are read when needed rather than loaded into every conversation.
+4. **Memory off here too.** A workspace's setting outranks the one the installer made for the whole laptop, so set it here as well, in `.claude\settings.local.json`: if the file is missing, create it as `{ "autoMemoryEnabled": false }`; if it holds a JSON object, set `autoMemoryEnabled` to `false` and keep every other key. If it isn't valid JSON, leave it alone and tell them in one line that memory couldn't be switched off for this folder.
+
+Done when `CLAUDE.md`, `me.md`, `work.md` and `people.md` are here, `CLAUDE.md` matches the template with only the path filled in, every line of the three files is one the person approved, and the settings file turns memory off (or they've been told why not).
+
+## 8. Finish
+
+Setting up their workspaces isn't built yet. Tell them, in two or three sentences, what you kept and where: in this folder, `CLAUDE.md` holds how you'll work with them, and `me.md`, `work.md` and `people.md` hold what they approved about themselves, their work and the people they work with, all files they can open and read at any time. Then say the next part of the setup is coming, and stop.
 
 ## The profile
 
