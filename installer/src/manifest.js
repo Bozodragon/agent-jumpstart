@@ -15,7 +15,9 @@ const pinned = fileURLToPath(new URL('../../manifest.json', import.meta.url));
  * @property {Partial<Record<string, Download>>} downloads By processor (`x64`, `arm64`).
  * @property {Install} install
  * @property {string} [when] Set aside from the main run of installs: installed only by the
- *   step this names (for an extra tool in the profile, its id, when ticked).
+ *   step this names (for an extra tool in the profile, its id, when ticked; `"t3"` for T3 Code
+ *   and Claude Code, installed after the other tools and their PATH entries by `t3.js` and
+ *   `claude.js`, whose entries keep `id` and `name` but otherwise have their own shape).
  * @property {SignIn} [signIn] For a tool the person signs in to in the browser.
  */
 

@@ -13,7 +13,7 @@ import { messageOf } from './stop.js';
 import * as ui from './ui.js';
 
 /** A reason a tool isn't installed, worded for the checklist. */
-class NotInstalled extends Error {}
+export class NotInstalled extends Error {}
 
 /**
  * @typedef {object} Context
@@ -111,7 +111,7 @@ export async function installTool(tool, { places, machine, downloads, keepDownlo
 }
 
 /** @param {string} path */
-const exists = (path) => access(path).then(() => true, () => false);
+export const exists = (path) => access(path).then(() => true, () => false);
 
 /** @param {import('./machine.js').Machine} machine @param {string} program @param {string} version */
 async function reportsVersion(machine, program, version) {
@@ -132,11 +132,11 @@ async function addToPath(tool, folder, machine, say) {
 }
 
 /**
- * @param {import('./manifest.js').Download} download
+ * @param {{ url: string }} download
  * @param {{ downloads?: string, saveIn: string, say: (line: string) => void }} where
  * @returns {Promise<string>} the file
  */
-async function obtain({ url }, { downloads, saveIn, say }) {
+export async function obtain({ url }, { downloads, saveIn, say }) {
   const name = basename(new URL(url).pathname);
   const file = join(saveIn, name);
   if (downloads) {

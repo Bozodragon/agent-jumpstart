@@ -17,6 +17,8 @@ export async function readProfile(name) {
 
 /** @typedef {'signed-in' | 'signed-out' | 'missing'} GoogleDriveState */
 
+/** @typedef {{ code?: number, output?: string, creates?: string[] }} Reply What a faked program run returns and leaves behind. */
+
 /**
  * A temporary home with an answers file and an empty downloads folder,
  * removed when the test ends. Like a York laptop, it has Google Drive for
@@ -137,6 +139,7 @@ export function fakeMachine(home) {
      * Keyed by the program's file name, optionally followed by its arguments
      * (`"node.exe --version"`); the longer key wins. Runs with no reply succeed with no output.
      * A list answers successive runs with that key in turn, and its last reply repeats.
+     * A reply may also list files the run leaves, relative to the home (`creates`).
      * @param {Record<string, Reply | Reply[]>} replies
      */
     setReplies: (replies) => writeJson('replies.json', replies),
@@ -155,8 +158,6 @@ export async function makeZip(folder, zipFile) {
     execFile(tar, ['-a', '-cf', zipFile, '-C', folder, ...entries], (error) => (error ? reject(error) : resolve(undefined)));
   });
 }
-
-/** @typedef {{ code?: number, output?: string }} Reply */
 
 /** @param {string} home */
 export async function readOnlyLog(home) {
