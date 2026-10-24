@@ -22,7 +22,7 @@ Read the installer's settings file, `%LOCALAPPDATA%\agent-jumpstart\settings.jso
 
 Take their name from the account: most work addresses are `first.last@`, so read it off the email, capitalised. If the address doesn't spell a name, the research finds it; greet them without one until then.
 
-You should be running in their top workspace: a folder directly inside `workspacesLocation`, holding a folder for each of their `workspaces`. If it isn't, tell them to open their top workspace in T3 and type `/jumpstart` there, and stop.
+You should be running in their top workspace: the folder `topWorkspace` names (the installer created it and added it to T3). In a settings file from before the installer wrote that key, it is a folder directly inside `workspacesLocation`, holding a folder for each of their `workspaces`. If it isn't, tell them to open their top workspace in T3 and type `/jumpstart` there, and stop.
 
 Done when you have their email, workspaces and connectors, and either a name or the knowledge that the research will find it.
 
