@@ -1,0 +1,250 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Your profile</title>
+<style>
+  :root { color-scheme: light dark; }
+  [hidden] { display: none !important; }
+  body { font-family: var(--font-sans, system-ui, sans-serif); color: var(--foreground, inherit); line-height: 1.45; }
+  .page { display: flex; flex-direction: column; gap: 22px; padding: 4px 0 8px; }
+  .intro { margin: 0; color: var(--muted-foreground, inherit); }
+  section h2 { font-size: 15px; font-weight: 600; margin: 0 0 8px; }
+  .items { display: flex; flex-direction: column; gap: 8px; }
+  .item { display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; align-items: start; }
+  .item.labelled { grid-template-columns: 8.5em 1fr; align-items: center; }
+  .item label { font-size: 13px; color: var(--muted-foreground, inherit); }
+  .meta { grid-column: 1 / -1; font-size: 12px; color: var(--muted-foreground, inherit); }
+  .item.labelled .meta { grid-column: 2; }
+  .unsure { display: inline-block; margin-right: 6px; padding: 0 6px; border-radius: 999px; background: var(--warning-surface, transparent); color: var(--warning, inherit); border: 1px solid var(--warning, currentColor); font-size: 11px; }
+  input, textarea { width: 100%; box-sizing: border-box; font: inherit; font-size: 14px; color: var(--foreground, inherit); background: var(--input, transparent); border: 1px solid var(--border, #8884); border-radius: calc(var(--radius, 8px) * 0.75); padding: 6px 8px; }
+  textarea { resize: none; overflow: hidden; min-height: 2.2em; display: block; }
+  input:focus, textarea:focus { outline: 2px solid var(--ring, Highlight); outline-offset: 0; }
+  .item.removed textarea { text-decoration: line-through; opacity: 0.55; }
+  .changed input, .changed textarea { border-color: var(--accent, var(--ring, Highlight)); }
+  button { font: inherit; font-size: 13px; cursor: pointer; border-radius: calc(var(--radius, 8px) * 0.75); }
+  .quiet { background: none; border: 1px solid transparent; color: var(--muted-foreground, inherit); padding: 4px 8px; }
+  .quiet:hover { border-color: var(--border, #8884); color: var(--foreground, inherit); }
+  .add { align-self: flex-start; margin-top: 2px; }
+  .notfound { margin: 0; padding-left: 1.2em; color: var(--muted-foreground, inherit); font-size: 14px; }
+  .finish { display: flex; flex-direction: column; gap: 10px; }
+  .copy { align-self: flex-start; background: var(--primary, ButtonFace); color: var(--primary-foreground, ButtonText); border: none; padding: 8px 16px; font-size: 14px; font-weight: 600; }
+  .status { margin: 0; font-size: 13px; color: var(--muted-foreground, inherit); min-height: 1.2em; }
+  .output { font-family: var(--font-mono, monospace); font-size: 13px; background: var(--code-background, transparent); color: var(--code-foreground, inherit); }
+  .error { color: var(--destructive, inherit); }
+  @media (max-width: 480px) { .item.labelled { grid-template-columns: 1fr; } .item.labelled .meta { grid-column: 1; } }
+</style>
+</head>
+<body>
+<div class="page" id="page">
+  <p class="intro">Here's what I found. Change anything that's wrong, remove what you'd rather I didn't keep, and add what's missing. Then copy your changes into the chat. Typing in the chat works just as well.</p>
+</div>
+
+<!-- The profile goes in the next element, as the JSON described in SKILL.md. -->
+<script type="application/json" id="profile">PROFILE_JSON</script>
+
+<script>
+(() => {
+  const page = document.getElementById('page');
+  let data;
+  try {
+    data = JSON.parse(document.getElementById('profile').textContent);
+  } catch (error) {
+    const p = el('p', 'error', "The profile couldn't be shown here. Ask me to show it in the chat instead.");
+    page.append(p);
+    return;
+  }
+
+  /** Every editable thing on the page, with what it started as. */
+  const entries = [];
+
+  function el(tag, className, text) {
+    const node = document.createElement(tag);
+    if (className) node.className = className;
+    if (text !== undefined) node.textContent = text;
+    return node;
+  }
+
+  function grow(area) {
+    area.style.height = 'auto';
+    area.style.height = area.scrollHeight + 2 + 'px';
+  }
+
+  function meta(item) {
+    if (!item.source && !item.unsure) return null;
+    const line = el('div', 'meta');
+    if (item.unsure) line.append(el('span', 'unsure', 'not sure'));
+    if (item.source) line.append(document.createTextNode('from ' + item.source));
+    return line;
+  }
+
+  /** Text as compared and copied: runs of spaces and line breaks become one space. */
+  function tidy(text) {
+    return String(text || '').replace(/\s+/g, ' ').trim();
+  }
+
+  function markChanged(entry) {
+    entry.row.classList.toggle('changed', tidy(entry.field.value) !== entry.original);
+  }
+
+  function labelledRow(section, item) {
+    const row = el('div', 'item labelled');
+    const id = 'f' + entries.length;
+    const label = el('label', '', item.label);
+    label.htmlFor = id;
+    const field = el('input');
+    field.id = id;
+    field.value = tidy(item.text);
+    row.append(label, field);
+    const m = meta(item);
+    if (m) row.append(m);
+    const entry = { section, label: item.label, original: tidy(item.text), field, row, removed: false };
+    field.addEventListener('input', () => markChanged(entry));
+    entries.push(entry);
+    return row;
+  }
+
+  function lineRow(section, item, added) {
+    const row = el('div', 'item');
+    const field = el('textarea');
+    field.rows = 1;
+    field.value = item.text || '';
+    field.setAttribute('aria-label', section.title);
+    const remove = el('button', 'quiet', 'Remove');
+    remove.type = 'button';
+    row.append(field, remove);
+    const m = meta(item);
+    if (m) row.append(m);
+    const entry = { section, original: tidy(item.text), field, row, removed: false, added };
+    field.addEventListener('input', () => { grow(field); if (!added) markChanged(entry); });
+    remove.addEventListener('click', () => {
+      if (added) {
+        entries.splice(entries.indexOf(entry), 1);
+        row.remove();
+        return;
+      }
+      entry.removed = !entry.removed;
+      row.classList.toggle('removed', entry.removed);
+      field.disabled = entry.removed;
+      remove.textContent = entry.removed ? 'Undo' : 'Remove';
+    });
+    entries.push(entry);
+    requestAnimationFrame(() => grow(field));
+    return row;
+  }
+
+  for (const section of data.sections || []) {
+    const block = el('section');
+    block.append(el('h2', '', section.title));
+    const items = el('div', 'items');
+    for (const item of section.items || []) {
+      items.append(item.label ? labelledRow(section, item) : lineRow(section, item, false));
+    }
+    block.append(items);
+    if (section.addable !== false) {
+      const add = el('button', 'quiet add', '+ Add a line');
+      add.type = 'button';
+      add.addEventListener('click', () => {
+        const row = lineRow(section, { text: '' }, true);
+        items.append(row);
+        row.querySelector('textarea').focus();
+      });
+      block.append(add);
+    }
+    page.append(block);
+  }
+
+  if (data.notFound && data.notFound.length) {
+    const block = el('section');
+    block.append(el('h2', '', "What I couldn't find"));
+    const list = el('ul', 'notfound');
+    for (const text of data.notFound) list.append(el('li', '', text));
+    block.append(list);
+    page.append(block);
+  }
+
+  const elseBlock = el('section');
+  elseBlock.append(el('h2', '', 'Anything else I should know?'));
+  const elseField = el('textarea');
+  elseField.rows = 2;
+  elseField.setAttribute('aria-label', 'Anything else I should know?');
+  elseField.addEventListener('input', () => grow(elseField));
+  elseBlock.append(elseField);
+  page.append(elseBlock);
+
+  const finish = el('div', 'finish');
+  const copy = el('button', 'copy', 'Copy my changes');
+  copy.type = 'button';
+  const status = el('p', 'status');
+  status.setAttribute('role', 'status');
+  const output = el('textarea', 'output');
+  output.readOnly = true;
+  output.hidden = true;
+  output.setAttribute('aria-label', 'Your changes, to paste into the chat');
+  finish.append(copy, status, output);
+  page.append(finish);
+
+  function label() {
+    const text = changes();
+    copy.textContent = text === 'Looks good' ? 'Copy “Looks good”' : 'Copy my changes';
+    if (!output.hidden && output.value !== text) show(text, 'You changed something since you copied it: copy it again.');
+  }
+  page.addEventListener('input', label);
+  page.addEventListener('click', label);
+
+  const quote = (text) => '"' + tidy(text) + '"';
+
+  function changes() {
+    const lines = [];
+    for (const entry of entries) {
+      const now = tidy(entry.field.value);
+      const where = entry.section.title;
+      if (entry.label) {
+        if (now !== entry.original) lines.push(`- ${where}, ${entry.label}: ${quote(now)} (was ${quote(entry.original)})`);
+      } else if (entry.added) {
+        if (now) lines.push(`- ${where}, added: ${quote(now)}`);
+      } else if (entry.removed) {
+        lines.push(`- ${where}, removed: ${quote(entry.original)}`);
+      } else if (now !== entry.original) {
+        lines.push(now ? `- ${where}, changed: ${quote(entry.original)} to ${quote(now)}` : `- ${where}, removed: ${quote(entry.original)}`);
+      }
+    }
+    if (elseField.value.trim()) lines.push(`- Anything else: ${quote(elseField.value)}`);
+    return lines.length ? ['My profile changes (everything else is right):', ...lines].join('\n') : 'Looks good';
+  }
+
+  function show(text, message) {
+    output.hidden = false;
+    output.value = text;
+    grow(output);
+    status.textContent = message;
+  }
+
+  label();
+
+  copy.addEventListener('click', () => {
+    const text = changes();
+    show(text, '');
+    output.focus();
+    output.select();
+    let copied = false;
+    try { copied = document.execCommand('copy'); } catch (error) { copied = false; }
+    if (copied) {
+      status.textContent = 'Copied. Paste it into the chat and send it.';
+      return;
+    }
+    const fallback = 'This page couldn\'t copy it. Select the text below, copy it and paste it into the chat.';
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(
+        () => { status.textContent = 'Copied. Paste it into the chat and send it.'; },
+        () => { status.textContent = fallback; output.select(); },
+      );
+    } else {
+      status.textContent = fallback;
+    }
+  });
+})();
+</script>
+</body>
+</html>
