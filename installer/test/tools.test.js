@@ -1,61 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createHash } from 'node:crypto';
 import { access, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { basename, join } from 'node:path';
-import { fakeMachine, makeHome, makeZip, programsFolder, readManifest, readOnlyLog, runWith } from './harness.js';
-
-/** @param {string} url */
-const fileName = (url) => basename(new URL(url).pathname);
-
-/** @param {string} path */
-const exists = (path) => access(path).then(() => true, () => false);
-
-/**
- * Stand-ins for the vendors' downloads, shaped like the real ones: Node's zip has one
- * top folder, gh's has `bin\gh.exe`, and Git's installer is a file the fake machine "runs".
- * @param {string} folder where to build them
- * @param {any} tool a manifest entry
- * @returns {Promise<string>} the file, named as the vendor names it
- */
-async function standIn(folder, tool) {
-  const name = fileName(tool.downloads[process.arch].url);
-  const file = join(folder, name);
-  if (tool.install.how === 'installer') {
-    await writeFile(file, `stand-in for ${name}`);
-    return file;
-  }
-  const contents = join(folder, `${tool.id}-contents`);
-  const inner = tool.id === 'node' ? join(contents, name.replace(/\.zip$/, '')) : contents;
-  const check = join(inner, tool.install.check);
-  await mkdir(join(check, '..'), { recursive: true });
-  await writeFile(check, 'stand-in');
-  await writeFile(join(inner, tool.id === 'node' ? 'npm.cmd' : 'LICENSE'), 'stand-in');
-  await makeZip(contents, file);
-  return file;
-}
-
-/**
- * Fills the downloads folder with stand-ins and a copy of the pinned manifest whose
- * checksums are the stand-ins', so the run can succeed without the vendors' files.
- * @param {{ downloads: string }} where
- * @param {string[]} [ids] which tools to supply (default all)
- */
-async function supplyDownloads(where, ids) {
-  const manifest = await readManifest();
-  const workshop = join(where.downloads, '..', 'workshop');
-  await mkdir(workshop, { recursive: true });
-  for (const tool of manifest.tools) {
-    // T3 isn't pinned, so it has no download here (t3.test.js supplies its own).
-    if (!tool.downloads || (ids && !ids.includes(tool.id))) continue;
-    const built = await standIn(workshop, tool);
-    const bytes = await readFile(built);
-    await writeFile(join(where.downloads, basename(built)), bytes);
-    tool.downloads[process.arch].sha256 = createHash('sha256').update(bytes).digest('hex');
-  }
-  await writeFile(join(where.downloads, 'manifest.json'), JSON.stringify(manifest));
-  return manifest;
-}
+import { exists, fakeMachine, fileName, makeHome, programsFolder, readManifest, readOnlyLog, runWith, supplyDownloads } from './harness.js';
 
 /** @param {string} stdout @param {string} label @param {string} value */
 function checklistSays(stdout, label, value) {
@@ -154,7 +101,7 @@ test('a tool already at the pinned version, such as the Node the bootstrap unpac
   const result = await runWith(where, 'default');
 
   assert.equal(result.code, 0, result.stderr);
-  checklistSays(result.stdout, 'Node.js', `${node.version} (already installed)`);
+  checklistSays(result.stdout, 'Node.js', `${node.version} (already up to date)`);
   assert.equal(await readFile(join(nodeFolder, 'node.exe'), 'utf8'), 'the copy already there');
   assert.ok((await machine.userPath()).includes(nodeFolder));
 });

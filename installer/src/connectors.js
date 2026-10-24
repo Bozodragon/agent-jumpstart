@@ -17,16 +17,22 @@ function inWords(names) {
  * Walks the person through connecting the connectors they ticked. With none
  * ticked, does nothing. When nobody is at the screen (answers came from a file)
  * it opens no browser and waits for nothing, and takes the answers file's word
- * that they were connected.
+ * that they were connected. On a re-run with the same connectors, the person was walked
+ * through them last time, so they aren't sent again.
  * @param {import('./profile.js').Profile} profile
  * @param {string[]} connectors The names of the ticked connectors.
- * @param {{ attended: boolean, log: { write(line: string): void } }} how
+ * @param {{ attended: boolean, connectedBefore?: boolean, log: { write(line: string): void } }} how
+ *   `connectedBefore`: the same connectors came from an earlier run's settings.
  * @returns {Promise<string>} The checklist's Connectors line.
  */
-export async function walkThroughConnectors(profile, connectors, { attended, log }) {
+export async function walkThroughConnectors(profile, connectors, { attended, connectedBefore = false, log }) {
   if (connectors.length === 0) {
     log.write('Connectors: none chosen, so the walkthrough was skipped');
     return 'None chosen';
+  }
+  if (connectedBefore) {
+    log.write('Connectors: walked through on an earlier run, so skipped');
+    return `You said you connected ${inWords(connectors)} last time`;
   }
   const page = profile.connectorsPage;
   if (typeof page !== 'string') throw new Stop(`The "${profile.id}" profile needs a connectors page address.`);

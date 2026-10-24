@@ -44,7 +44,8 @@ export async function installTools(context) {
 /**
  * @param {import('./manifest.js').Tool} tool
  * @param {Context} context
- * @returns {Promise<string>} the version installed, or why it isn't
+ * @returns {Promise<string>} the checklist row: the version and what this run did (see
+ *   `change`), or why it isn't installed. A copy at another version is replaced.
  */
 export async function installTool(tool, { places, machine, downloads, keepDownloads, log }) {
   const say = (/** @type {string} */ line) => log.write(`${tool.name}: ${line}`);
@@ -52,11 +53,13 @@ export async function installTool(tool, { places, machine, downloads, keepDownlo
   const folder = join(places.programs, tool.install.folder);
   const check = join(folder, tool.install.check);
   try {
-    if ((await exists(check)) && (await reportsVersion(machine, check, tool.version))) {
+    const before = await versionThere(machine, check, tool.version);
+    if (before.upToDate) {
       say(`${tool.version} is already in ${folder}`);
       await addToPath(tool, folder, machine, say);
-      return `${tool.version} (already installed)`;
+      return `${tool.version} (${change.upToDate})`;
     }
+    if (before.present) say(`replacing ${before.version ?? "a copy whose version couldn't be read"}`);
 
     const download = tool.downloads[process.arch];
     if (!download) throw new NotInstalled(`there's no pinned download for this kind of computer (${process.arch})`);
@@ -101,7 +104,7 @@ export async function installTool(tool, { places, machine, downloads, keepDownlo
     }
     await addToPath(tool, folder, machine, say);
     say(`installed ${tool.version}`);
-    return tool.version;
+    return `${tool.version} (${changeFrom(before)})`;
   } catch (error) {
     if (!(error instanceof NotInstalled)) say(`failed: ${error instanceof Error ? error.stack : String(error)}`);
     const reason = error instanceof NotInstalled ? error.message : messageOf(error);
@@ -113,11 +116,41 @@ export async function installTool(tool, { places, machine, downloads, keepDownlo
 /** @param {string} path */
 export const exists = (path) => access(path).then(() => true, () => false);
 
-/** @param {import('./machine.js').Machine} machine @param {string} program @param {string} version */
-async function reportsVersion(machine, program, version) {
+/**
+ * What a tool's checklist row says this run did to it, worded the same for every tool (T3 and
+ * the extra tools too), so a re-run's checklist shows what changed and what was already right.
+ */
+export const change = {
+  installed: 'installed',
+  /** @param {string} version */
+  updatedFrom: (version) => `updated from ${version}`,
+  reinstalled: 'reinstalled',
+  upToDate: 'already up to date',
+};
+
+/**
+ * @typedef {object} Before What was in a tool's folder before this run.
+ * @property {boolean} present Whether its program was there.
+ * @property {boolean} upToDate Whether that program reported the pinned version.
+ * @property {string} [version] The version it reported, if one could be read.
+ */
+
+/** @param {Before} before */
+const changeFrom = (before) => (!before.present ? change.installed : before.version ? change.updatedFrom(before.version) : change.reinstalled);
+
+/**
+ * Asks the program already in the tool's folder, if there is one, for its version.
+ * @param {import('./machine.js').Machine} machine @param {string} program @param {string} pinned
+ * @returns {Promise<Before>}
+ */
+async function versionThere(machine, program, pinned) {
+  if (!(await exists(program))) return { present: false, upToDate: false };
   const ran = await machine.run(program, ['--version']);
-  const escaped = version.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  return ran.code === 0 && new RegExp(`(?<![\\d.])${escaped}(?![\\d])`).test(ran.output);
+  if (ran.code !== 0) return { present: true, upToDate: false };
+  const escaped = pinned.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  if (new RegExp(`(?<![\\d.])${escaped}(?![\\d])`).test(ran.output)) return { present: true, upToDate: true, version: pinned };
+  // The first version-shaped word: `v24.11.0`, `git version 2.50.1.windows.1`, `gh version 2.90.0 (…)`.
+  return { present: true, upToDate: false, version: /\d+\.\d+(?:\.[0-9A-Za-z-]+)*/.exec(ran.output)?.[0] };
 }
 
 /**

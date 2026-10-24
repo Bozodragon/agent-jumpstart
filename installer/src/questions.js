@@ -133,6 +133,44 @@ export async function askQuestions(profile, places, ask, log) {
 }
 
 /**
+ * On a re-run: answers from the settings file an earlier run wrote, so nothing already known is
+ * asked again. Only an answer that's missing (a key added since), or no longer right (a folder
+ * that's gone, a name the profile no longer offers), goes to `ask`, the person or the answers
+ * file.
+ * @param {Record<string, unknown>} settings
+ * @param {Asker} ask
+ * @param {{ write(line: string): void }} log
+ * @returns {Asker}
+ */
+export function knownFrom(settings, ask, log) {
+  const known = answersFrom(settings);
+  /**
+   * @template T
+   * @param {string} key @param {() => Promise<T>} fromSettings @param {() => Promise<T>} otherwise
+   * @returns {Promise<T>}
+   */
+  const either = async (key, fromSettings, otherwise) => {
+    if (key in settings) {
+      try {
+        const value = await fromSettings();
+        log.write(`Known from settings: ${key}: ${JSON.stringify(value)}`);
+        return value;
+      } catch (error) {
+        if (!(error instanceof Stop)) throw error;
+        log.write(`Settings: ${key} is no longer right (${JSON.stringify(settings[key])}), so it's asked again`);
+      }
+    }
+    return otherwise();
+  };
+  return {
+    folder: (q) => either(q.key, () => known.folder(q), () => ask.folder(q)),
+    choose: (q) => either(q.key, () => known.choose(q), () => ask.choose(q)),
+    confirm: (q) => either(q.key, () => known.confirm(q), () => ask.confirm(q)),
+    pick: (q) => either(q.key, () => known.pick(q), () => ask.pick(q)),
+  };
+}
+
+/**
  * Answers from an answers file: a JSON object keyed as {@link Answers}. A
  * missing answer takes the default, as Enter would; a wrong one stops the run.
  * @param {Record<string, unknown>} file

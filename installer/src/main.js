@@ -23,7 +23,7 @@ import { findPlaces } from './places.js';
 import { openMachine } from './machine.js';
 import { switchOffAutoMemory } from './memory.js';
 import { loadProfile } from './profile.js';
-import { answersFrom, askQuestions } from './questions.js';
+import { answersFrom, askQuestions, knownFrom } from './questions.js';
 import { installSkills } from './skills.js';
 import { messageOf, Stop } from './stop.js';
 import { installT3 } from './t3.js';
@@ -52,6 +52,36 @@ async function readAnswers(path) {
   } catch (error) {
     throw new Stop(`The answers file ${path} couldn't be read: ${messageOf(error)}`);
   }
+}
+
+/**
+ * The settings file an earlier run wrote for this profile, if there is one. One that can't be
+ * read, or was written for another profile, is set aside and every question is asked.
+ * @param {string} path @param {string} profile @param {{ write(line: string): void }} log
+ * @returns {Promise<Record<string, unknown> | undefined>}
+ */
+async function readEarlierSettings(path, profile, log) {
+  let settings;
+  try {
+    settings = JSON.parse(await readFile(path, 'utf8'));
+  } catch (error) {
+    if (/** @type {NodeJS.ErrnoException} */ (error).code === 'ENOENT') {
+      log.write('Settings: none yet, so this is a first run');
+    } else {
+      log.write(`Settings: ${path} couldn't be read (${messageOf(error)}), so every question is asked`);
+    }
+    return undefined;
+  }
+  if (settings === null || typeof settings !== 'object' || Array.isArray(settings)) {
+    log.write(`Settings: ${path} isn't a JSON object, so every question is asked`);
+    return undefined;
+  }
+  if (settings.profile !== profile) {
+    log.write(`Settings: ${path} is for the "${settings.profile}" profile, so every question is asked`);
+    return undefined;
+  }
+  log.write(`Settings: found ${path}, so this is a re-run`);
+  return settings;
 }
 
 /** @param {string} path @param {Record<string, unknown>} settings */
@@ -90,10 +120,15 @@ async function main() {
     ui.step(`Setup page: ${profile.page}`);
     log.write(`Setup page: ${profile.page} (${unattended ? 'not opened: answers came from a file' : await tryToOpen(profile.page)})`);
 
-    const choices = await askQuestions(profile, places, unattended ? answersFrom(answers) : ui.ask, log);
+    // A re-run asks nothing an earlier run already wrote down.
+    const earlier = await readEarlierSettings(places.settings, profile.id, log);
+    const asker = unattended ? answersFrom(answers) : ui.ask;
+    if (earlier) ui.step('Using your answers from last time.');
+    const choices = await askQuestions(profile, places, earlier ? knownFrom(earlier, asker, log) : asker, log);
 
+    // Keys this run doesn't write (another program's, or a later version's) are kept.
     /** @type {Record<string, unknown>} */
-    const settings = { profile: profile.id, ...choices };
+    const settings = { ...earlier, profile: profile.id, ...choices };
     await writeSettings(places.settings, settings);
     log.write(`Settings written to ${places.settings}`);
 
@@ -101,7 +136,9 @@ async function main() {
     const github = await setUpGitHub(profile, choices.github, { attended: !unattended, places, machine, downloads: options.downloads, log });
     const skills = await installSkills(profile, { places, machine, downloads: options.downloads, log });
     const memory = await switchOffAutoMemory({ places, machine, log });
-    const connectors = await walkThroughConnectors(profile, choices.connectors, { attended: !unattended, log });
+    // Settings' connectors are kept only when every one is still offered, so equal means known.
+    const connectedBefore = JSON.stringify(earlier?.connectors) === JSON.stringify(choices.connectors);
+    const connectors = await walkThroughConnectors(profile, choices.connectors, { attended: !unattended, connectedBefore, log });
     const extraTools = await setUpExtraTools(profile, choices.extraTools, { places, machine, downloads: options.downloads, keepDownloads: options.debug, log, attended: !unattended });
     // Last of the installs, after every other tool and its PATH entry: T3 reads PATH only when it starts.
     const t3 = await installT3(choices.channel, { places, machine, downloads: options.downloads, keepDownloads: options.debug, log, attended: !unattended });
