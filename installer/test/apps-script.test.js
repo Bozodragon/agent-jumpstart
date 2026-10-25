@@ -95,7 +95,7 @@ test("clasp's browser sign-in runs in the person's window and the installer wait
   );
 });
 
-test('after the sign-in, the Apps Script settings page is given with a plain instruction to turn on the API; with answers from a file it opens nothing', async (t) => {
+test('after the sign-in, the Apps Script settings page is given with a plain instruction to turn on the API, opened on the fake machine under --home', async (t) => {
   const where = await makeHome(t, { extraTools: ['apps-script'] });
   await supplyClasp(where);
   const profile = await readProfile('york');
@@ -108,7 +108,8 @@ test('after the sign-in, the Apps Script settings page is given with a plain ins
   assert.ok(page > result.stdout.indexOf(appsScript.signIn.slice(0, 40)), 'the page comes after the sign-in');
   assert.match(result.stdout, /Google Apps Script API and switch it on/);
   const log = await readOnlyLog(where.home);
-  assert.ok(log.text.includes(`Settings page: ${appsScript.settingsPage} (not opened: answers came from a file)`), log.text);
+  assert.ok(log.text.includes(`Settings page: ${appsScript.settingsPage} (opened)`), log.text);
+  assert.ok((await fakeMachine(where.home).pagesOpened()).includes(appsScript.settingsPage));
 });
 
 test("a sign-in that doesn't finish leaves clasp installed and the checklist says it isn't signed in", async (t) => {

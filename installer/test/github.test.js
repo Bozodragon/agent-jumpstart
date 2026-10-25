@@ -1,5 +1,5 @@
-// The optional GitHub flow. Under --answers nobody is at the screen, so the sign-up page is
-// printed but not opened and nothing waits for Enter. gh still runs, through the fake machine:
+// The optional GitHub flow. Under --answers nobody is at the screen, so nothing waits for Enter;
+// the sign-up page is opened through the machine. gh still runs, through the fake machine:
 // a test scripts what gh says in replies.json (for example the username `gh api user` prints),
 // and sees what was run in runs.json.
 import { test } from 'node:test';
@@ -74,7 +74,8 @@ test('with GitHub chosen, the sign-up page is shown with what to do, then gh (th
   assert.equal(/** @type {any} */ (login).onScreen, true, 'the person must see the one-time code gh prints');
   checklistSays(result.stdout, 'GitHub', 'Signed in as octocat-york');
   const log = await readOnlyLog(where.home);
-  assert.ok(log.text.includes(`GitHub sign-up page: ${profile.github.signUpPage} (not opened: answers came from a file)`), log.text);
+  assert.ok(log.text.includes(`GitHub sign-up page: ${profile.github.signUpPage} (opened)`), log.text);
+  assert.ok((await fakeMachine(where.home).pagesOpened()).includes(profile.github.signUpPage));
   assert.ok(log.text.includes('Checklist: GitHub: Signed in as octocat-york'), log.text);
 });
 

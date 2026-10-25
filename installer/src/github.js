@@ -5,21 +5,22 @@
 // password. No organisation invites: the username goes in the checklist so Jacob can send one.
 import { join } from 'node:path';
 import { githubHost as host, loadManifest, toolEntry } from './manifest.js';
-import { tryToOpen } from './open-page.js';
+import { showPage } from './open-page.js';
 import { Stop } from './stop.js';
 import { exists } from './tools.js';
 import * as ui from './ui.js';
 
 /**
  * Someone already signed in (a re-run, or an earlier gh) is left signed in and isn't sent to the
- * sign-up page. When nobody is at the screen (answers came from a file) it opens no browser and
- * waits for nothing; gh still runs through the machine, which under a home override is the fake.
+ * sign-up page. When nobody is at the screen (answers came from a file) it waits for nothing.
+ * The page and gh go through the machine, which under a home override is the fake.
  * @param {import('./profile.js').Profile} profile
  * @param {boolean} wanted Whether the person chose to set up GitHub now.
  * @param {import('./tools.js').Context} context
  * @returns {Promise<string>} The checklist's GitHub line.
  */
-export async function setUpGitHub(profile, wanted, { attended, places, machine, downloads, log }) {
+export async function setUpGitHub(profile, wanted, context) {
+  const { places, machine, downloads, log } = context;
   const say = (/** @type {string} */ line) => log.write(`GitHub: ${line}`);
   if (!wanted) {
     say('not chosen, so it was skipped');
@@ -41,7 +42,7 @@ export async function setUpGitHub(profile, wanted, { attended, places, machine, 
     say('already signed in, so the sign-up page and sign-in were skipped');
   } else {
     say('not signed in yet');
-    await walkThroughSignUp(github, { attended, log, say });
+    await walkThroughSignUp(github, { ...context, say });
     ui.notice(
       [
         "GitHub's own tool signs you in next, in your browser:",
@@ -79,11 +80,10 @@ export async function setUpGitHub(profile, wanted, { attended, places, machine, 
 /**
  * Opens the sign-up page, says what to do, and waits for Enter.
  * @param {{ signUpPage: string, email: string }} github
- * @param {{ attended: boolean, log: { write(line: string): void }, say: (line: string) => void }} how
+ * @param {import('./tools.js').Context & { say: (line: string) => void }} context
  */
-async function walkThroughSignUp({ signUpPage, email }, { attended, log, say }) {
-  ui.step(`GitHub sign-up page: ${signUpPage}`);
-  log.write(`GitHub sign-up page: ${signUpPage} (${attended ? await tryToOpen(signUpPage) : 'not opened: answers came from a file'})`);
+async function walkThroughSignUp({ signUpPage, email }, { attended, machine, log, say }) {
+  await showPage('GitHub sign-up page', signUpPage, { machine, log });
   ui.notice(
     [
       `If you don't have a GitHub account yet, create one on the sign-up page with ${email}.`,

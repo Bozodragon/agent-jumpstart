@@ -6,9 +6,11 @@
 // --debug comes from the debug pasted line (york-debug.ps1).
 //
 // Three overrides let a test run it end to end with no network and no prompts:
-//   --home <folder>       use this as the user's profile folder (local AppData sits inside it)
-//   --answers <file>      answer every question from this JSON file; nothing is asked and no
-//                         browser is opened, because nobody is at the screen
+//   --home <folder>       use this as the user's profile folder (local AppData sits inside it);
+//                         everything that would change the rest of the machine, opening a page
+//                         in the browser among it, is faked inside it (machine.js)
+//   --answers <file>      answer every question from this JSON file; nothing is asked and
+//                         nothing waits for Enter, because nobody is at the screen
 //   --downloads <folder>  take downloads from this folder instead of the internet
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
@@ -18,7 +20,7 @@ import { checkClaude } from './claude.js';
 import { walkThroughConnectors } from './connectors.js';
 import { setUpExtraTools } from './extra-tools.js';
 import { setUpGitHub } from './github.js';
-import { tryToOpen } from './open-page.js';
+import { showPage } from './open-page.js';
 import { findPlaces } from './places.js';
 import { openMachine } from './machine.js';
 import { switchOffAutoMemory } from './memory.js';
@@ -118,8 +120,7 @@ async function main() {
 
     ui.start(`Agent Jumpstart · ${profile.name}`);
 
-    ui.step(`Setup page: ${profile.page}`);
-    log.write(`Setup page: ${profile.page} (${unattended ? 'not opened: answers came from a file' : await tryToOpen(profile.page)})`);
+    await showPage('Setup page', profile.page, { machine, log });
 
     // A re-run asks nothing an earlier run already wrote down.
     const earlier = await readEarlierSettings(places.settings, profile.id, log);

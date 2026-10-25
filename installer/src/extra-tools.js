@@ -4,7 +4,7 @@
 // and is then sent to the profile's settings page for anything only they can switch on.
 import { join } from 'node:path';
 import { loadManifest } from './manifest.js';
-import { tryToOpen } from './open-page.js';
+import { showPage } from './open-page.js';
 import { installTool } from './tools.js';
 import * as ui from './ui.js';
 
@@ -44,14 +44,13 @@ export async function setUpExtraTools(profile, ticked, context) {
 
 /**
  * Opens the extra tool's settings page, says what to switch on there, and waits for Enter.
- * When nobody is at the screen it opens nothing and waits for nothing.
+ * When nobody is at the screen it waits for nothing.
  * @param {import('./profile.js').ExtraTool} extra
  * @param {import('./tools.js').Context} context
  */
-async function walkThroughSettings(extra, { attended, log }) {
+async function walkThroughSettings(extra, { attended, machine, log }) {
   if (!extra.settingsPage) return;
-  ui.step(`Settings page: ${extra.settingsPage}`);
-  log.write(`Settings page: ${extra.settingsPage} (${attended ? await tryToOpen(extra.settingsPage) : 'not opened: answers came from a file'})`);
+  await showPage('Settings page', extra.settingsPage, { machine, log });
   ui.notice(extra.settings ?? 'Change the setting on this page.', 'One setting only you can change');
   if (attended) {
     await ui.pressEnter("Press Enter once you've done that.");

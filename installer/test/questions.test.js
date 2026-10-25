@@ -7,8 +7,10 @@ import { makeHome, readOnlyLog, readSettings, runWith } from './harness.js';
 /** Everything in a home except the installer's own folder, which always holds a log. */
 async function homeContents(/** @type {string} */ home) {
   const own = join('AppData', 'Local', 'agent-jumpstart');
+  // The fake machine's record of pages opened in the browser: opening one changes nothing.
+  const pages = join('fake-machine', 'pages.json');
   return (await readdir(home, { recursive: true }))
-    .filter((path) => !path.startsWith(own) && !own.startsWith(path))
+    .filter((path) => !path.startsWith(own) && !own.startsWith(path) && path !== pages && !pages.startsWith(path))
     .sort();
 }
 

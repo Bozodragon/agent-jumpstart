@@ -1,32 +1,21 @@
-import { spawn } from 'node:child_process';
 import { messageOf } from './stop.js';
+import * as ui from './ui.js';
 
 /**
- * Opens an address in the person's default browser without waiting for it.
+ * Shows a page's address on screen and opens it in the browser through the machine (under a
+ * home override, the fake records it instead). A browser that won't start doesn't stop the run:
+ * the address is on screen to copy.
+ * @param {string} label What the page is, such as "Connectors page".
  * @param {string} url
- * @returns {Promise<void>} Rejects if the browser couldn't be started.
+ * @param {{ machine: import('./machine.js').Machine, log: { write(line: string): void } }} context
  */
-export function openPage(url) {
-  return new Promise((resolve, reject) => {
-    const child = spawn('rundll32', ['url.dll,FileProtocolHandler', url], { detached: true, stdio: 'ignore' });
-    child.once('error', reject);
-    child.once('spawn', () => {
-      child.unref();
-      resolve();
-    });
-  });
-}
-
-/**
- * Opens an address if it can, without stopping the run if it can't.
- * @param {string} url
- * @returns {Promise<string>} What happened, for the log.
- */
-export async function tryToOpen(url) {
+export async function showPage(label, url, { machine, log }) {
+  ui.step(`${label}: ${url}`);
+  let opened = 'opened';
   try {
-    await openPage(url);
-    return 'opened';
+    await machine.openPage(url);
   } catch (error) {
-    return `couldn't open: ${messageOf(error)}`;
+    opened = `couldn't open: ${messageOf(error)}`;
   }
+  log.write(`${label}: ${url} (${opened})`);
 }
