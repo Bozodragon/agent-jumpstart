@@ -105,7 +105,7 @@ export async function askQuestions(profile, places, ask, log) {
     initial: 'stable',
   });
 
-  const github = await ask.confirm({ key: 'github', message: 'Set up GitHub now? You can do it later.', initial: false });
+  const github = await ask.confirm({ key: 'github', message: "Set up GitHub now? A later run won't ask this again.", initial: false });
 
   const workspaces = await ask.pick({
     key: 'workspaces',
