@@ -58,12 +58,8 @@ export async function installT3(channel, context) {
       const file = await obtain({ url: release.url }, { downloads, saveIn: join(places.state, 'downloads'), say });
       try {
         await checkSha512(file, release.sha512, say);
-        say(`running ${basename(file)} ${entry.install.arguments.join(' ')}`);
         const ran = await machine.run(file, entry.install.arguments);
-        if (ran.code !== 0) {
-          say(`installer output: ${ran.output.trim()}`);
-          throw new NotInstalled(`its installer stopped with code ${ran.code}`);
-        }
+        if (ran.code !== 0) throw new NotInstalled(`its installer stopped with code ${ran.code}`);
       } finally {
         if (keepDownloads) say(`kept ${file}`);
         else await rm(file, { force: true });

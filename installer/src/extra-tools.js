@@ -78,7 +78,7 @@ async function signIn(tool, program, extra, { machine, log }) {
   const whoIsSignedIn = async () => {
     const ran = await machine.run(program, how.check);
     const match = ran.code === 0 ? new RegExp(how.signedInAs, 'm').exec(ran.output) : null;
-    if (!match) say(`not signed in: ${ran.output.trim() || `code ${ran.code}`}`);
+    if (!match) say('not signed in');
     return match?.[1];
   };
 

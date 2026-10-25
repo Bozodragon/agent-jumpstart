@@ -45,7 +45,7 @@ npm install
 node installer/src/main.js --profile york
 ```
 
-It writes `settings.json` and a dated log under `%LOCALAPPDATA%\agent-jumpstart\`. With `--debug` (the debug line passes it) the person sees exactly the same questions and checklist, but the log also holds every program the installer ran with its exit code and full output, and the user PATH before and after; and the downloads are kept in `%LOCALAPPDATA%\agent-jumpstart\downloads\` rather than deleted after use.
+It writes `settings.json` and a dated log under `%LOCALAPPDATA%\agent-jumpstart\`. The log holds each program that failed, with its exit code and output. With `--debug` (the debug line passes it) the person sees exactly the same questions and checklist, but the log also holds every program the installer ran with its exit code and full output, and the user PATH before and after; and the downloads are kept in `%LOCALAPPDATA%\agent-jumpstart\downloads\` rather than deleted after use.
 
 Running it again updates. If `settings.json` is there for the same profile, its answers are used and nothing it holds is asked again; only an answer it lacks, or one that no longer fits (a folder that's gone, a name the profile no longer offers), is asked. To answer everything afresh, delete `settings.json` first. Each tool is moved to the pinned version (T3 to its channel's current build) if it's at another, missing PATH entries are put back, and anyone already signed in (Claude, GitHub, clasp) isn't signed in again or sent to the connectors page again. Every tool's checklist row says what this run did: `(installed)`, `(updated from <version>)`, `(reinstalled)` when the old version couldn't be read, or `(already up to date)`.
 

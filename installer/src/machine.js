@@ -19,8 +19,9 @@
 //
 // Every program the installer runs goes through `run`, `runHere` or `runOnScreen`, real or fake,
 // so a debug run's log holds each one with its exit code and full output (for `runOnScreen`,
-// the command and code only: its output goes to the person's window), and nothing else has to
-// log it.
+// the command and code only: its output goes to the person's window), and every run's log holds
+// each `run` or `runHere` that failed (a code other than 0), with its output. Nothing else has
+// to log a program's command or output.
 import { spawn } from 'node:child_process';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { basename, dirname, join, relative, resolve } from 'node:path';
@@ -57,14 +58,20 @@ import { basename, dirname, join, relative, resolve } from 'node:path';
  * @returns {Machine}
  */
 export function openMachine(places, log) {
-  // Logged before it starts as well as after, so a program that never returns still shows.
+  // In a debug run, logged before it starts as well as after, so a program that never returns
+  // still shows. In any run, a program that fails is logged once it has, with its output.
   /** @param {Runner} run @returns {Runner} */
   const logged = (run) => async (file, args) => {
-    log.detail(`Running: ${[file, ...args].map(quoted).join(' ')}`);
+    const running = `Running: ${[file, ...args].map(quoted).join(' ')}`;
+    log.detail(running);
     const ran = await run(file, args);
     const output = ran.output.trimEnd();
-    log.detail(`Ran: ${basename(file)} (code ${ran.code})`);
-    log.detail(output ? output.split(/\r?\n/).map((line) => `  | ${line}`).join('\n') : '  (no output)');
+    const lines = [
+      `Ran: ${basename(file)} (code ${ran.code})`,
+      ...(output ? output.split(/\r?\n/).map((line) => `  | ${line}`) : ['  (no output)']),
+    ];
+    if (ran.code === 0) log.detail(lines.join('\n'));
+    else for (const line of [...(log.debug ? [] : [running]), ...lines]) log.write(line);
     return ran;
   };
   // A program in the person's window writes straight to it: catching its output would take the

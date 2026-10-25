@@ -32,10 +32,8 @@ export async function installSkills(profile, { places, machine, downloads, log }
     const skills = names ?? [source.split('/').at(-1) ?? source];
     ui.step(`Installing ${skills.length === 1 ? 'the skill' : `${skills.length} skills`} from ${source}`);
     const args = ['-y', cli, 'add', source, '-g', '-a', 'claude-code', '-y', ...(names ? ['-s', ...names] : [])];
-    log.write(`Skills: running npx.cmd ${args.join(' ')}`);
     // The .cmd, not npx.ps1, which a locked-down execution policy blocks.
     const ran = await machine.run('npx.cmd', args);
-    if (ran.output.trim()) log.write(`Skills: output from ${source}:\n${ran.output.trim()}`);
     for (const name of skills) {
       let value;
       // Kept short: skill names make the label column wide, and clack wraps long rows.

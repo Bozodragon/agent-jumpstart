@@ -40,7 +40,7 @@ export async function setUpGitHub(profile, wanted, { attended, places, machine, 
   if (status.code === 0) {
     say('already signed in, so the sign-up page and sign-in were skipped');
   } else {
-    say(`not signed in yet: ${status.output.trim()}`);
+    say('not signed in yet');
     await walkThroughSignUp(github, { attended, log, say });
     ui.notice(
       [
@@ -65,12 +65,12 @@ export async function setUpGitHub(profile, wanted, { attended, places, machine, 
   const user = await machine.run(gh, ['api', 'user', '--jq', '.login']);
   const username = user.output.trim();
   if (user.code !== 0 || username === '') {
-    say(`gh api user: ${username || `code ${user.code}`}`);
+    say("GitHub didn't say who is signed in");
     return "Not signed in: GitHub didn't say who you are";
   }
   say(`signed in as ${username}`);
   if (git.code !== 0) {
-    say(`gh auth setup-git: ${git.output.trim()}`);
+    say("Git couldn't be set up to use the sign-in");
     return `Signed in as ${username}, but Git isn't set up to use it`;
   }
   return `Signed in as ${username}`;
