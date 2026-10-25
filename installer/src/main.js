@@ -136,19 +136,21 @@ async function main() {
 
     const workspaces = await createWorkspaces(topWorkspace, choices.workspaces, log);
 
-    const tools = await installTools({ places, machine, downloads: options.downloads, keepDownloads: options.debug, log });
-    const github = await setUpGitHub(profile, choices.github, { attended: !unattended, places, machine, downloads: options.downloads, log });
-    const skills = await installSkills(profile, { places, machine, downloads: options.downloads, log });
-    const memory = await switchOffAutoMemory({ places, machine, log });
+    /** @type {import('./tools.js').Context} */
+    const context = { places, machine, downloads: options.downloads, keepDownloads: options.debug, log, attended: !unattended };
+    const tools = await installTools(context);
+    const github = await setUpGitHub(profile, choices.github, context);
+    const skills = await installSkills(profile, context);
+    const memory = await switchOffAutoMemory(context);
     // Settings' connectors are kept only when every one is still offered, so equal means known.
     const connectedBefore = JSON.stringify(earlier?.connectors) === JSON.stringify(choices.connectors);
-    const connectors = await walkThroughConnectors(profile, choices.connectors, { attended: !unattended, connectedBefore, log });
-    const extraTools = await setUpExtraTools(profile, choices.extraTools, { places, machine, downloads: options.downloads, keepDownloads: options.debug, log, attended: !unattended });
+    const connectors = await walkThroughConnectors(profile, choices.connectors, { ...context, connectedBefore });
+    const extraTools = await setUpExtraTools(profile, choices.extraTools, context);
     // Last of the installs, after every other tool and its PATH entry: T3 reads PATH only when it starts.
-    const t3 = await installT3(choices.channel, { places, machine, downloads: options.downloads, keepDownloads: options.debug, log, attended: !unattended });
+    const t3 = await installT3(choices.channel, context);
     // After T3's first start, which leaves the command-line shim that adds a project.
-    const workspacesLine = await addToT3(workspaces, t3, { machine, log });
-    const claude = await checkClaude({ places, machine, downloads: options.downloads, log, attended: !unattended, t3 });
+    const workspacesLine = await addToT3(workspaces, t3, context);
+    const claude = await checkClaude({ ...context, t3 });
     settings.email = claude.email;
     await writeSettings(places.settings, settings);
     log.write(`Signed-in email written to settings: ${claude.email ?? 'none'}`);

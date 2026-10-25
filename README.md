@@ -13,6 +13,8 @@ Sets a team member up with an agent: the **Installer** puts everything on their 
 
 `.agents/` and `.claude/` hold the skills used to build this repo, not ones the installer ships.
 
+The installer's code names no workspace, connector, tool or skill: those come from the profile and the manifest. The one exception is the steps the spec fixes for every run: signing in to GitHub with the GitHub CLI, installing T3 Code, and checking Claude Code. Their manifest ids (`gh`, `t3`, `claude`) and GitHub's host (`github.com`) are named once, in `installer/src/manifest.js`, and every step reaches its entry through `toolEntry`.
+
 ## The pasted lines
 
 A team member opens Windows PowerShell from the Start menu and pastes one of these:

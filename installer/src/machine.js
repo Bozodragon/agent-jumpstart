@@ -170,7 +170,7 @@ function fakeMachine(folder, home, logged) {
 }
 
 /** @param {string} name */
-const system32 = (name) => join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', name);
+export const system32 = (name) => join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', name);
 
 /**
  * The real user environment lives in HKCU\Environment. It's read and written with reg.exe

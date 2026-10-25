@@ -9,14 +9,14 @@
 //
 // A skill counts as installed only if it is in Claude's skills folder afterwards: the CLI's
 // exit code alone isn't trusted.
-import { access } from 'node:fs/promises';
 import { join } from 'node:path';
 import { loadManifest } from './manifest.js';
+import { exists } from './tools.js';
 import * as ui from './ui.js';
 
 /**
  * @param {import('./profile.js').Profile} profile
- * @param {{ places: import('./places.js').Places, machine: import('./machine.js').Machine, downloads?: string, log: { write(line: string): void } }} context
+ * @param {import('./tools.js').Context} context
  * @returns {Promise<{ rows: [string, string][], line: string }>} One row per skill, labelled as the
  *   person types it, for the Skills summary; and the checklist's Skills line.
  */
@@ -54,6 +54,3 @@ export async function installSkills(profile, { places, machine, downloads, log }
     : `${installed} of ${rows.length} installed`;
   return { rows, line };
 }
-
-/** @param {string} path */
-const exists = (path) => access(path).then(() => true, () => false);

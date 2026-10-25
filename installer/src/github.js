@@ -3,14 +3,12 @@
 // CLI (the copy the installer put in place, not whatever else is on the machine) signs them in
 // through the browser and makes itself Git's credential helper, so a later clone needs no
 // password. No organisation invites: the username goes in the checklist so Jacob can send one.
-import { access } from 'node:fs/promises';
 import { join } from 'node:path';
-import { loadManifest } from './manifest.js';
+import { githubHost as host, loadManifest, toolEntry } from './manifest.js';
 import { tryToOpen } from './open-page.js';
 import { Stop } from './stop.js';
+import { exists } from './tools.js';
 import * as ui from './ui.js';
-
-const host = 'github.com';
 
 /**
  * Someone already signed in (a re-run, or an earlier gh) is left signed in and isn't sent to the
@@ -18,12 +16,7 @@ const host = 'github.com';
  * waits for nothing; gh still runs through the machine, which under a home override is the fake.
  * @param {import('./profile.js').Profile} profile
  * @param {boolean} wanted Whether the person chose to set up GitHub now.
- * @param {object} how
- * @param {boolean} how.attended
- * @param {import('./places.js').Places} how.places
- * @param {import('./machine.js').Machine} how.machine
- * @param {string} [how.downloads] The downloads-folder override, which may hold its own manifest.
- * @param {{ write(line: string): void }} how.log
+ * @param {import('./tools.js').Context} context
  * @returns {Promise<string>} The checklist's GitHub line.
  */
 export async function setUpGitHub(profile, wanted, { attended, places, machine, downloads, log }) {
@@ -113,9 +106,8 @@ async function walkThroughSignUp({ signUpPage, email }, { attended, log, say }) 
  * @param {string | undefined} downloads
  */
 async function installedGh(places, downloads) {
-  const { tools } = await loadManifest(downloads);
-  const tool = tools.find((entry) => entry.id === 'gh');
+  const tool = toolEntry(await loadManifest(downloads), 'gh');
   if (!tool) return undefined;
   const gh = join(places.programs, tool.install.folder, tool.install.check);
-  return (await access(gh).then(() => true, () => false)) ? gh : undefined;
+  return (await exists(gh)) ? gh : undefined;
 }

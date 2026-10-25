@@ -4,14 +4,9 @@
 // folder to the user PATH, and asks Claude Code whether it's signed in. If it isn't, Claude
 // Code's own sign-in runs in the person's window. The signed-in email is what Jumpstart reads.
 import { join } from 'node:path';
-import { loadManifest } from './manifest.js';
+import { loadManifest, toolEntry } from './manifest.js';
 import { exists } from './tools.js';
 import * as ui from './ui.js';
-
-/**
- * Claude Code's entry in the manifest. `folder` is relative to the home.
- * @typedef {{ name: string, install: { folder: string, check: string } }} ClaudeEntry
- */
 
 /**
  * @typedef {object} ClaudeState
@@ -23,13 +18,12 @@ import * as ui from './ui.js';
  */
 
 /**
- * @param {import('./tools.js').Context & { attended: boolean, t3: import('./t3.js').T3Result }} context
+ * @param {import('./tools.js').Context & { t3: import('./t3.js').T3Result }} context
  * @returns {Promise<{ row: string, email: string | null }>} The checklist's Claude Code line and
  *   the signed-in email, if any.
  */
 export async function checkClaude({ places, machine, downloads, log, attended, t3 }) {
-  const manifest = await loadManifest(downloads);
-  const entry = /** @type {ClaudeEntry | undefined} */ (/** @type {unknown} */ (manifest.tools.find((tool) => tool.id === 'claude')));
+  const entry = toolEntry(await loadManifest(downloads), 'claude');
   if (!entry) return { row: 'Not checked: the list of versions has no entry for it', email: null };
   const say = (/** @type {string} */ line) => log.write(`${entry.name}: ${line}`);
   const folder = join(places.home, entry.install.folder);

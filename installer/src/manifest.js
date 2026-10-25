@@ -48,6 +48,54 @@ const pinned = fileURLToPath(new URL('../../manifest.json', import.meta.url));
  */
 
 /**
+ * T3's entry in the manifest.
+ * @typedef {object} T3Entry
+ * @property {string} id
+ * @property {string} name
+ * @property {Record<string, T3Channel>} channels By channel (`stable`, `nightly`).
+ * @property {Partial<Record<string, string>>} files By processor: a pattern the build's file name matches.
+ * @property {{ folder: string, arguments: string[], versionIn: string, firstLaunchLeaves: string }} install
+ *   `folder` is under `%LOCALAPPDATA%\Programs`; `versionIn` is the registry key whose
+ *   `DisplayVersion` is the installed version; `firstLaunchLeaves` is the file, relative to the
+ *   home, that T3 writes when it starts.
+ */
+
+/**
+ * @typedef {object} T3Channel
+ * @property {string} feed The release feed's address. `{tag}` is the release's tag.
+ * @property {string} download The build's address: `{tag}`, `{version}` and `{file}` are filled in.
+ * @property {string} program The program the install leaves in the folder.
+ * @property {string} [releases] Where to list releases, when the feed has no fixed address.
+ * @property {string} [tag] The pattern the channel's tags match.
+ */
+
+/**
+ * Claude Code's entry in the manifest. `folder` is relative to the home.
+ * @typedef {{ id: string, name: string, install: { folder: string, check: string } }} ClaudeEntry
+ */
+
+/**
+ * The tools the spec makes fixed steps of every run, rather than entries in a profile's lists:
+ * the only manifest ids the code names, each with the shape of its entry. Every other tool is
+ * reached through the manifest's order or a profile's extra tools, never by id.
+ * @typedef {{ claude: ClaudeEntry, t3: T3Entry, gh: Tool }} FixedTools
+ */
+
+/** The host the GitHub step signs in to, with the `gh` entry. */
+export const githubHost = 'github.com';
+
+/**
+ * One of the fixed steps' entries, if the manifest has it.
+ * @template {keyof FixedTools} K
+ * @param {{ tools: Tool[] }} manifest @param {K} id
+ * @returns {FixedTools[K] | undefined}
+ */
+export function toolEntry(manifest, id) {
+  // Each fixed entry has its own shape, documented above; the manifest's JSON isn't checked against it.
+  return /** @type {FixedTools[K] | undefined} */ (/** @type {unknown} */ (manifest.tools.find((tool) => tool.id === id)));
+}
+
+/**
  * A test (or an offline run) can put its own `manifest.json` in the downloads folder,
  * so its stand-in files can pass the checksum check.
  * @param {string | undefined} downloads
