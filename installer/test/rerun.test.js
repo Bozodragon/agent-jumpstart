@@ -130,7 +130,7 @@ test('a re-run of a home set up earlier updates what is out of date, re-adds PAT
   const where = await makeHome(t);
   const profile = await readProfile('york');
   const manifest = await supplyDownloads(where);
-  const [node, git, gh, clasp] = ['node', 'git', 'gh', 'clasp'].map((id) => manifest.tools.find((/** @type {any} */ tool) => tool.id === id));
+  const [node, git, gh, clasp, skillsCli] = ['node', 'git', 'gh', 'clasp', 'skills'].map((id) => manifest.tools.find((/** @type {any} */ tool) => tool.id === id));
   const nightly = '0.1.3-nightly.20261023.3579';
   await writeFile(join(where.downloads, 'releases'), JSON.stringify([{ tag_name: `v${nightly}`, draft: false, prerelease: true }]));
   const t3Installer = await supplyT3(where.downloads, 'nightly.yml', nightly);
@@ -162,6 +162,7 @@ test('a re-run of a home set up earlier updates what is out of date, re-adds PAT
     [join(programs, 'Git', 'cmd', 'git.exe')]: 'the older copy',
     [join(programs, 'GitHub CLI', 'bin', 'gh.exe')]: 'the copy already there',
     [join(programs, 'npm', 'clasp.cmd')]: 'the copy already there',
+    [join(programs, 'skills-cli', 'skills.cmd')]: 'the copy already there',
     [join(programs, 't3code', 'T3 Code (Nightly).exe')]: 'the copy already there',
     [join('.t3', 'bin', 't3.cmd')]: 'left by T3',
     [join('.local', 'bin', 'claude.exe')]: 'installed from T3',
@@ -196,6 +197,7 @@ test('a re-run of a home set up earlier updates what is out of date, re-adds PAT
     'git.exe --version': [{ output: 'git version 2.50.1.windows.1\n' }, { output: `git version ${git.version}\n` }],
     'gh.exe --version': { output: `gh version ${gh.version} (2026-10-01)\n` },
     'clasp.cmd --version': { output: `${clasp.version}\n` },
+    'skills.cmd --version': { output: `${skillsCli.version}\n` },
     [`reg.exe query ${uninstallKey} /v DisplayVersion`]: { output: `    DisplayVersion    REG_SZ    ${nightly}\r\n` },
     'gh.exe auth status --hostname github.com': { output: 'Logged in to github.com account octocat (keyring)\n' },
     'gh.exe api user --jq .login': { output: 'octocat\n' },
@@ -216,6 +218,7 @@ test('a re-run of a home set up earlier updates what is out of date, re-adds PAT
   checklistSays(result.stdout, 'T3 Code', `${nightly} (nightly, already up to date)`);
   checklistSays(result.stdout, 'Claude Code', `2.1.306, signed in as ${email}`);
   checklistSays(result.stdout, 'GitHub', 'Signed in as octocat');
+  checklistSays(result.stdout, 'Skills CLI', `${skillsCli.version} (already up to date)`);
   checklistSays(result.stdout, 'Skills', `All ${skills.length} installed`);
   checklistSays(result.stdout, 'Memory', "Claude's automatic memory is off");
 

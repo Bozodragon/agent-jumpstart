@@ -1,7 +1,8 @@
 {
-  "skillsCli": {
-    "package": "skills",
-    "version": "1.7.4"
+  "skillSources": {
+    "mattpocock/skills": "5beb35b040e3de97e54fa9e386d7e42d15c295c2",
+    "anthropics/skills": "dbd4588f9e1033efb41dad4bef2f7947c8993d44",
+    "cursor/plugins": "190d28736eff128ec94f502a22c7fe0c4b56cd37"
   },
   "tools": [
     {
@@ -93,6 +94,28 @@
         "run": ["login"],
         "check": ["show-authorized-user"],
         "signedInAs": "You are logged in as (.+?)\\.?\\s*$"
+      }
+    },
+    {
+      "id": "skills",
+      "name": "Skills CLI",
+      "version": "1.7.4",
+      "when": "skills",
+      "downloads": {
+        "x64": {
+          "url": "https://registry.npmjs.org/skills/-/skills-1.7.4.tgz",
+          "sha256": "fee71731971e94d90bff2ee55f5556dc325e2f6f53ca0b5eff93ed22b9d838dd"
+        },
+        "arm64": {
+          "url": "https://registry.npmjs.org/skills/-/skills-1.7.4.tgz",
+          "sha256": "fee71731971e94d90bff2ee55f5556dc325e2f6f53ca0b5eff93ed22b9d838dd"
+        }
+      },
+      "install": {
+        "how": "npm",
+        "folder": "skills-cli",
+        "path": [],
+        "check": "skills.cmd"
       }
     },
     {

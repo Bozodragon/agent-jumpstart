@@ -15,8 +15,9 @@ const pinned = fileURLToPath(new URL('../../manifest.json', import.meta.url));
  * @property {Partial<Record<string, Download>>} downloads By processor (`x64`, `arm64`).
  * @property {Install} install
  * @property {string} [when] Set aside from the main run of installs: installed only by the
- *   step this names (for an extra tool in the profile, its id, when ticked; `"t3"` for T3 Code
- *   and Claude Code, installed after the other tools and their PATH entries by `t3.js` and
+ *   step this names (for an extra tool in the profile, its id, when ticked; `"skills"` for the
+ *   skills CLI, installed by `skills.js` when the profile has skills; `"t3"` for T3 Code and
+ *   Claude Code, installed after the other tools and their PATH entries by `t3.js` and
  *   `claude.js`, whose entries keep `id` and `name` but otherwise have their own shape).
  * @property {SignIn} [signIn] For a tool the person signs in to in the browser.
  */
@@ -32,8 +33,10 @@ const pinned = fileURLToPath(new URL('../../manifest.json', import.meta.url));
  */
 
 /**
- * The skills CLI, run with npx at this version.
- * @typedef {{ package: string, version: string }} SkillsCli
+ * The commit each skill source is installed at, keyed by its GitHub repository
+ * (`owner/repo`, the first two parts of a profile's `source`). A source whose repository isn't
+ * here is installed from its default branch.
+ * @typedef {Record<string, string>} SkillSources
  */
 
 /**
@@ -78,7 +81,7 @@ const pinned = fileURLToPath(new URL('../../manifest.json', import.meta.url));
  * The tools the spec makes fixed steps of every run, rather than entries in a profile's lists:
  * the only manifest ids the code names, each with the shape of its entry. Every other tool is
  * reached through the manifest's order or a profile's extra tools, never by id.
- * @typedef {{ claude: ClaudeEntry, t3: T3Entry, gh: Tool }} FixedTools
+ * @typedef {{ claude: ClaudeEntry, t3: T3Entry, gh: Tool, skills: Tool }} FixedTools
  */
 
 /** The host the GitHub step signs in to, with the `gh` entry. */
@@ -99,7 +102,7 @@ export function toolEntry(manifest, id) {
  * A test (or an offline run) can put its own `manifest.json` in the downloads folder,
  * so its stand-in files can pass the checksum check.
  * @param {string | undefined} downloads
- * @returns {Promise<{ tools: Tool[], skillsCli: SkillsCli, source: string }>}
+ * @returns {Promise<{ tools: Tool[], skillSources: SkillSources, source: string }>}
  */
 export async function loadManifest(downloads) {
   for (const source of downloads ? [join(downloads, 'manifest.json'), pinned] : [pinned]) {
@@ -117,11 +120,11 @@ export async function loadManifest(downloads) {
       throw new Stop(`The list of versions to install (${source}) isn't valid: ${messageOf(error)}`);
     }
     if (!Array.isArray(manifest.tools)) throw new Stop(`The list of versions to install (${source}) has no tools.`);
-    const { skillsCli } = manifest;
-    if (typeof skillsCli?.package !== 'string' || typeof skillsCli?.version !== 'string') {
-      throw new Stop(`The list of versions to install (${source}) doesn't pin the skills CLI.`);
+    const skillSources = manifest.skillSources ?? {};
+    if (typeof skillSources !== 'object' || Array.isArray(skillSources) || Object.values(skillSources).some((ref) => typeof ref !== 'string')) {
+      throw new Stop(`The list of versions to install (${source}) has skill sources that aren't each a commit.`);
     }
-    return { tools: manifest.tools, skillsCli, source };
+    return { tools: manifest.tools, skillSources, source };
   }
   throw new Error('unreachable');
 }

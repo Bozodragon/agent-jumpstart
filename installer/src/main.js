@@ -151,7 +151,10 @@ async function main() {
     const github = await setUpGitHub(profile, choices.github, context);
     done.push(['GitHub', github]);
     const skills = await installSkills(profile, context);
-    done.push(['Skills', skills.line]);
+    /** @type {[string, string][]} */
+    const skillsRows = skills.cli === undefined ? [] : [['Skills CLI', skills.cli]];
+    skillsRows.push(['Skills', skills.line]);
+    done.push(...skillsRows);
     const memory = await switchOffAutoMemory(context);
     done.push(['Memory', memory]);
     // Settings' connectors are kept only when every one is still offered, so equal means known.
@@ -178,7 +181,7 @@ async function main() {
       ...extraTools,
       ['T3 Code', t3.row],
       ['Claude Code', claude.row],
-      ['Skills', skills.line],
+      ...skillsRows,
       ['Memory', memory],
       ['Workspaces', workspacesLine],
       ['Connectors', connectors],

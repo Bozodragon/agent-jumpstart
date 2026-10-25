@@ -7,13 +7,19 @@ Sets a team member up with an agent: the **Installer** puts everything on their 
 | `bootstrap/` | The four PowerShell files people paste the address of, and the script that builds the Portall item they're published from. |
 | `installer/` | The Node program the pasted line runs. It reads a profile, asks its questions, installs the tools and prints a checklist. |
 | `profiles/` | One JSON file per profile (`york`, `default`): the workspace, connector, extra-tool and skill lists, which are ticked by default, the top workspace's folder name and whether it lives in Google Drive, and the setup page's address, its line to paste and who to send a log to. Adapting the setup for a new team is an edit here, not to the code. |
-| `manifest.json` | The pinned version, download address and SHA-256 of each tool the installer installs (Node, Git, the GitHub CLI). Bumping a version is an edit here. T3 Code isn't pinned: its entry names the release feeds the installer follows for each channel, and the build is checked against the SHA-512 T3 publishes in them. |
+| `manifest.json` | The pinned version, download address and SHA-256 of each tool the installer installs (Node, Git, the GitHub CLI, clasp and the skills CLI), and the commit each skill source is installed at (`skillSources`). Bumping a version is an edit here. T3 Code isn't pinned: its entry names the release feeds the installer follows for each channel, and the build is checked against the SHA-512 T3 publishes in them. |
 | `skills/` | Skills the installer installs from this repo, such as `jumpstart`. |
 | `page/` | The setup page, one source rendered per profile and published to the address in that profile's `page`. See `page/README.md`. |
 
 `.agents/` and `.claude/` hold the skills used to build this repo, not ones the installer ships.
 
-The installer's code names no workspace, connector, tool or skill: those come from the profile and the manifest. The one exception is the steps the spec fixes for every run: signing in to GitHub with the GitHub CLI, installing T3 Code, and checking Claude Code. Their manifest ids (`gh`, `t3`, `claude`) and GitHub's host (`github.com`) are named once, in `installer/src/manifest.js`, and every step reaches its entry through `toolEntry`.
+What the pins don't cover:
+
+- clasp and the skills CLI are npm packages pinned by their own tarball's checksum, but their dependencies aren't: neither ships a lock file (`npm-shrinkwrap.json`), so npm picks their dependencies' versions within the packages' ranges on the day, checked only against the registry's own hashes.
+- The `jumpstart` skill comes from this repo's default branch, not a pinned commit: pinning the repo inside itself would take a second commit to bump on every change to the skill.
+- Claude Code isn't installed by the installer (T3 Code's welcome screen installs it), so its version isn't pinned here.
+
+The installer's code names no workspace, connector, tool or skill: those come from the profile and the manifest. The one exception is the steps the spec fixes for every run: signing in to GitHub with the GitHub CLI, installing the skills with the skills CLI, installing T3 Code, and checking Claude Code. Their manifest ids (`gh`, `t3`, `claude`, `skills`) and GitHub's host (`github.com`) are named once, in `installer/src/manifest.js`, and every step reaches its entry through `toolEntry`.
 
 ## The pasted lines
 
@@ -53,7 +59,7 @@ Three overrides let it run with no network and no prompts:
 
 - `--home <folder>` uses that folder as the user's profile folder, with local AppData inside it. Nothing outside it is touched: changes to the user PATH and environment, the programs it would run (such as Git's installer, or T3's `t3.cmd project add` that puts the top workspace in T3's list), and the pages it would open in the browser are recorded under `<folder>\fake-machine\` instead.
 - `--answers <file>` answers every question from a JSON file. Nothing is asked and nothing waits for Enter. Pages still open, and programs still run, through the machine: without `--home` that is the real one. Its keys are the settings file's: `googleDriveFolder` (Google Drive profiles) or `workspacesLocation` (others), `channel` (`stable` or `nightly`), `github` (true or false), and `workspaces`, `connectors` and `extraTools` (lists of names, or of ids for extra tools, from the profile). A key left out takes its default, as pressing Enter would. On a re-run the settings file's answers come first, and the answers file stands in for the person only for what the settings file doesn't know.
-- `--downloads <folder>` takes downloads from that folder instead of the internet. It stands in for the internet only: each file is copied into the installer's own downloads folder as a real download would be, and that folder is never changed. A `manifest.json` there replaces the pinned one, so a test's stand-in files can pass the checksum check. T3's release feed (`latest.yml` or `nightly.yml`) and GitHub's release list (`releases`) are read from there too.
+- `--downloads <folder>` takes downloads from that folder instead of the internet. It stands in for the internet only: each file is copied into the installer's own downloads folder as a real download would be, and that folder is never changed. A `manifest.json` there replaces the pinned one, so a test's stand-in files can pass the checksum check. That replacement is for tests only: it's reachable only through `--downloads`, which nothing but a test passes, and a real run always reads the pinned `manifest.json`. T3's release feed (`latest.yml` or `nightly.yml`) and GitHub's release list (`releases`) are read from there too.
 
 ## Testing
 
