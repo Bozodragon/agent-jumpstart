@@ -3,170 +3,225 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="color-scheme" content="light">
+<meta name="color-scheme" content="dark">
 <title>Set up your agent</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible+Mono:wght@400;500&family=Atkinson+Hyperlegible+Next:wght@400;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400&display=swap" rel="stylesheet">
 <style>
   :root {
-    --paper: #f5f7f9;
-    --ink: #1c2b36;
-    --quiet: #566876;
-    --rule: #d3dce3;
-    --navy: #012456;      /* the Windows PowerShell window */
-    --navy-bar: #e9edf1;
-    --console-text: #eeedf0;
-    --focus: #1d5fa8;
-    --sans: "Atkinson Hyperlegible Next", "Segoe UI", system-ui, sans-serif;
-    --mono: "Atkinson Hyperlegible Mono", Consolas, "Cascadia Mono", monospace;
+    --bg: #000000;
+    --panel: #0b0c0e;
+    --hover: #131417;
+    --selected: #1b1d21;
+    --hairline: #1f2126;
+    --outline: #2b2e35;
+    --text: #ecedef;
+    --secondary: #9b9ea7;
+    --muted: #666973;
+    --accent: #5b95ff;
+    --lit: inset 0 1px 0 rgba(255, 255, 255, .055);
+    --mono: "JetBrains Mono", Consolas, monospace;
   }
   * { box-sizing: border-box; }
-  html { background: var(--paper); }
+  html { background: var(--bg); }
   body {
     margin: 0;
-    font-family: var(--sans);
-    font-size: 1.125rem;
+    font-family: "Instrument Sans", "Segoe UI", system-ui, sans-serif;
+    font-size: 15px;
     line-height: 1.6;
-    color: var(--ink);
+    color: var(--text);
+    -webkit-font-smoothing: antialiased;
   }
-  main { max-width: 44rem; margin: 0 auto; padding: 4.5rem 1.5rem 5rem; }
+  main { max-width: 720px; margin: 0 auto; padding: 72px 20px 96px; }
 
-  h1 { font-size: 2.5rem; line-height: 1.1; font-weight: 700; letter-spacing: -0.015em; margin: 0 0 1rem; }
-  .lede { margin: 0 0 3.5rem; color: var(--quiet); max-width: 32rem; }
-  h2 { font-size: 1.375rem; line-height: 1.3; font-weight: 700; margin: 0 0 0.5rem; }
-  p { margin: 0 0 0.75rem; }
-  strong { font-weight: 600; }
-  code {
-    font-family: var(--mono); font-size: 0.95em;
-    background: #fff; border: 1px solid var(--rule); border-radius: 4px; padding: 0 0.3em;
+  a { color: var(--accent); text-decoration: none; border-bottom: 1px solid rgba(91, 149, 255, .35); }
+  a:hover { border-bottom-color: var(--accent); }
+  a:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+
+  /* Page header */
+  .page-head { text-align: center; margin-bottom: 48px; }
+  .mark {
+    width: 44px; height: 44px; margin: 0 auto 20px;
+    border-radius: 14px; background: var(--selected);
+    border: 1px solid var(--outline); box-shadow: var(--lit);
+    display: grid; place-items: center;
   }
-  .quiet { color: var(--quiet); }
+  .mark svg { width: 22px; height: 22px; stroke: var(--accent); }
+  h1 { font-size: 32px; line-height: 1.15; font-weight: 600; letter-spacing: -0.02em; margin: 0 0 10px; }
+  .page-head p { margin: 0 auto; max-width: 460px; color: var(--secondary); }
 
-  /* The three steps: a real sequence, so the numbers carry it. */
+  /* Sections */
+  section + section { margin-top: 40px; }
+  .section-head { display: flex; align-items: baseline; justify-content: space-between; padding: 0 4px 12px; }
+  h2 { font-size: 15px; font-weight: 600; margin: 0; }
+  .section-head span { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .panel {
+    background: var(--panel); border: 1px solid var(--hairline);
+    border-radius: 16px; box-shadow: var(--lit); padding: 8px;
+  }
+  .panel > .plain { padding: 14px 12px; }
+
+  /* Steps */
   ol.steps { list-style: none; margin: 0; padding: 0; counter-reset: step; }
   ol.steps > li {
     counter-increment: step;
-    position: relative;
-    display: grid; grid-template-columns: 3rem minmax(0, 1fr); column-gap: 1rem;
-    padding-bottom: 2.75rem;
+    display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: 14px;
+    padding: 14px 12px;
   }
   ol.steps > li::before {
     content: counter(step);
-    font-size: 2.5rem; line-height: 1; font-weight: 700; color: var(--navy);
-    font-variant-numeric: tabular-nums; text-align: right;
+    width: 28px; height: 28px; border-radius: 999px;
+    border: 1px solid var(--outline); color: var(--secondary);
+    font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums;
+    display: grid; place-items: center; margin-top: 1px;
   }
-  ol.steps > li:not(:last-child)::after {
-    content: ""; position: absolute; left: 1.75rem; top: 3.25rem; bottom: 1rem;
-    width: 2px; background: var(--rule);
+  .step-title { font-size: 15px; font-weight: 600; margin: 3px 0 2px; }
+  .step-body { color: var(--secondary); margin: 0; }
+  .step-body strong, .after strong { color: var(--text); font-weight: 500; }
+  .after { color: var(--secondary); margin: 12px 0 0; }
+  code {
+    font-family: var(--mono); font-size: 12.5px; color: var(--text);
+    background: var(--selected); border: 1px solid var(--outline);
+    border-radius: 6px; padding: 1px 6px;
   }
 
-  /* A line to paste, drawn as the PowerShell window it goes into. */
-  .console {
-    margin: 1rem 0 1rem; border-radius: 8px; overflow: hidden;
-    border: 1px solid #b9c5cf; background: var(--navy);
+  /* Copy box: one component, used the same way everywhere */
+  .copybox {
+    margin-top: 12px; background: var(--bg);
+    border: 1px solid var(--hairline); border-radius: 14px; overflow: hidden;
   }
-  .console-bar {
-    display: flex; align-items: center; justify-content: space-between; gap: 1rem;
-    padding: 0.35rem 0.4rem 0.35rem 0.85rem; background: var(--navy-bar); border-bottom: 1px solid #b9c5cf;
-    font-size: 0.875rem; color: var(--quiet);
+  .copybox-head {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    padding: 8px 8px 8px 14px; border-bottom: 1px solid var(--hairline);
+    background: var(--panel);
   }
-  .console-body {
-    padding: 0.9rem 1.1rem 1rem;
-    font-family: var(--mono); font-size: 0.875rem; line-height: 1.5; color: var(--console-text);
+  .copybox-label { display: flex; flex-direction: column; line-height: 1.3; min-width: 0; }
+  .copybox-label b { font-size: 13.5px; font-weight: 500; }
+  .copybox-label span { font-size: 12px; color: var(--muted); }
+  .copybox-body { position: relative; padding: 14px 16px; font-size: 14px; line-height: 1.65; }
+  .copybox-body.cmd { font-family: var(--mono); font-size: 13px; overflow-x: auto; white-space: nowrap; }
+  .copybox-body.cmd .prompt-sign { color: var(--muted); user-select: none; margin-right: 10px; }
+
+  /* Pills */
+  button {
+    font: inherit; font-size: 13px; font-weight: 500; color: var(--text);
+    background: var(--hover); border: 1px solid var(--outline); border-radius: 999px;
+    padding: 6px 14px; cursor: pointer;
+    display: inline-flex; align-items: center; gap: 7px;
+    transition: background .15s ease, border-color .15s ease, color .15s ease;
   }
-  .console-body code { all: unset; white-space: pre-wrap; line-break: anywhere; }
+  button:hover { background: var(--selected); border-color: #3a3e47; }
+  button svg { width: 14px; height: 14px; flex: none; }
+  button.copy { min-width: 88px; justify-content: center; }
+  button.copy .icon-done { display: none; }
+  button.copy.copied { color: var(--accent); border-color: rgba(91, 149, 255, .5); }
+  button.copy.copied .icon-copy { display: none; }
+  button.copy.copied .icon-done { display: block; }
 
-  button.copy {
-    font: inherit; font-size: 0.9375rem; font-weight: 600; color: var(--navy);
-    background: #fff; border: 1px solid #b9c5cf; border-radius: 6px;
-    padding: 0.3rem 0.9rem; min-width: 6.5rem; cursor: pointer;
-  }
-  button.copy:hover { border-color: var(--navy); }
-  button.copy.done { background: var(--navy); color: #fff; border-color: var(--navy); }
-  button:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+  .foot { margin-top: 40px; padding: 0 4px; text-align: center; color: var(--muted); font-size: 13.5px; }
 
-  /* When something goes wrong: set apart, and calmer than the steps. */
-  .trouble { margin-top: 0.5rem; padding-top: 2.25rem; border-top: 2px solid var(--rule); }
-
-
-  @media (max-width: 34rem) {
-    main { padding: 3rem 1.1rem 4rem; }
-    h1 { font-size: 2rem; }
-    .lede { margin-bottom: 2.5rem; }
-    ol.steps > li { grid-template-columns: 2rem minmax(0, 1fr); column-gap: 0.75rem; }
-    ol.steps > li::before { font-size: 2rem; }
-    ol.steps > li:not(:last-child)::after { left: 1.1rem; top: 2.75rem; }
+  @media (prefers-reduced-motion: reduce) { button { transition: none; } }
+  @media (max-width: 600px) {
+    main { padding: 48px 16px 72px; }
+    h1 { font-size: 26px; }
+    ol.steps > li { gap: 12px; padding: 12px 8px; }
+    .copybox-body { padding: 12px; }
   }
 </style>
 </head>
 <body>
 <main>
-  <h1>Set up your agent</h1>
-  <p class="lede">Three steps, in order. You don't need admin rights, and doing a step again is safe.</p>
-
-  <ol class="steps">
-    <li><div>
-      <h2>Paste the line</h2>
-      <p>Open <strong>Windows PowerShell</strong> from the Start menu. Copy this line, paste it into PowerShell (right-click, or Ctrl+V) and press Enter.</p>
-      <div class="console">
-        <div class="console-bar"><span>Windows PowerShell</span><button class="copy" type="button">Copy</button></div>
-        <div class="console-body"><code>{{pastedLine}}</code></div>
-      </div>
-      <p class="quiet">It asks a few questions, and pressing Enter picks the usual answer. When you need to sign in to something, it opens the page, says what to click and waits for you. It ends with a checklist of what it set up.</p>
-    </div></li>
-
-    <li><div>
-      <h2>Type /jumpstart in your top workspace</h2>
-      <p>Open <strong>T3 Code</strong> from the Start menu. Your top workspace, <strong>{{topWorkspace}}</strong>, is already in its list, because the installer added it. Start a new conversation there, type <code>/jumpstart</code> and press Enter.</p>
-      <p class="quiet">The agent gets to know you and your work, asks a few questions, shows you what it found so you can correct it, then sets up your other workspaces.</p>
-    </div></li>
-
-    <li><div>
-      <h2>Open Personal assistant and start a conversation</h2>
-      <p>Personal assistant is now in T3 Code's list too. Open it, start a conversation and ask for what you need, such as "Help me plan today".</p>
-    </div></li>
-  </ol>
-
-  <section class="trouble">
-    <h2>If something went wrong</h2>
-    <p>Paste this line into Windows PowerShell. It copies the installer's log for you.</p>
-    <div class="console">
-      <div class="console-bar"><span>Windows PowerShell</span><button class="copy" type="button">Copy</button></div>
-      <div class="console-body"><code>{{shareLogLine}}</code></div>
+  <header class="page-head">
+    <div class="mark" aria-hidden="true">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 17l6-6-6-6"/><path d="M12 19h8"/></svg>
     </div>
-    <p>Then paste the log into a message (Ctrl+V) and send it to {{logGoesTo}}.</p>
+    <h1>Set up your agent</h1>
+    <p>Work through the steps in order. Where there's a box, copy it and paste it where the box says.</p>
+  </header>
+
+  <section>
+    <div class="section-head"><h2>Set up</h2><span>3 steps</span></div>
+    <div class="panel">
+      <ol class="steps">
+        <li><div>
+          <p class="step-title">Paste the line</p>
+          <p class="step-body">Open <strong>Windows PowerShell</strong> from the Start menu, paste this and press Enter. You don't need admin rights, and running it again is safe.</p>
+          <div class="copybox">
+            <div class="copybox-head">
+              <div class="copybox-label"><b>Install line</b><span>Paste into PowerShell</span></div>
+            </div>
+            <div class="copybox-body cmd"><span class="prompt-sign" aria-hidden="true">&gt;</span><span class="line">{{pastedLine}}</span></div>
+          </div>
+          <p class="after">It asks a few questions, and pressing Enter picks the usual answer. When you need to sign in to something, it opens the page, says what to click and waits for you. It ends with a checklist of what it set up.</p>
+        </div></li>
+
+        <li><div>
+          <p class="step-title">Type /jumpstart in your top workspace</p>
+          <p class="step-body">Open <strong>T3 Code</strong> from the Start menu. Your top workspace, <strong>{{topWorkspace}}</strong>, is already in its list, because the installer added it. Start a new conversation there, type <code>/jumpstart</code> and press Enter.</p>
+          <p class="after">The agent gets to know you and your work, asks a few questions, shows you what it found so you can correct it, then sets up your other workspaces.</p>
+        </div></li>
+
+        <li><div>
+          <p class="step-title">Open Personal assistant and start a conversation</p>
+          <p class="step-body"><strong>Personal assistant</strong> is now in T3 Code's list too. Open it, start a conversation and ask for what you need, such as "Help me plan today".</p>
+        </div></li>
+      </ol>
+    </div>
   </section>
+
+  <section>
+    <div class="section-head"><h2>If something went wrong</h2></div>
+    <div class="panel">
+      <div class="plain">
+        <p class="step-body">Paste this into <strong>Windows PowerShell</strong>. It copies the installer's log for you.</p>
+        <div class="copybox">
+          <div class="copybox-head">
+            <div class="copybox-label"><b>Share the log</b><span>Paste into PowerShell</span></div>
+          </div>
+          <div class="copybox-body cmd"><span class="prompt-sign" aria-hidden="true">&gt;</span><span class="line">{{shareLogLine}}</span></div>
+        </div>
+        <p class="after">Then paste the log into a message (Ctrl+V) and send it to <strong>{{logGoesTo}}</strong>.</p>
+      </div>
+    </div>
+  </section>
+
+  <p class="foot">An agent only knows what it can see in the workspace you open it in. Start each conversation in the workspace the work belongs to.</p>
 </main>
 
 <script>
-  // Copies the line in the same window as the button. If the browser won't copy, the
-  // line is left selected so Ctrl+C still works.
-  document.querySelectorAll(".console").forEach(function (box) {
-    var button = box.querySelector("button.copy");
-    var line = box.querySelector("code");
-    var shown = function (label) {
-      button.textContent = label;
-      button.classList.toggle("done", label === "Copied");
-      clearTimeout(button.reset);
-      button.reset = setTimeout(function () { button.textContent = "Copy"; button.classList.remove("done"); }, 2500);
+  var COPY_ICON = '<svg class="icon-copy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="12" height="12" rx="2.5"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>';
+  var DONE_ICON = '<svg class="icon-done" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
+
+  // Every copy box gets the same Copy button in its header. It copies the line shown in the box;
+  // if the browser won't copy, the line is left selected so Ctrl+C still works.
+  document.querySelectorAll(".copybox").forEach(function (box) {
+    var line = box.querySelector(".line");
+    var btn = document.createElement("button");
+    btn.className = "copy";
+    btn.type = "button";
+    btn.innerHTML = COPY_ICON + DONE_ICON + '<span class="copy-label">Copy</span>';
+    box.querySelector(".copybox-head").appendChild(btn);
+    var label = btn.querySelector(".copy-label");
+    var shown = function (text, copied) {
+      label.textContent = text;
+      btn.classList.toggle("copied", copied);
+      clearTimeout(btn._t);
+      btn._t = setTimeout(function () { label.textContent = "Copy"; btn.classList.remove("copied"); }, 2000);
     };
-    var selectLine = function () {
+    var fallback = function () {
       var range = document.createRange();
       range.selectNodeContents(line);
       var selection = window.getSelection();
       selection.removeAllRanges();
       selection.addRange(range);
-    };
-    var fallback = function () {
-      selectLine();
       var copied = false;
       try { copied = document.execCommand("copy"); } catch (error) { copied = false; }
-      shown(copied ? "Copied" : "Press Ctrl+C");
+      shown(copied ? "Copied" : "Press Ctrl+C", copied);
     };
-    button.addEventListener("click", function () {
+    btn.addEventListener("click", function () {
       if (navigator.clipboard && window.isSecureContext) {
-        navigator.clipboard.writeText(line.textContent).then(function () { shown("Copied"); }, fallback);
+        navigator.clipboard.writeText(line.textContent).then(function () { shown("Copied", true); }, fallback);
       } else {
         fallback();
       }
