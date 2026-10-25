@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { makeHome, readOnlyLog, readProfile, runWith } from './harness.js';
+import { fakeMachine, makeHome, readOnlyLog, readProfile, runWith } from './harness.js';
 
 test('the checklist lists the connectors the answers file says were connected, in the person\'s words', async (t) => {
   const where = await makeHome(t, { connectors: ['Gmail', 'Asana', 'Google Sheets'] });
@@ -16,7 +16,7 @@ test('the checklist lists the connectors the answers file says were connected, i
   assert.match(result.stdout, /Connectors\s+You said you connected Gmail, Asana and Google Sheets/);
 });
 
-test('the walkthrough names each chosen connector beside the profile\'s connectors page, and with answers from a file opens nothing', async (t) => {
+test('the walkthrough names each chosen connector beside the profile\'s connectors page, opened on the fake machine under --home', async (t) => {
   const where = await makeHome(t);
   const profile = await readProfile('york');
 
@@ -29,7 +29,8 @@ test('the walkthrough names each chosen connector beside the profile\'s connecto
   }
   assert.doesNotMatch(result.stdout, /[•-] Asana/);
   const log = await readOnlyLog(where.home);
-  assert.ok(log.text.includes(`Connectors page: ${profile.connectorsPage} (not opened: answers came from a file)`), log.text);
+  assert.ok(log.text.includes(`Connectors page: ${profile.connectorsPage} (opened)`), log.text);
+  assert.ok((await fakeMachine(where.home).pagesOpened()).includes(profile.connectorsPage));
   assert.ok(log.text.includes('Checklist: Connectors: You said you connected Gmail, Google Drive and Google Calendar'), log.text);
 });
 

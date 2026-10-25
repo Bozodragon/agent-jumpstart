@@ -6,9 +6,11 @@
 // --debug comes from the debug pasted line (york-debug.ps1).
 //
 // Three overrides let a test run it end to end with no network and no prompts:
-//   --home <folder>       use this as the user's profile folder (local AppData sits inside it)
-//   --answers <file>      answer every question from this JSON file; nothing is asked and no
-//                         browser is opened, because nobody is at the screen
+//   --home <folder>       use this as the user's profile folder (local AppData sits inside it);
+//                         everything that would change the rest of the machine, opening a page
+//                         in the browser among it, is faked inside it (machine.js)
+//   --answers <file>      answer every question from this JSON file; nothing is asked and
+//                         nothing waits for Enter, because nobody is at the screen
 //   --downloads <folder>  take downloads from this folder instead of the internet
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
@@ -18,7 +20,7 @@ import { checkClaude } from './claude.js';
 import { walkThroughConnectors } from './connectors.js';
 import { setUpExtraTools } from './extra-tools.js';
 import { setUpGitHub } from './github.js';
-import { tryToOpen } from './open-page.js';
+import { showPage } from './open-page.js';
 import { findPlaces } from './places.js';
 import { openMachine } from './machine.js';
 import { switchOffAutoMemory } from './memory.js';
@@ -110,6 +112,11 @@ async function main() {
   if (options.downloads) log.write(`Downloads from: ${options.downloads}`);
   const machine = openMachine(places, log);
   if (options.debug) await logUserPath(machine, log, 'before');
+  /**
+   * What this run has changed so far, step by step, for a run that stops partway.
+   * @type {[string, string][]}
+   */
+  const done = [];
 
   try {
     const profile = await loadProfile(options.profile);
@@ -118,8 +125,7 @@ async function main() {
 
     ui.start(`Agent Jumpstart · ${profile.name}`);
 
-    ui.step(`Setup page: ${profile.page}`);
-    log.write(`Setup page: ${profile.page} (${unattended ? 'not opened: answers came from a file' : await tryToOpen(profile.page)})`);
+    await showPage('Setup page', profile.page, { machine, log });
 
     // A re-run asks nothing an earlier run already wrote down.
     const earlier = await readEarlierSettings(places.settings, profile.id, log);
@@ -133,22 +139,37 @@ async function main() {
     const settings = { ...earlier, profile: profile.id, ...choices, topWorkspace };
     await writeSettings(places.settings, settings);
     log.write(`Settings written to ${places.settings}`);
+    done.push(['Settings', 'Your answers, saved for next time']);
 
     const workspaces = await createWorkspaces(topWorkspace, choices.workspaces, log);
+    done.push(...workspaces.rows);
 
-    const tools = await installTools({ places, machine, downloads: options.downloads, keepDownloads: options.debug, log });
-    const github = await setUpGitHub(profile, choices.github, { attended: !unattended, places, machine, downloads: options.downloads, log });
-    const skills = await installSkills(profile, { places, machine, downloads: options.downloads, log });
-    const memory = await switchOffAutoMemory({ places, machine, log });
+    /** @type {import('./tools.js').Context} */
+    const context = { places, machine, downloads: options.downloads, keepDownloads: options.debug, log, attended: !unattended };
+    const tools = await installTools(context);
+    done.push(...tools);
+    const github = await setUpGitHub(profile, choices.github, context);
+    done.push(['GitHub', github]);
+    const skills = await installSkills(profile, context);
+    /** @type {[string, string][]} */
+    const skillsRows = skills.cli === undefined ? [] : [['Skills CLI', skills.cli]];
+    skillsRows.push(['Skills', skills.line]);
+    done.push(...skillsRows);
+    const memory = await switchOffAutoMemory(context);
+    done.push(['Memory', memory]);
     // Settings' connectors are kept only when every one is still offered, so equal means known.
     const connectedBefore = JSON.stringify(earlier?.connectors) === JSON.stringify(choices.connectors);
-    const connectors = await walkThroughConnectors(profile, choices.connectors, { attended: !unattended, connectedBefore, log });
-    const extraTools = await setUpExtraTools(profile, choices.extraTools, { places, machine, downloads: options.downloads, keepDownloads: options.debug, log, attended: !unattended });
+    const connectors = await walkThroughConnectors(profile, choices.connectors, { ...context, connectedBefore });
+    done.push(['Connectors', connectors]);
+    const extraTools = await setUpExtraTools(profile, choices.extraTools, context);
+    done.push(...extraTools);
     // Last of the installs, after every other tool and its PATH entry: T3 reads PATH only when it starts.
-    const t3 = await installT3(choices.channel, { places, machine, downloads: options.downloads, keepDownloads: options.debug, log, attended: !unattended });
+    const t3 = await installT3(choices.channel, context);
+    done.push(['T3 Code', t3.row]);
     // After T3's first start, which leaves the command-line shim that adds a project.
-    const workspacesLine = await addToT3(workspaces, t3, { machine, log });
-    const claude = await checkClaude({ places, machine, downloads: options.downloads, log, attended: !unattended, t3 });
+    const workspacesLine = await addToT3(workspaces, t3, context);
+    done.push(['Workspaces', workspacesLine]);
+    const claude = await checkClaude({ ...context, t3 });
     settings.email = claude.email;
     await writeSettings(places.settings, settings);
     log.write(`Signed-in email written to settings: ${claude.email ?? 'none'}`);
@@ -160,7 +181,7 @@ async function main() {
       ...extraTools,
       ['T3 Code', t3.row],
       ['Claude Code', claude.row],
-      ['Skills', skills.line],
+      ...skillsRows,
       ['Memory', memory],
       ['Workspaces', workspacesLine],
       ['Connectors', connectors],
@@ -180,8 +201,17 @@ async function main() {
       log.write(`Failed: ${error instanceof Error ? error.stack : String(error)}`);
       throw error;
     }
-    ui.problem(error.message);
     log.write(`Stopped: ${error.message}`);
+    // Only here is the person told what a stop left behind, so it's never claimed that nothing
+    // changed after something did.
+    if (done.length === 0) {
+      ui.problem(`${error.message} Nothing has been changed.`);
+    } else {
+      ui.problem(error.message);
+      ui.summary(done, 'Done before it stopped');
+      for (const [label, value] of done) log.write(`Done before it stopped: ${label}: ${value}`);
+      ui.step('Running the same line again carries on from here, without asking your answers again.');
+    }
     return 1;
   } finally {
     if (options.debug) await logUserPath(machine, log, 'after');

@@ -8,6 +8,7 @@ import { access, copyFile, mkdir, readdir, rename, rm } from 'node:fs/promises';
 import { basename, dirname, join } from 'node:path';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
+import { system32 } from './machine.js';
 import { loadManifest } from './manifest.js';
 import { messageOf } from './stop.js';
 import * as ui from './ui.js';
@@ -23,7 +24,9 @@ export class NotInstalled extends Error {}
  *   only: what's taken from it is still copied into the installer's own downloads folder.
  * @property {boolean} [keepDownloads] Leave the downloads in the installer's own folder after
  *   use (a debug run) rather than deleting them.
- * @property {{ write(line: string): void }} log
+ * @property {import('./log.js').Log} log
+ * @property {boolean} attended Whether someone is at the screen. Not when the answers came from
+ *   a file: then nothing waits for Enter.
  */
 
 /**
@@ -37,15 +40,16 @@ export async function installTools(context) {
   context.log.write(`Versions from: ${manifest.source}`);
   /** @type {[string, string][]} */
   const rows = [];
-  for (const tool of manifest.tools) if (!tool.when) rows.push([tool.name, await installTool(tool, context)]);
+  for (const tool of manifest.tools) if (!tool.when) rows.push([tool.name, (await installTool(tool, context)).row]);
   return rows;
 }
 
 /**
  * @param {import('./manifest.js').Tool} tool
  * @param {Context} context
- * @returns {Promise<string>} the checklist row: the version and what this run did (see
- *   `change`), or why it isn't installed. A copy at another version is replaced.
+ * @returns {Promise<{ installed: boolean, row: string }>} whether the tool is in place, and its
+ *   checklist row: the version and what this run did (see `change`), or why it isn't installed.
+ *   A copy at another version is replaced.
  */
 export async function installTool(tool, { places, machine, downloads, keepDownloads, log }) {
   const say = (/** @type {string} */ line) => log.write(`${tool.name}: ${line}`);
@@ -57,7 +61,7 @@ export async function installTool(tool, { places, machine, downloads, keepDownlo
     if (before.upToDate) {
       say(`${tool.version} is already in ${folder}`);
       await addToPath(tool, folder, machine, say);
-      return `${tool.version} (${change.upToDate})`;
+      return { installed: true, row: `${tool.version} (${change.upToDate})` };
     }
     if (before.present) say(`replacing ${before.version ?? "a copy whose version couldn't be read"}`);
 
@@ -76,20 +80,12 @@ export async function installTool(tool, { places, machine, downloads, keepDownlo
         // bootstrap replaces when Node's pin changes).
         const npm = join(dirname(process.execPath), 'npm.cmd');
         const args = ['install', '--global', '--prefix', folder, '--no-audit', '--no-fund', file];
-        say(`running ${npm} ${args.join(' ')}`);
         const ran = await machine.run(npm, args);
-        if (ran.code !== 0) {
-          say(`npm output: ${ran.output.trim()}`);
-          throw new NotInstalled(`npm stopped with code ${ran.code}`);
-        }
+        if (ran.code !== 0) throw new NotInstalled(`npm stopped with code ${ran.code}`);
       } else {
         const args = (tool.install.arguments ?? []).map((arg) => arg.replaceAll('{folder}', folder));
-        say(`running ${basename(file)} ${args.join(' ')}`);
         const ran = await machine.run(file, args);
-        if (ran.code !== 0) {
-          say(`installer output: ${ran.output.trim()}`);
-          throw new NotInstalled(`its installer stopped with code ${ran.code}`);
-        }
+        if (ran.code !== 0) throw new NotInstalled(`its installer stopped with code ${ran.code}`);
       }
     } finally {
       if (keepDownloads) say(`kept ${file}`);
@@ -98,18 +94,15 @@ export async function installTool(tool, { places, machine, downloads, keepDownlo
 
     // A per-user program can be blocked from running (AppLocker), so prove it runs.
     const ran = await machine.run(check, ['--version']);
-    if (ran.code !== 0) {
-      say(`${check} --version: ${ran.output.trim()}`);
-      throw new NotInstalled("Windows wouldn't run it");
-    }
+    if (ran.code !== 0) throw new NotInstalled("Windows wouldn't run it");
     await addToPath(tool, folder, machine, say);
     say(`installed ${tool.version}`);
-    return `${tool.version} (${changeFrom(before)})`;
+    return { installed: true, row: `${tool.version} (${changeFrom(before)})` };
   } catch (error) {
     if (!(error instanceof NotInstalled)) say(`failed: ${error instanceof Error ? error.stack : String(error)}`);
     const reason = error instanceof NotInstalled ? error.message : messageOf(error);
     say(`not installed: ${reason}`);
-    return `Not installed: ${reason}`;
+    return { installed: false, row: `Not installed: ${reason}` };
   }
 }
 
@@ -222,12 +215,8 @@ async function unpack(zip, folder, check, { scratch, machine, say }) {
   await rm(scratch, { recursive: true, force: true });
   await mkdir(scratch, { recursive: true });
   try {
-    const tar = join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'tar.exe');
-    const ran = await machine.runHere(tar, ['-xf', zip, '-C', scratch]);
-    if (ran.code !== 0) {
-      say(`tar: ${ran.output.trim()}`);
-      throw new NotInstalled("the download couldn't be unpacked");
-    }
+    const ran = await machine.runHere(system32('tar.exe'),['-xf', zip, '-C', scratch]);
+    if (ran.code !== 0) throw new NotInstalled("the download couldn't be unpacked");
     // Node's zip wraps everything in one top folder; gh's doesn't.
     const entries = await readdir(scratch);
     const candidates = entries.length === 1 ? [scratch, join(scratch, entries[0])] : [scratch];

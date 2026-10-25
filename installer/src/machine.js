@@ -1,12 +1,13 @@
 // Everything that would change the machine outside the installer's own folders: the user's
-// environment variables (PATH among them) and the programs it runs (vendor installers, and
-// later gh, claude, npm). With a home override all of it is faked inside that home, so a test
+// environment variables (PATH among them), the programs it runs (vendor installers, gh,
+// claude, npm) and the pages it opens in the browser. With a home override all of it is faked inside that home, so a test
 // can run the real installer end to end and touch nothing else:
 //
 //   <home>/fake-machine/environment.json  the user environment variables, as HKCU\Environment
 //                                         holds them; the user PATH is `Path`, joined with `;`
 //   <home>/fake-machine/runs.json         every program it was asked to run: [{ file, args }],
 //                                         with `onScreen: true` for one run in the person's window
+//   <home>/fake-machine/pages.json        every address it was asked to open in the browser
 //   <home>/fake-machine/replies.json      written by a test: what a run returns, keyed by the
 //                                         file name, or the file name and its arguments
 //                                         ("gh.exe auth status"). No reply means code 0, no output.
@@ -19,8 +20,9 @@
 //
 // Every program the installer runs goes through `run`, `runHere` or `runOnScreen`, real or fake,
 // so a debug run's log holds each one with its exit code and full output (for `runOnScreen`,
-// the command and code only: its output goes to the person's window), and nothing else has to
-// log it.
+// the command and code only: its output goes to the person's window), and every run's log holds
+// each `run` or `runHere` that failed (a code other than 0), with its output. Nothing else has
+// to log a program's command or output.
 import { spawn } from 'node:child_process';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { basename, dirname, join, relative, resolve } from 'node:path';
@@ -40,6 +42,8 @@ import { basename, dirname, join, relative, resolve } from 'node:path';
  * @property {(file: string, args: string[]) => Promise<number>} runOnScreen Runs a program in the
  *   person's window, so they see what it prints and can answer it, and waits for it. Returns its
  *   exit code, or -1 if it couldn't start.
+ * @property {(url: string) => Promise<void>} openPage Opens an address in the person's default
+ *   browser without waiting for it. Rejects if the browser couldn't be started.
  * @property {number} patience How long, in milliseconds, to wait for what a program does after
  *   it has returned, such as an app it started opening. None for the fake, which does everything
  *   a program does before the run returns.
@@ -57,14 +61,20 @@ import { basename, dirname, join, relative, resolve } from 'node:path';
  * @returns {Machine}
  */
 export function openMachine(places, log) {
-  // Logged before it starts as well as after, so a program that never returns still shows.
+  // In a debug run, logged before it starts as well as after, so a program that never returns
+  // still shows. In any run, a program that fails is logged once it has, with its output.
   /** @param {Runner} run @returns {Runner} */
   const logged = (run) => async (file, args) => {
-    log.detail(`Running: ${[file, ...args].map(quoted).join(' ')}`);
+    const running = `Running: ${[file, ...args].map(quoted).join(' ')}`;
+    log.detail(running);
     const ran = await run(file, args);
     const output = ran.output.trimEnd();
-    log.detail(`Ran: ${basename(file)} (code ${ran.code})`);
-    log.detail(output ? output.split(/\r?\n/).map((line) => `  | ${line}`).join('\n') : '  (no output)');
+    const lines = [
+      `Ran: ${basename(file)} (code ${ran.code})`,
+      ...(output ? output.split(/\r?\n/).map((line) => `  | ${line}`) : ['  (no output)']),
+    ];
+    if (ran.code === 0) log.detail(lines.join('\n'));
+    else for (const line of [...(log.debug ? [] : [running]), ...lines]) log.write(line);
     return ran;
   };
   // A program in the person's window writes straight to it: catching its output would take the
@@ -78,7 +88,12 @@ export function openMachine(places, log) {
     return code;
   };
   const machine = places.fakeMachine ? fakeMachine(places.fakeMachine, places.home, logged) : realMachine(logged(runProgram));
-  return { ...machine, runOnScreen: loggedOnScreen(machine.runOnScreen), runHere: logged(runProgram) };
+  /** @type {Machine['openPage']} */
+  const openPage = (url) => {
+    log.detail(`Opening in the browser: ${url}`);
+    return machine.openPage(url);
+  };
+  return { ...machine, runOnScreen: loggedOnScreen(machine.runOnScreen), runHere: logged(runProgram), openPage };
 }
 
 /** @param {string} arg */
@@ -139,6 +154,9 @@ function fakeMachine(folder, home, logged) {
     async runOnScreen(file, args) {
       return (await reply(file, args, { file, args, onScreen: true })).code;
     },
+    async openPage(url) {
+      await write('pages.json', [...(await read('pages.json', [])), url]);
+    },
   };
 
   /** @param {string} file @param {string[]} args @param {{ file: string, args: string[], onScreen?: boolean }} record @returns {Promise<Ran>} */
@@ -170,7 +188,7 @@ function fakeMachine(folder, home, logged) {
 }
 
 /** @param {string} name */
-const system32 = (name) => join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', name);
+export const system32 = (name) => join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', name);
 
 /**
  * The real user environment lives in HKCU\Environment. It's read and written with reg.exe
@@ -231,6 +249,16 @@ function realMachine(runProgram) {
         const child = spawn(how.file, how.args, { ...how.options, stdio: 'inherit' });
         child.once('error', () => resolve(-1));
         child.once('close', (code) => resolve(code ?? -1));
+      });
+    },
+    openPage(url) {
+      return new Promise((resolve, reject) => {
+        const child = spawn(system32('rundll32.exe'), ['url.dll,FileProtocolHandler', url], { detached: true, stdio: 'ignore' });
+        child.once('error', reject);
+        child.once('spawn', () => {
+          child.unref();
+          resolve();
+        });
       });
     },
   };

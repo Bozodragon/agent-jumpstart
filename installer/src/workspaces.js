@@ -68,7 +68,7 @@ export async function addToT3(workspaces, t3, { machine, log }) {
     say(`${top} is already in T3 Code's list`);
     return `${name}, already in T3 Code`;
   }
-  say(`${top} not added: code ${ran.code}: ${ran.output.trim()}`);
+  say(`${top} not added: T3 Code refused it (code ${ran.code})`);
   return `${name}, not in T3 Code: T3 Code wouldn't add it`;
 }
 

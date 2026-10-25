@@ -116,8 +116,9 @@ export async function readManifest() {
 /**
  * With `--home`, whatever would change the real machine lands in `<home>/fake-machine/`:
  * `environment.json` stands for the user's environment variables (the user PATH is its
- * `Path`, entries joined with `;`), `runs.json` lists every program it was asked to run, and
- * `replies.json`, if a test writes one, says what a run returns.
+ * `Path`, entries joined with `;`), `runs.json` lists every program it was asked to run,
+ * `pages.json` every page it was asked to open in the browser, and `replies.json`, if a test
+ * writes one, says what a run returns.
  * @param {string} home
  */
 export function fakeMachine(home) {
@@ -143,6 +144,8 @@ export function fakeMachine(home) {
     userPath: async () => ((await readJson('environment.json')).Path ?? '').split(';').filter(Boolean),
     /** @returns {Promise<{ file: string, args: string[], onScreen?: boolean }[]>} */
     runs: () => readJson('runs.json', []),
+    /** @returns {Promise<string[]>} the addresses it was asked to open in the browser, in order */
+    pagesOpened: () => readJson('pages.json', []),
     /** @param {Record<string, string>} variables */
     setEnvironment: (variables) => writeJson('environment.json', variables),
     /**

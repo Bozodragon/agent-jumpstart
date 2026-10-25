@@ -1,8 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
-import { fakeMachine, makeHome, readOnlyLog, readProfile, runWith } from './harness.js';
+import { basename, join } from 'node:path';
+import { fakeMachine, makeHome, readOnlyLog, readProfile, runWith, supplyDownloads } from './harness.js';
 
 /** @param {string} stdout @param {string} label @param {string} value */
 function checklistSays(stdout, label, value) {
@@ -26,32 +26,40 @@ async function yorkSkills() {
   }));
 }
 
-/** @param {string} home */
-async function skillsCliRuns(home) {
-  return (await fakeMachine(home).runs()).filter((ran) => ran.file === 'npx.cmd');
+/** A home where the pinned skills CLI can be installed (see skills-pinning.test.js). @param {import('node:test').TestContext} t */
+async function homeWithSkillsCli(t) {
+  const where = await makeHome(t);
+  await supplyDownloads(where, ['skills']);
+  return where;
 }
 
-test('each skill in the profile is installed with the pinned skills CLI, globally, for Claude Code, with no prompts', async (t) => {
-  const where = await makeHome(t);
+/** @param {string} home */
+async function skillsCliRuns(home) {
+  return (await fakeMachine(home).runs()).filter((ran) => basename(ran.file) === 'skills.cmd' && ran.args[0] === 'add');
+}
+
+test('each skill in the profile is installed with the pinned skills CLI, at its pinned commit, globally, for Claude Code, with no prompts', async (t) => {
+  const where = await homeWithSkillsCli(t);
 
   const result = await runWith(where, 'york');
 
   assert.equal(result.code, 0, result.stderr);
   const runs = await skillsCliRuns(where.home);
-  // The flags the skills CLI's research settled: npx -y (no "Ok to proceed?"), then
-  // add <source> -g -a claude-code -y, with -s <names> last because it takes every word after it.
+  // The flags the skills CLI's research settled: add <source> -g -a claude-code -y, with
+  // -s <names> last because it takes every word after it. Each source from another repo is
+  // pinned at the commit the research checked, as <source>#<commit>; this repo's own isn't.
   assert.deepEqual(runs.map((ran) => ran.args), [
-    ['-y', 'skills@1.7.4', 'add', 'mattpocock/skills', '-g', '-a', 'claude-code', '-y', '-s',
+    ['add', 'mattpocock/skills#5beb35b040e3de97e54fa9e386d7e42d15c295c2', '-g', '-a', 'claude-code', '-y', '-s',
       'grilling', 'grill-me', 'grill-with-docs', 'domain-modeling', 'teach', 'to-questionnaire', 'handoff', 'wait-what',
       'research', 'wayfinder', 'to-spec', 'to-tickets', 'setup-matt-pocock-skills', 'prototype', 'wizard'],
-    ['-y', 'skills@1.7.4', 'add', 'anthropics/skills', '-g', '-a', 'claude-code', '-y', '-s', 'frontend-design'],
-    ['-y', 'skills@1.7.4', 'add', 'cursor/plugins/pstack/skills/unslop', '-g', '-a', 'claude-code', '-y'],
-    ['-y', 'skills@1.7.4', 'add', 'Bozodragon/agent-jumpstart', '-g', '-a', 'claude-code', '-y', '-s', 'jumpstart'],
+    ['add', 'anthropics/skills#dbd4588f9e1033efb41dad4bef2f7947c8993d44', '-g', '-a', 'claude-code', '-y', '-s', 'frontend-design'],
+    ['add', 'cursor/plugins/pstack/skills/unslop#190d28736eff128ec94f502a22c7fe0c4b56cd37', '-g', '-a', 'claude-code', '-y'],
+    ['add', 'Bozodragon/agent-jumpstart', '-g', '-a', 'claude-code', '-y', '-s', 'jumpstart'],
   ]);
 });
 
 test("with no network, every skill is reported as not installed, since none arrived in Claude's skills folder", async (t) => {
-  const where = await makeHome(t);
+  const where = await homeWithSkillsCli(t);
 
   const result = await runWith(where, 'york');
 
@@ -63,8 +71,11 @@ test("with no network, every skill is reported as not installed, since none arri
 });
 
 test('a skills CLI that fails is reported, with its output in the log', async (t) => {
-  const where = await makeHome(t);
-  await fakeMachine(where.home).setReplies({ 'npx.cmd': { code: 1, output: 'Failed to clone repository' } });
+  const where = await homeWithSkillsCli(t);
+  await fakeMachine(where.home).setReplies({
+    'skills.cmd --version': { output: '1.7.4\n' },
+    'skills.cmd': { code: 1, output: 'Failed to clone repository' },
+  });
 
   const result = await runWith(where, 'york');
 
@@ -74,7 +85,7 @@ test('a skills CLI that fails is reported, with its output in the log', async (t
 });
 
 test("skills found in Claude's skills folder after the skills CLI ran are reported as installed", async (t) => {
-  const where = await makeHome(t);
+  const where = await homeWithSkillsCli(t);
   for (const { names } of await yorkSkills()) {
     for (const name of names) {
       await mkdir(join(where.home, '.claude', 'skills', name), { recursive: true });

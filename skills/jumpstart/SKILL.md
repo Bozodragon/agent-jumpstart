@@ -20,17 +20,17 @@ Read the installer's settings file, `%LOCALAPPDATA%\agent-jumpstart\settings.jso
 - `workspaces`: the names of the workspaces they chose.
 - `connectors`: the names of the connectors they chose, such as `Gmail`, `Google Calendar`, `Google Drive`, `Asana`.
 
-Take their name from the account: most work addresses are `first.last@`, so read it off the email, capitalised. If the address doesn't spell a name, the research finds it; greet them without one until then.
+Take their name from their Claude account. Claude Code keeps it in its own config file, `.claude.json`, in their profile folder (`%USERPROFILE%\.claude.json`), or in the folder `CLAUDE_CONFIG_DIR` names if that is set. Read only `oauthAccount.fullName` from it, or `oauthAccount.displayName` if there's no full name; the file holds other things that aren't yours to read. Never guess a name from the email address. If neither key gives one, ask for their name in step 2: the other exception.
 
 You should be running in their top workspace: the folder `topWorkspace` names (the installer created it and added it to T3). In a settings file from before the installer wrote that key, it is a folder directly inside `workspacesLocation`, holding a folder for each of their `workspaces`. If it isn't, tell them to open their top workspace in T3 and type `/jumpstart` there, and stop.
 
-Done when you have their email, workspaces and connectors, and either a name or the knowledge that the research will find it.
+Done when you have their email, workspaces and connectors, and either their name from the account or the knowledge that you'll ask for it.
 
 ## 2. Say hello and ask their role
 
-Greet them, by first name if you have it. In two or three sentences, say what happens next: you'll look through their calendar and files while you talk, show them what you found on one page to correct, and keep nothing until they've said it's right. Then ask their job title and team, as one question.
+Greet them, by first name if you have it. In two or three sentences, say what happens next: you'll look through their calendar and files while you talk, show them what you found on one page to correct, and keep nothing until they've said it's right. Then ask their job title and team, as one question; if the account gave no name, ask what you should call them in the same question.
 
-Done when you have both, in their words. If they answer only one, ask once more for the other.
+Done when you have their job title and team (and their name, if you asked), in their words. If they leave one out, ask once more for it.
 
 ## 3. Ask about their email
 
@@ -144,6 +144,7 @@ Done when every connector has a result.
 Close with one short message in plain words:
 
 - **What you kept**: in this folder, `CLAUDE.md` holds how you'll work with them, and `me.md`, `work.md` and `people.md` hold what they approved about themselves, their work and the people they work with. They can open and change these files at any time, and you'll suggest additions and make them only once they agree.
+- **What you put aside**: only if steps 7 and 8 renamed anything. Name each file you renamed with " (before Jumpstart)" and the folder it's in, say that nothing in it was changed or lost, and that it no longer loads, so they can open it, copy back anything they still want, and delete it when they're done.
 - **Their workspaces**: each one, with a line on what it's for and whether it's in T3. For one that isn't, tell them to add its folder as a project in T3, giving the full path.
 - **Their services**: each one by name, working or not, from step 10, with the fix for each that isn't.
 - **Where to start**: open the workspace whose template is marked **Open first** in T3 and start a conversation there with whatever's on their mind. If they didn't choose that one, name the first of their `workspaces`; if they chose none, this folder.
@@ -160,7 +161,7 @@ The JSON:
 {
   "sections": [
     { "title": "About you", "addable": false, "items": [
-      { "label": "Name", "text": "Alex Morgan", "source": "your email address" }
+      { "label": "Name", "text": "Alex Morgan", "source": "your account" }
     ] },
     { "title": "Your work", "items": [
       { "text": "Runs the open day campaign", "source": "your calendar: weekly 'Open day planning'", "unsure": true }

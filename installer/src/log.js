@@ -4,6 +4,7 @@ import { join } from 'node:path';
 /**
  * @typedef {object} Log
  * @property {string} path
+ * @property {boolean} debug Whether this is a debug run, which `detail` writes in.
  * @property {(line: string) => void} write Writes a line, in every run.
  * @property {(text: string) => void} detail Writes only in a debug run, which the debug pasted
  *   line starts. Each line of a text with several is written as a log line of its own.
@@ -36,6 +37,7 @@ export function openLog(folder, { debug = false, now = new Date() } = {}) {
   };
   return {
     path,
+    debug,
     write: (line) => append([line]),
     detail: (text) => {
       if (debug) append(text.split(/\r?\n/));
