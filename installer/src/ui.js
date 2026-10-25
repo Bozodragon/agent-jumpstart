@@ -12,7 +12,7 @@ const accent = 'magenta';
  * @returns {Exclude<T, symbol>}
  */
 function unlessCancelled(value) {
-  if (isCancel(value)) throw new Stop('Stopped at your request. Nothing has been changed.');
+  if (isCancel(value)) throw new Stop('Stopped at your request.');
   return /** @type {Exclude<T, symbol>} */ (value);
 }
 

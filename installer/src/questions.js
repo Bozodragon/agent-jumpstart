@@ -67,12 +67,12 @@ export async function askQuestions(profile, places, ask, log) {
     log.write(`Google Drive for desktop: ${drive.status}${drive.status === 'signed-in' ? `, My Drive ${drive.folder ?? 'not found'}` : ''}`);
     if (drive.status === 'not-installed') {
       throw new Stop(
-        "Your workspaces live in Google Drive, so Google Drive for desktop is needed first, and it isn't on this laptop (or hasn't been opened yet). Install it, sign in, then paste the same line again. Nothing has been changed.",
+        "Your workspaces live in Google Drive, so Google Drive for desktop is needed first, and it isn't on this laptop (or hasn't been opened yet). Install it, sign in, then paste the same line again.",
       );
     }
     if (drive.status === 'signed-out') {
       throw new Stop(
-        'Google Drive for desktop is installed but not signed in. Open it from the Start menu, sign in with your work Google account, then paste the same line again. Nothing has been changed.',
+        'Google Drive for desktop is installed but not signed in. Open it from the Start menu, sign in with your work Google account, then paste the same line again.',
       );
     }
     googleDriveFolder = await ask.folder({
