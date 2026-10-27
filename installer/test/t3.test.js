@@ -24,7 +24,7 @@ const signedIn = {
   output: JSON.stringify({ loggedIn: true, authMethod: 'claude.ai', email: 'jo.bloggs@york.ac.uk', orgName: 'University of York', subscriptionType: 'enterprise' }),
 };
 
-test('with stable chosen, the current stable T3 is installed per user after its hash is checked, then Claude is confirmed signed in', async (t) => {
+test('with stable chosen, the current stable T3 is installed per user after its hash is checked, with Claude confirmed signed in', async (t) => {
   const where = await makeHome(t, { channel: 'stable' });
   const installer = await supplyT3(where.downloads, 'latest.yml', '0.1.2');
   // Node is already in place, as an earlier run left it.
@@ -34,9 +34,10 @@ test('with stable chosen, the current stable T3 is installed per user after its 
   const machine = fakeMachine(where.home);
   await machine.setReplies({
     'node.exe --version': { output: `v${node.version}\r\n` },
-    // The silent install leaves the program, and T3 starting leaves its shim. Claude Code
-    // was installed from T3's welcome screen.
-    [`${installer} /S --force-run`]: { creates: [t3Program('Beta'), t3Shim, claudeProgram] },
+    // Anthropic's installer leaves Claude Code. T3's silent install leaves the program, and T3
+    // starting leaves its shim.
+    'powershell.exe': { creates: [claudeProgram] },
+    [`${installer} /S --force-run`]: { creates: [t3Program('Beta'), t3Shim] },
     'claude.exe --version': { output: '2.1.306 (Claude Code)\n' },
     'claude.exe auth status': signedIn,
   });
@@ -124,7 +125,8 @@ test("when Claude isn't signed in, its own sign-in runs in the person's window, 
   const installer = await supplyT3(where.downloads, 'latest.yml', '0.1.2');
   const machine = fakeMachine(where.home);
   await machine.setReplies({
-    [`${installer} /S --force-run`]: { creates: [t3Program('Beta'), t3Shim, claudeProgram] },
+    'powershell.exe': { creates: [claudeProgram] },
+    [`${installer} /S --force-run`]: { creates: [t3Program('Beta'), t3Shim] },
     'claude.exe --version': { output: '2.1.306 (Claude Code)\n' },
     'claude.exe auth status': [{ code: 1, output: JSON.stringify({ loggedIn: false, authMethod: 'none' }) }, signedIn],
   });
@@ -145,7 +147,8 @@ test("a sign-in that doesn't finish leaves Claude reported as not signed in, wit
   const installer = await supplyT3(where.downloads, 'latest.yml', '0.1.2');
   const machine = fakeMachine(where.home);
   await machine.setReplies({
-    [`${installer} /S --force-run`]: { creates: [t3Program('Beta'), t3Shim, claudeProgram] },
+    'powershell.exe': { creates: [claudeProgram] },
+    [`${installer} /S --force-run`]: { creates: [t3Program('Beta'), t3Shim] },
     'claude.exe --version': { output: '2.1.306 (Claude Code)\n' },
     'claude.exe auth status': { code: 1, output: JSON.stringify({ loggedIn: false, authMethod: 'none' }) },
     'claude.exe auth login': { code: 1 },
@@ -157,22 +160,6 @@ test("a sign-in that doesn't finish leaves Claude reported as not signed in, wit
   checklistSays(result.stdout, 'Claude Code', '2.1.306, not signed in');
   assert.ok((await machine.userPath()).includes(join(where.home, '.local', 'bin')));
   assert.equal((await readSettings(where.home)).email, null);
-});
-
-test("if Claude Code wasn't installed from T3's welcome screen, the checklist says so, nothing runs it, and its folder is still on the PATH for when it is", async (t) => {
-  const where = await makeHome(t, { channel: 'stable' });
-  const installer = await supplyT3(where.downloads, 'latest.yml', '0.1.2');
-  const machine = fakeMachine(where.home);
-  await machine.setReplies({ [`${installer} /S --force-run`]: { creates: [t3Program('Beta'), t3Shim] } });
-
-  const result = await runWith(where, 'york');
-
-  assert.equal(result.code, 0, result.stderr);
-  checklistSays(result.stdout, 'T3 Code', '0.1.2 (stable, installed)');
-  checklistSays(result.stdout, 'Claude Code', "Not installed: T3 Code's welcome screen installs it");
-  // Put there before T3 started, so T3 finds Claude Code as soon as its welcome screen installs it.
-  assert.ok((await machine.userPath()).includes(join(where.home, '.local', 'bin')));
-  assert.equal((await machine.runs()).some((run) => basename(run.file) === 'claude.exe'), false);
 });
 
 test('a T3 already installed is left alone, and a signed-in Claude is not signed in again', async (t) => {

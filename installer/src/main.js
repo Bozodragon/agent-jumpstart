@@ -16,7 +16,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { parseArgs } from 'node:util';
 import { openLog } from './log.js';
-import { checkClaude, makeWayForClaude } from './claude.js';
+import { setUpClaude } from './claude.js';
 import { walkThroughConnectors } from './connectors.js';
 import { setUpExtraTools } from './extra-tools.js';
 import { setUpGitHub } from './github.js';
@@ -177,26 +177,26 @@ async function main() {
     done.push(['Connectors', connectors]);
     const extraTools = await setUpExtraTools(profile, choices.extraTools, context);
     done.push(...extraTools);
-    // Last of the installs, after every other tool and its PATH entry, Claude Code's among them
-    // though it isn't there yet: T3 reads PATH only when it starts.
-    await makeWayForClaude(context);
+    // Before T3, which finds Claude Code only if it's on PATH when T3 starts.
+    const claude = await setUpClaude(context);
+    done.push(['Claude Code', claude.row]);
+    settings.email = claude.email;
+    await writeSettings(places.settings, settings);
+    log.write(`Signed-in email written to settings: ${claude.email ?? 'none'}`);
+    // Last of the installs, after every other tool and its PATH entry: T3 reads PATH only when it starts.
     const t3 = await installT3(profile, choices.channel, foundT3, context);
     done.push(['T3 Code', t3.row]);
     // After T3's first start, which leaves the command-line shim that adds a project.
     const workspacesLine = await addToT3(workspaces, t3, context);
     done.push(['Workspaces', workspacesLine]);
-    const claude = await checkClaude({ ...context, t3 });
-    settings.email = claude.email;
-    await writeSettings(places.settings, settings);
-    log.write(`Signed-in email written to settings: ${claude.email ?? 'none'}`);
 
     /** @type {[string, string][]} */
     const checklist = [
       ['Profile', profile.name],
       ...tools,
       ...extraTools,
-      ['T3 Code', t3.row],
       ['Claude Code', claude.row],
+      ['T3 Code', t3.row],
       ...skillsRows,
       ['Memory', memory],
       ['Workspaces', workspacesLine],
