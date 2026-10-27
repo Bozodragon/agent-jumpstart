@@ -1,0 +1,11 @@
+{
+  "name": "agent-jumpstart-installer",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.20.0"
+  },
+  "dependencies": {
+    "@clack/prompts": "^1.2.0"
+  }
+}

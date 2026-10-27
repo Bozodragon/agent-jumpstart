@@ -1,0 +1,104 @@
+{
+  "name": "York",
+  "page": "https://jumpstart-york.arcforge.uk/",
+  "pastedLine": "irm https://jumpstart-install.arcforge.uk/york.ps1 | iex",
+  "shareLogLine": "irm https://jumpstart-install.arcforge.uk/share-log.ps1 | iex",
+  "logGoesTo": "Jacob",
+  "logEmail": "jacob.hamood@york.ac.uk",
+  "workspaces": {
+    "top": "Claude",
+    "inGoogleDrive": true,
+    "choices": [
+      {
+        "name": "Thinking space",
+        "default": true
+      },
+      {
+        "name": "Personal assistant",
+        "default": true
+      }
+    ]
+  },
+  "connectors": [
+    {
+      "name": "Gmail",
+      "default": true
+    },
+    {
+      "name": "Google Drive",
+      "default": true
+    },
+    {
+      "name": "Google Calendar",
+      "default": true
+    },
+    {
+      "name": "Asana",
+      "default": false
+    },
+    {
+      "name": "Google Docs",
+      "default": false
+    },
+    {
+      "name": "Google Sheets",
+      "default": false
+    },
+    {
+      "name": "Google Slides",
+      "default": false
+    }
+  ],
+  "connectorsPage": "https://claude.ai/customize/connectors",
+  "github": {
+    "signUpPage": "https://github.com/signup",
+    "email": "your university email address"
+  },
+  "extraTools": [
+    {
+      "id": "apps-script",
+      "question": "Would you like the agent to be able to publish and manage Apps Script projects for you?",
+      "default": false,
+      "signIn": "A browser window will open. Choose your York Google account and allow what clasp asks for. Come back here when the page says \"Logged in!\".",
+      "settingsPage": "https://script.google.com/home/usersettings",
+      "settings": "On the Apps Script settings page, check your York account is the one shown at the top right. Then click Google Apps Script API and switch it on. Only you can change this setting."
+    }
+  ],
+  "skills": [
+    {
+      "source": "mattpocock/skills",
+      "names": [
+        "grilling",
+        "grill-me",
+        "grill-with-docs",
+        "domain-modeling",
+        "teach",
+        "to-questionnaire",
+        "handoff",
+        "wait-what",
+        "research",
+        "wayfinder",
+        "to-spec",
+        "to-tickets",
+        "setup-matt-pocock-skills",
+        "prototype",
+        "wizard"
+      ]
+    },
+    {
+      "source": "anthropics/skills",
+      "names": [
+        "frontend-design"
+      ]
+    },
+    {
+      "source": "cursor/plugins/pstack/skills/unslop"
+    },
+    {
+      "source": "Bozodragon/agent-jumpstart",
+      "names": [
+        "jumpstart"
+      ]
+    }
+  ]
+}

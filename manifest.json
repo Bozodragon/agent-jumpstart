@@ -1,0 +1,156 @@
+{
+  "tools": [
+    {
+      "id": "node",
+      "name": "Node.js",
+      "version": "26.12.1",
+      "downloads": {
+        "x64": {
+          "url": "https://nodejs.org/dist/v26.12.1/node-v26.12.1-win-x64.zip",
+          "sha256": "b3efd5c70cba3308ed46e7e699a9b8aac075bbc6b027fcb39c84c31acc25e2b4"
+        },
+        "arm64": {
+          "url": "https://nodejs.org/dist/v26.12.1/node-v26.12.1-win-arm64.zip",
+          "sha256": "34567581ee63967b37afb6b7a0cc63a2d550a43d5d838adb75982d7e356f2e2c"
+        }
+      },
+      "install": {
+        "how": "zip",
+        "folder": "nodejs",
+        "path": ["."],
+        "check": "node.exe"
+      }
+    },
+    {
+      "id": "git",
+      "name": "Git",
+      "version": "2.56.0.windows.3",
+      "downloads": {
+        "x64": {
+          "url": "https://github.com/git-for-windows/git/releases/download/v2.56.0.windows.3/Git-2.56.0.3-64-bit.exe",
+          "sha256": "dc6d3db061999136e139f31376c5582a9ed6f36a4ea12f15e54ad7fa2bfc0bf2"
+        },
+        "arm64": {
+          "url": "https://github.com/git-for-windows/git/releases/download/v2.56.0.windows.3/Git-2.56.0.3-arm64.exe",
+          "sha256": "53cfe6358a1f0573c8c777c9ad71151df8f29986759c689c7b8a5cbb84cca495"
+        }
+      },
+      "install": {
+        "how": "installer",
+        "folder": "Git",
+        "arguments": ["/VERYSILENT", "/NORESTART", "/NOCANCEL", "/SP-", "/SUPPRESSMSGBOXES", "/o:PathOption=Cmd", "/DIR={folder}"],
+        "path": ["cmd"],
+        "check": "cmd/git.exe"
+      }
+    },
+    {
+      "id": "gh",
+      "name": "GitHub CLI",
+      "version": "2.103.1",
+      "downloads": {
+        "x64": {
+          "url": "https://github.com/cli/cli/releases/download/v2.103.1/gh_2.103.1_windows_amd64.zip",
+          "sha256": "a1d22e6f0dea586cf69478aaccbc6e3370dbc954c383cd412b9959635591dc5f"
+        },
+        "arm64": {
+          "url": "https://github.com/cli/cli/releases/download/v2.103.1/gh_2.103.1_windows_arm64.zip",
+          "sha256": "0cf083871b8ff876f0a09fc8afa006eaf82828b58887676328cba55e56703d4c"
+        }
+      },
+      "install": {
+        "how": "zip",
+        "folder": "GitHub CLI",
+        "path": ["bin"],
+        "check": "bin/gh.exe"
+      }
+    },
+    {
+      "id": "clasp",
+      "name": "clasp",
+      "version": "3.4.1",
+      "when": "apps-script",
+      "downloads": {
+        "x64": {
+          "url": "https://registry.npmjs.org/@google/clasp/-/clasp-3.4.1.tgz",
+          "sha256": "5efb98b01f2860434ac8261106699714138a5e3cd77b49c379c4a82792c18f5e"
+        },
+        "arm64": {
+          "url": "https://registry.npmjs.org/@google/clasp/-/clasp-3.4.1.tgz",
+          "sha256": "5efb98b01f2860434ac8261106699714138a5e3cd77b49c379c4a82792c18f5e"
+        }
+      },
+      "install": {
+        "how": "npm",
+        "folder": "npm",
+        "path": ["."],
+        "check": "clasp.cmd"
+      },
+      "signIn": {
+        "run": ["login"],
+        "check": ["show-authorized-user"],
+        "signedInAs": "You are logged in as (.+?)\\.?\\s*$"
+      }
+    },
+    {
+      "id": "skills",
+      "name": "Skills CLI",
+      "version": "1.7.4",
+      "when": "skills",
+      "downloads": {
+        "x64": {
+          "url": "https://registry.npmjs.org/skills/-/skills-1.7.4.tgz",
+          "sha256": "fee71731971e94d90bff2ee55f5556dc325e2f6f53ca0b5eff93ed22b9d838dd"
+        },
+        "arm64": {
+          "url": "https://registry.npmjs.org/skills/-/skills-1.7.4.tgz",
+          "sha256": "fee71731971e94d90bff2ee55f5556dc325e2f6f53ca0b5eff93ed22b9d838dd"
+        }
+      },
+      "install": {
+        "how": "npm",
+        "folder": "skills-cli",
+        "path": [],
+        "check": "skills.cmd",
+        "package": "skills"
+      }
+    },
+    {
+      "id": "t3",
+      "name": "T3 Code",
+      "when": "t3",
+      "channels": {
+        "stable": {
+          "feed": "https://github.com/pingdotgg/t3code/releases/latest/download/latest.yml",
+          "download": "https://github.com/pingdotgg/t3code/releases/download/v{version}/{file}",
+          "program": "T3 Code (Beta).exe"
+        },
+        "nightly": {
+          "releases": "https://api.github.com/repos/pingdotgg/t3code/releases?per_page=30",
+          "tag": "^v\\d+\\.\\d+\\.\\d+-nightly\\.\\d+\\.\\d+$",
+          "feed": "https://github.com/pingdotgg/t3code/releases/download/{tag}/nightly.yml",
+          "download": "https://github.com/pingdotgg/t3code/releases/download/{tag}/{file}",
+          "program": "T3 Code (Nightly).exe"
+        }
+      },
+      "files": {
+        "x64": "-x64\\.exe$",
+        "arm64": "-arm64\\.exe$"
+      },
+      "install": {
+        "folder": "t3code",
+        "arguments": ["/S", "--force-run"],
+        "versionIn": "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\e9197887-efb3-55e0-985e-d6d3b5dd594a",
+        "firstLaunchLeaves": ".t3/bin/t3.cmd"
+      }
+    },
+    {
+      "id": "claude",
+      "name": "Claude Code",
+      "when": "t3",
+      "install": {
+        "folder": ".local/bin",
+        "check": "claude.exe"
+      }
+    }
+  ]
+}
