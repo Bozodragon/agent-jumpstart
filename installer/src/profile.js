@@ -19,7 +19,15 @@ const profilesFolder = fileURLToPath(new URL('../../profiles/', import.meta.url)
  *   `top` is the top workspace's folder name, created in the confirmed location with the chosen
  *   workspaces inside it. `defaultLocation` is the folder, within the user's profile folder,
  *   offered for workspaces when they aren't in Google Drive.
- * @property {Choice[]} connectors
+ * @property {{ install?: string }} [googleDrive] For a profile whose workspaces are in Google Drive:
+ *   `install` says, in the person's words, how to get Google Drive for desktop and sign in, for
+ *   a laptop that hasn't got it. Without it, they're sent to Google's download page.
+ * @property {{ defaultModel?: string, effort?: string, codex?: boolean }} [t3] How T3 Code is set up
+ *   when the installer installs it (never for a T3 already there): new threads use Claude with
+ *   `defaultModel`, which must be a model id T3 knows exactly (`claude-opus-5-5`; T3 quietly
+ *   falls back to its own default for one it doesn't), at `effort` (such as `medium`); and
+ *   `codex: false` turns T3's Codex off.
+ * @property {Connector[]} connectors
  * @property {string} [connectorsPage] The address of the page where the person connects the connectors they ticked.
  * @property {{ signUpPage: string, email: string }} [github] For the person who chooses to set up
  *   GitHub: the sign-up page, and which email to sign up with, in words ("your university email address").
@@ -41,6 +49,12 @@ const profilesFolder = fileURLToPath(new URL('../../profiles/', import.meta.url)
  */
 
 /** @typedef {{ name: string, default: boolean }} Choice */
+
+/**
+ * A connector the person can tick. `what` says what it lets the agent do, in a few plain words
+ * that follow its name in the connectors notice ("Gmail: search and read your email").
+ * @typedef {Choice & { what?: string }} Connector
+ */
 
 /** @returns {Promise<string[]>} */
 async function profileIds() {

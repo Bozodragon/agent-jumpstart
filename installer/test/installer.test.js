@@ -2,10 +2,10 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { makeHome, readOnlyLog, readProfile, runWith, stateFolder } from './harness.js';
+import { fakeMachine, makeHome, readOnlyLog, readProfile, runWith, stateFolder } from './harness.js';
 
 for (const id of ['york', 'default']) {
-  test(`a ${id} run shows its setup page, writes settings and a dated log, and prints an honest checklist`, async (t) => {
+  test(`a ${id} run doesn't open its setup page again, writes settings and a dated log, and prints an honest checklist`, async (t) => {
     const where = await makeHome(t);
     const profile = await readProfile(id);
     const dayBefore = new Date().toLocaleDateString('en-CA');
@@ -14,7 +14,9 @@ for (const id of ['york', 'default']) {
     const dayAfter = new Date().toLocaleDateString('en-CA');
 
     assert.equal(result.code, 0, result.stderr);
-    assert.ok(result.stdout.includes(`Setup page: ${profile.page}`), result.stdout);
+    // The person has just pasted the line from it.
+    assert.ok(!result.stdout.includes(profile.page), result.stdout);
+    assert.ok(!(await fakeMachine(where.home).pagesOpened()).includes(profile.page));
     assert.match(result.stdout, /Checklist/);
     assert.match(result.stdout, /Not installed/);
 
@@ -23,7 +25,6 @@ for (const id of ['york', 'default']) {
 
     const log = await readOnlyLog(where.home);
     assert.match(log.name, new RegExp(`^install-(${dayBefore}|${dayAfter})-\\d{6}\\.log$`));
-    assert.ok(log.text.includes(profile.page), log.text);
     assert.match(log.text, /Not installed/);
   });
 }

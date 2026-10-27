@@ -16,9 +16,9 @@ const pinned = fileURLToPath(new URL('../../manifest.json', import.meta.url));
  * @property {Install} install
  * @property {string} [when] Set aside from the main run of installs: installed only by the
  *   step this names (for an extra tool in the profile, its id, when ticked; `"skills"` for the
- *   skills CLI, installed by `skills.js` when the profile has skills; `"t3"` for T3 Code and
- *   Claude Code, installed after the other tools and their PATH entries by `t3.js` and
- *   `claude.js`, whose entries keep `id` and `name` but otherwise have their own shape).
+ *   skills CLI, installed by `skills.js` when the profile has skills; `"t3"` for Claude Code and
+ *   T3 Code, installed in that order after the other tools and their PATH entries by `claude.js`
+ *   and `t3.js`, whose entries keep `id` and `name` but otherwise have their own shape).
  * @property {SignIn} [signIn] For a tool the person signs in to in the browser.
  */
 

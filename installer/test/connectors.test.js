@@ -24,10 +24,17 @@ test('the walkthrough names each chosen connector beside the profile\'s connecto
 
   assert.equal(result.code, 0, result.stdout + result.stderr);
   assert.ok(result.stdout.includes(`Connectors page: ${profile.connectorsPage}`), result.stdout);
+  const flowing = result.stdout.replace(/[│|]/g, ' ').replace(/\s+/g, ' ');
+  // The page's heading reads Customize, so the notice says so.
+  assert.ok(flowing.includes("This opens claude.ai's Customize page, on Connectors."), result.stdout);
+  // Each chosen connector by name, with what it lets the agent do.
+  assert.ok(flowing.includes('Gmail: search and read your email, and write drafts for you to check and send'), result.stdout);
   for (const name of ['Gmail', 'Google Drive', 'Google Calendar']) {
-    assert.match(result.stdout, new RegExp(`[•-] ${name}\\s`), `${name} should be named on screen`);
+    const { what } = profile.connectors.find((/** @type {{ name: string }} */ connector) => connector.name === name);
+    assert.ok(flowing.includes(`${name}: ${what}`), `${name} should be named on screen with what it does`);
   }
   assert.doesNotMatch(result.stdout, /[•-] Asana/);
+  assert.ok(flowing.includes('The agent uses them as you, and only for what you ask it to do. You can disconnect any of them on the same page.'), result.stdout);
   const log = await readOnlyLog(where.home);
   assert.ok(log.text.includes(`Connectors page: ${profile.connectorsPage} (opened)`), log.text);
   assert.ok((await fakeMachine(where.home).pagesOpened()).includes(profile.connectorsPage));

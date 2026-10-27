@@ -1,12 +1,23 @@
-// Claude Code, after T3's first launch. The installer doesn't install Claude Code: T3's welcome
-// screen does, with Anthropic's own installer, which puts claude.exe in the profile folder's
-// .local\bin and never adds that folder to PATH. So the installer checks it's there, adds the
-// folder to the user PATH, and asks Claude Code whether it's signed in. If it isn't, Claude
-// Code's own sign-in runs in the person's window. The signed-in email is what Jumpstart reads.
+// Claude Code, before T3 Code is installed and started. T3's first-run wizard, which would have
+// offered to install it, is skipped (see t3.js), so the installer installs it with Anthropic's
+// own install script, run in the person's window so they see its progress. The script puts
+// claude.exe in the profile folder's .local\bin and never adds that folder to PATH, so the
+// installer does, first, whether or not Claude Code is there yet: T3 reads PATH only as it
+// starts. Then it asks Claude Code whether it's signed in. If it isn't, Claude Code's own
+// sign-in runs in the person's window. The signed-in email is what Jumpstart reads.
+//
+// Claude Code isn't pinned: the script installs Anthropic's current release.
 import { join } from 'node:path';
+import { system32 } from './machine.js';
 import { loadManifest, toolEntry } from './manifest.js';
 import { exists } from './tools.js';
 import * as ui from './ui.js';
+
+/** Anthropic's own installer, run as Anthropic says to, in Windows PowerShell from System32. */
+const anthropicsInstaller = {
+  file: system32(join('WindowsPowerShell', 'v1.0', 'powershell.exe')),
+  args: ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', 'irm https://claude.ai/install.ps1 | iex'],
+};
 
 /**
  * @typedef {object} ClaudeState
@@ -18,17 +29,20 @@ import * as ui from './ui.js';
  */
 
 /**
- * @param {import('./tools.js').Context & { t3: import('./t3.js').T3Result }} context
+ * Installs Claude Code if it isn't there, puts its folder on the user PATH, and signs the person
+ * in if they aren't. Before T3 is installed and started.
+ * @param {import('./tools.js').Context} context
  * @returns {Promise<{ row: string, email: string | null }>} The checklist's Claude Code line and
  *   the signed-in email, if any.
  */
-export async function checkClaude({ places, machine, downloads, log, attended, t3 }) {
+export async function setUpClaude({ places, machine, downloads, log }) {
   const entry = toolEntry(await loadManifest(downloads), 'claude');
   if (!entry) return { row: 'Not checked: the list of versions has no entry for it', email: null };
   const say = (/** @type {string} */ line) => log.write(`${entry.name}: ${line}`);
   const folder = join(places.home, entry.install.folder);
   const program = join(folder, entry.install.check);
-  ui.step(`Checking ${entry.name}`);
+  // Before T3 starts, even if the install below doesn't finish: T3 then finds it once it's there.
+  say((await machine.addToUserPath(folder)) ? `added ${folder} to the user PATH` : `${folder} was already on the user PATH`);
 
   const look = async () => {
     const state = await lookAt(program, machine);
@@ -36,27 +50,17 @@ export async function checkClaude({ places, machine, downloads, log, attended, t
     return state;
   };
 
+  ui.step(`Checking ${entry.name}`);
   let state = await look();
-  if (!state.present && attended && t3.installed) {
-    ui.notice(
-      [
-        `T3 Code installs ${entry.name}. In T3 Code's welcome screen, next to Claude:`,
-        '',
-        `  ${ui.bullet} Click Install.`,
-        `  ${ui.bullet} A window opens with a command typed in. Press Enter in it.`,
-        `  ${ui.bullet} Wait until it says it's finished.`,
-        '',
-        "Don't sign in there: that comes next, here.",
-      ].join('\n'),
-      `Install ${entry.name}`,
-    );
-    await ui.pressEnter(`Press Enter once T3 Code has installed ${entry.name}.`);
-    say('the person pressed Enter');
+  if (!state.present) {
+    // Its own installer shows its progress in this window, so there's no spinner over it.
+    ui.step(`Installing ${entry.name} with Anthropic's own installer. Its progress shows below; it takes a minute or two.`);
+    const code = await machine.runOnScreen(anthropicsInstaller.file, anthropicsInstaller.args);
     state = await look();
+    say(state.present ? `installed by its installer (code ${code})` : `its installer finished with code ${code}, and ${program} isn't there`);
   }
 
   if (state.present && state.runs) {
-    say((await machine.addToUserPath(folder)) ? `added ${folder} to the user PATH` : `${folder} was already on the user PATH`);
     if (!state.signedIn) {
       ui.notice(
         [
@@ -103,7 +107,7 @@ function describe(state, program) {
 
 /** @param {ClaudeState} state */
 function rowFor(state) {
-  if (!state.present) return "Not installed: T3 Code's welcome screen installs it";
+  if (!state.present) return "Not installed: Claude Code's installer didn't finish";
   if (!state.runs) return "Not installed: Windows wouldn't run it";
   const version = state.version ?? 'Installed';
   if (!state.signedIn) return `${version}, not signed in`;

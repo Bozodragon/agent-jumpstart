@@ -16,11 +16,10 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { parseArgs } from 'node:util';
 import { openLog } from './log.js';
-import { checkClaude } from './claude.js';
+import { setUpClaude } from './claude.js';
 import { walkThroughConnectors } from './connectors.js';
 import { setUpExtraTools } from './extra-tools.js';
 import { setUpGitHub } from './github.js';
-import { showPage } from './open-page.js';
 import { findPlaces } from './places.js';
 import { openMachine } from './machine.js';
 import { autoMemoryInUse, switchOffAutoMemory } from './memory.js';
@@ -123,9 +122,8 @@ async function main() {
     const answers = options.answers === undefined ? undefined : await readAnswers(options.answers);
     const unattended = answers !== undefined;
 
+    // The setup page isn't opened: the person has just pasted its line into this window.
     ui.start(`Agent Jumpstart · ${profile.name}`);
-
-    await showPage('Setup page', profile.page, { machine, log });
 
     // A re-run asks nothing an earlier run already wrote down.
     const earlier = await readEarlierSettings(places.settings, profile.id, log);
@@ -142,7 +140,7 @@ async function main() {
       return undefined;
     });
     const found = { earlier, memoryInUse, t3Channel: foundT3?.channel };
-    const choices = await askQuestions(profile, places, earlier ? knownFrom(earlier, asker, log) : asker, log, found);
+    const choices = await askQuestions(profile, places, earlier ? knownFrom(earlier, asker, log) : asker, log, found, { machine, attended: !unattended });
 
     // Keys this run doesn't write (another program's, or a later version's) are kept.
     /** @type {Record<string, unknown>} */
@@ -179,24 +177,26 @@ async function main() {
     done.push(['Connectors', connectors]);
     const extraTools = await setUpExtraTools(profile, choices.extraTools, context);
     done.push(...extraTools);
+    // Before T3, which finds Claude Code only if it's on PATH when T3 starts.
+    const claude = await setUpClaude(context);
+    done.push(['Claude Code', claude.row]);
+    settings.email = claude.email;
+    await writeSettings(places.settings, settings);
+    log.write(`Signed-in email written to settings: ${claude.email ?? 'none'}`);
     // Last of the installs, after every other tool and its PATH entry: T3 reads PATH only when it starts.
-    const t3 = await installT3(choices.channel, foundT3, context);
+    const t3 = await installT3(profile, choices.channel, foundT3, context);
     done.push(['T3 Code', t3.row]);
     // After T3's first start, which leaves the command-line shim that adds a project.
     const workspacesLine = await addToT3(workspaces, t3, context);
     done.push(['Workspaces', workspacesLine]);
-    const claude = await checkClaude({ ...context, t3 });
-    settings.email = claude.email;
-    await writeSettings(places.settings, settings);
-    log.write(`Signed-in email written to settings: ${claude.email ?? 'none'}`);
 
     /** @type {[string, string][]} */
     const checklist = [
       ['Profile', profile.name],
       ...tools,
       ...extraTools,
-      ['T3 Code', t3.row],
       ['Claude Code', claude.row],
+      ['T3 Code', t3.row],
       ...skillsRows,
       ['Memory', memory],
       ['Workspaces', workspacesLine],

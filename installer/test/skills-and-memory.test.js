@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { checklistSays, fakeMachine, makeHome, readOnlyLog, readProfile, readSettings, runWith, seedSettings, skillsCli, supplyDownloads } from './harness.js';
+import { checklistSays, fakeMachine, gitOnMachinePath, makeHome, readOnlyLog, readProfile, readSettings, runWith, seedSettings, skillsCli, supplyDownloads } from './harness.js';
 
 /** Where a skill's SKILL.md is, relative to the home. @param {string} name */
 const skillFile = (name) => join('.claude', 'skills', name, 'SKILL.md');
@@ -24,13 +24,15 @@ async function yorkSkills() {
 }
 
 /**
- * A home where the pinned skills CLI can be installed (see skills-pinning.test.js). A test that
- * sets its own replies keeps `cli.install` among them, so npm still leaves the CLI in place.
+ * A home where the pinned skills CLI can be installed (see skills-pinning.test.js), with a Git on
+ * the machine PATH for it to clone with. A test that sets its own replies keeps `cli.install`
+ * among them, so npm still leaves the CLI in place.
  * @param {import('node:test').TestContext} t
  */
 async function homeWithSkillsCli(t) {
   const where = await makeHome(t);
   await supplyDownloads(where, ['skills']);
+  await gitOnMachinePath(where.home);
   const cli = skillsCli(where.home);
   await fakeMachine(where.home).setReplies(cli.install);
   return { ...where, cli };
@@ -74,6 +76,24 @@ test("with no network, every skill is reported as not installed, since none arri
     for (const name of names) checklistSays(result.stdout, `/${name} `, "Not installed: it didn't arrive");
   }
   checklistSays(result.stdout, 'Skills', 'None installed');
+});
+
+test("with no Git on the PATH the skills CLI isn't run, since it clones with Git, and each skill says Git is needed", async (t) => {
+  const where = await makeHome(t);
+  await supplyDownloads(where, ['skills']);
+  const cli = skillsCli(where.home);
+  await fakeMachine(where.home).setReplies(cli.install);
+
+  const result = await runWith(where, 'york');
+
+  assert.equal(result.code, 0, result.stdout + result.stderr);
+  checklistSays(result.stdout, 'Skills CLI', '1.7.4 (installed)');
+  for (const { names } of await yorkSkills()) {
+    for (const name of names) checklistSays(result.stdout, `/${name} `, "Not installed: Git is needed and isn't installed");
+  }
+  checklistSays(result.stdout, 'Skills', 'None installed');
+  assert.deepEqual(await skillsCliRuns(where.home), []);
+  assert.match((await readOnlyLog(where.home)).text, /Skills: no git\.exe on the machine or user PATH/);
 });
 
 test('a skills CLI that fails is reported, with its output in the log', async (t) => {

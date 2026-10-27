@@ -4,7 +4,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdir, readdir, writeFile } from 'node:fs/promises';
 import { basename, join } from 'node:path';
-import { fakeMachine, makeHome, markAsInstalledByUs, programsFolder, readManifest, readOnlyLog, runWith } from './harness.js';
+import { claudeFolder, fakeMachine, makeHome, markAsInstalledByUs, programsFolder, readManifest, readOnlyLog, runWith } from './harness.js';
 
 /** What the Node already on the machine says when asked its version: more than one line. */
 const nodeSays = (/** @type {string} */ version) => `v${version}\r\nfirst detail line\r\nsecond detail line\r\n`;
@@ -99,7 +99,7 @@ test('a debug run logs the user PATH before and after', async (t) => {
   assert.equal(result.code, 0, result.stderr);
   const { text } = await readOnlyLog(where.home);
   assert.deepEqual(listedUnder(text, 'User PATH before:'), ['C:\\Already\\There']);
-  assert.deepEqual(listedUnder(text, 'User PATH after:'), ['C:\\Already\\There', nodeFolder]);
+  assert.deepEqual(listedUnder(text, 'User PATH after:'), ['C:\\Already\\There', nodeFolder, claudeFolder(where.home)]);
 });
 
 test("a debug run keeps the downloads in the installer's folder", async (t) => {

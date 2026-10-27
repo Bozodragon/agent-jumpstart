@@ -96,6 +96,8 @@ async function walkThroughSignUp({ signUpPage, email }, { attended, machine, log
       `If you don't have a GitHub account yet, create one on the sign-up page with ${email}.`,
       'Follow its steps, including the code GitHub emails you.',
       "If you already have an account, there's nothing to do here.",
+      '',
+      ui.comeBack,
     ].join('\n'),
     'Create a GitHub account',
   );

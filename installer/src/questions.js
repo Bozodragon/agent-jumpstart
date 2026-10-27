@@ -2,7 +2,7 @@
 // so pressing Enter (or leaving it out of an answers file) gives a sensible setup.
 import { stat } from 'node:fs/promises';
 import { dirname, isAbsolute, join } from 'node:path';
-import { findGoogleDrive, isFolder } from './google-drive.js';
+import { describeGoogleDrive, findGoogleDrive, isFolder, readyGoogleDrive } from './google-drive.js';
 import { Stop } from './stop.js';
 import { existingTopWorkspaces, topWorkspaceIn } from './workspaces.js';
 
@@ -84,17 +84,25 @@ const newTopWorkspace = 'new';
 const anotherFolder = 'another';
 
 /**
- * Under a profile that keeps workspaces in Google Drive, stops if Drive for desktop isn't there
- * or isn't signed in, but only once the person has chosen to make a new top workspace.
+ * How the questions reach the laptop and the person beyond the asker: to look again for Google
+ * Drive for desktop, and to wait for someone at the screen to get it ready.
+ * @typedef {{ machine: import('./machine.js').Machine, attended: boolean }} Reach
+ */
+
+/**
+ * Under a profile that keeps workspaces in Google Drive, needs Drive for desktop signed in, but
+ * only once the person has chosen to make a new top workspace: if it isn't, they're told how to
+ * get it ready and, when they're at the screen, waited for (see readyGoogleDrive).
  * @param {import('./profile.js').Profile} profile
  * @param {import('./places.js').Places} places
  * @param {Asker} ask
  * @param {{ write(line: string): void }} log
  * @param {Found} found
+ * @param {Reach} reach
  * @returns {Promise<Answers>}
  */
-export async function askQuestions(profile, places, ask, log, found) {
-  return theRest(profile, ask, log, found, await whereWorkspacesLive(profile, places, ask, log, found));
+export async function askQuestions(profile, places, ask, log, found, reach) {
+  return theRest(profile, ask, log, found, await whereWorkspacesLive(profile, places, ask, log, found, reach));
 }
 
 /**
@@ -118,10 +126,10 @@ async function earlierTopWorkspace(earlier, log) {
  * or the folder they give), or another folder of their own. Only a new one in Google Drive
  * needs Drive for desktop; the others are used wherever they are.
  * @param {import('./profile.js').Profile} profile @param {import('./places.js').Places} places
- * @param {Asker} ask @param {{ write(line: string): void }} log @param {Found} found
+ * @param {Asker} ask @param {{ write(line: string): void }} log @param {Found} found @param {Reach} reach
  * @returns {Promise<Location>}
  */
-async function whereWorkspacesLive(profile, places, ask, log, found) {
+async function whereWorkspacesLive(profile, places, ask, log, found, reach) {
   /** @param {string} top @returns {Location} */
   const using = (top) => ({
     googleDriveFolder: typeof found.earlier?.googleDriveFolder === 'string' && top === found.earlier.topWorkspace ? found.earlier.googleDriveFolder : null,
@@ -135,12 +143,12 @@ async function whereWorkspacesLive(profile, places, ask, log, found) {
   }
   // Only looked at here, to say where a new one would go; whether it stops the run waits for the answer.
   const drive = profile.workspaces.inGoogleDrive ? await findGoogleDrive(places) : undefined;
-  if (drive) log.write(`Google Drive for desktop: ${drive.status}${drive.status === 'signed-in' ? `, My Drive ${drive.folder ?? 'not found'}` : ''}`);
+  if (drive) log.write(`Google Drive for desktop: ${describeGoogleDrive(drive)}`);
   // Settings from before this was asked: that run set up a new one where its answers say.
   const earlierLocation = drive ? 'googleDriveFolder' : 'workspacesLocation';
   if (found.earlier && !('topWorkspace' in found.earlier) && earlierLocation in found.earlier) {
     log.write(`Known from settings: topWorkspace: "${newTopWorkspace}" (an earlier run set one up where its ${earlierLocation} says)`);
-    return newLocation(profile, places, ask, drive);
+    return newLocation(profile, places, ask, drive, { ...reach, log });
   }
   const existing = await existingTopWorkspaces(profile, places, log);
   const chosen = await ask.choose({
@@ -156,7 +164,7 @@ async function whereWorkspacesLive(profile, places, ask, log, found) {
   });
   if (chosen === newTopWorkspace) {
     log.write(`Answer: topWorkspace: "${newTopWorkspace}"`);
-    return newLocation(profile, places, ask, drive);
+    return newLocation(profile, places, ask, drive, { ...reach, log });
   }
   if (chosen !== anotherFolder) {
     log.write(`Answer: topWorkspace: ${JSON.stringify(chosen)} (already there, so it's used as it is)`);
@@ -187,26 +195,19 @@ function whereNewGoes(profile, places, drive) {
 
 /**
  * The questions for a new top workspace: the Google Drive folder, or the folder workspaces live
- * in. Under a Google Drive profile, stops first if Drive for desktop isn't there or isn't signed in.
+ * in. Under a Google Drive profile, Drive for desktop has to be signed in first (see
+ * readyGoogleDrive, which stops the run if it can't be).
  * @param {import('./profile.js').Profile} profile @param {import('./places.js').Places} places
  * @param {Asker} ask
- * @param {import('./google-drive.js').GoogleDrive | undefined} drive what was found, under a Google Drive profile
+ * @param {import('./google-drive.js').GoogleDrive | undefined} found what was found, under a Google Drive profile
+ * @param {Reach & { log: { write(line: string): void } }} context
  * @returns {Promise<Location>}
  */
-async function newLocation(profile, places, ask, drive) {
+async function newLocation(profile, places, ask, found, context) {
   let googleDriveFolder = null;
   let workspacesLocation;
-  if (drive) {
-    if (drive.status === 'not-installed') {
-      throw new Stop(
-        "Your workspaces live in Google Drive, so Google Drive for desktop is needed first, and it isn't on this laptop (or hasn't been opened yet). Install it, sign in, then paste the same line again.",
-      );
-    }
-    if (drive.status === 'signed-out') {
-      throw new Stop(
-        'Google Drive for desktop is installed but not signed in. Open it from the Start menu, sign in with your work Google account, then paste the same line again.',
-      );
-    }
+  if (found) {
+    const drive = await readyGoogleDrive(profile, places, found, context);
     googleDriveFolder = await ask.folder({
       key: 'googleDriveFolder',
       message: drive.folder

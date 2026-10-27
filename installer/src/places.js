@@ -12,6 +12,8 @@ import { join } from 'node:path';
  * @property {string} programs Where per-user programs go (`%LOCALAPPDATA%\Programs`).
  * @property {string} claudeConfig Claude Code's user folder (its `settings.json`, its `skills`):
  *   `%USERPROFILE%\.claude`, or `CLAUDE_CONFIG_DIR` when that is set.
+ * @property {string} t3UserData T3 Code's data folder (`%USERPROFILE%\.t3\userdata`), which holds
+ *   its settings. The installer writes two of them before a T3 it installs first starts.
  * @property {string} t3Database T3 Code's state database (`%USERPROFILE%\.t3\userdata\statev2.sqlite`),
  *   which holds its project list. Only ever read.
  * @property {string} [fakeMachine] Set only with a home override: the folder that stands in
@@ -44,6 +46,7 @@ export function findPlaces(homeOverride) {
     programs: join(localAppData, 'Programs'),
     // Under a home override the real CLAUDE_CONFIG_DIR is ignored: it points outside the home.
     claudeConfig: (!homeOverride && process.env.CLAUDE_CONFIG_DIR) || join(home, '.claude'),
+    t3UserData: join(home, '.t3', 'userdata'),
     t3Database: join(home, '.t3', 'userdata', 'statev2.sqlite'),
     ...(homeOverride ? { fakeMachine: join(home, 'fake-machine') } : {}),
   };
