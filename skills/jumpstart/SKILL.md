@@ -22,7 +22,7 @@ Read the installer's settings file, `%LOCALAPPDATA%\agent-jumpstart\settings.jso
 
 Take their name from their Claude account. Claude Code keeps it in its own config file, `.claude.json`, in their profile folder (`%USERPROFILE%\.claude.json`), or in the folder `CLAUDE_CONFIG_DIR` names if that is set. Read only `oauthAccount.fullName` from it, or `oauthAccount.displayName` if there's no full name; the file holds other things that aren't yours to read. Never guess a name from the email address. If neither key gives one, ask for their name in step 2: the other exception.
 
-You should be running in their top workspace: the folder `topWorkspace` names (the installer created it and added it to T3). In a settings file from before the installer wrote that key, it is a folder directly inside `workspacesLocation`, holding a folder for each of their `workspaces`. If it isn't, tell them to open their top workspace in T3 and type `/jumpstart` there, and stop.
+You should be running in their top workspace: the folder `topWorkspace` names (the installer created it, or found the one they already had, and added it to T3). In a settings file from before the installer wrote that key, it is a folder directly inside `workspacesLocation`, holding a folder for each of their `workspaces`. If it isn't, tell them to open their top workspace in T3 and type `/jumpstart` there, and stop.
 
 Done when you have their email, workspaces and connectors, and either their name from the account or the knowledge that you'll ask for it.
 
@@ -97,15 +97,20 @@ Done when the person has approved the profile with no change outstanding.
 
 Now you write, in the top workspace (the folder you're running in): rules in its agent instructions, facts in three files beside them. The facts are the approved profile and nothing else: no finding the person didn't see or removed, no sources, no `notFound`.
 
-1. **Put old files aside.** If `CLAUDE.md`, `CLAUDE.local.md`, `me.md`, `people.md` or `work.md` is already here, rename it with " (before Jumpstart)" added to its name, such as `CLAUDE (before Jumpstart).md`. Nothing they had is lost, and old instructions stop loading. Tell them in one line which files you put aside.
+1. **Ask about files already there.** Before you write anything, here or in step 8, look for files you'd otherwise write: `CLAUDE.md`, `CLAUDE.local.md`, `me.md`, `people.md` and `work.md` here, and `CLAUDE.md` and `CLAUDE.local.md` in each of their `workspaces`' folders. If there are none, carry on. If there are, they already have a setup, so nothing of theirs changes unless they say so. Ask with one question card headed "Your files", one single-select question per folder that has any, reading "You already have [the files, by name] in [folder name]. What should I do with them?":
+   - **Keep mine as they are** (first): "I'll leave them exactly as they are and won't write my own in their place."
+   - **Use new ones**: "I'll rename yours with '(before Jumpstart)' added, so nothing is lost, and write new ones."
+
+   Anything short of a clear choice of new ones is keep. For a folder they keep, leave each file that's there untouched and unrenamed, and write only the files that aren't there. For a folder they want new ones in, rename each file that's there with " (before Jumpstart)" added to its name, such as `CLAUDE (before Jumpstart).md`, then write as below; old instructions stop loading once renamed.
 2. **The three files.** Write each in the person's voice, as they will open and read it: turn "you" and "your" into "I", "me" and "my", in headings and lines alike. Each starts with a title, then "Checked with [first name] on [date]." (such as 25 October 2026), then the profile's sections, each section's title as a heading over its lines as a bulleted list. Labelled items read "Label: text". A section with no lines keeps its heading.
    - `me.md`, titled "About me": every section except "Your work" and "People you work with", in page order.
    - `work.md`, titled "My work": the "Your work" section.
    - `people.md`, titled "People I work with": the "People you work with" section. Hold every line, including any the person added, to the **Colleagues** rule in [`research-brief.md`](research-brief.md) once more; if you cut something from a line, tell them in one line.
 3. **The agent instructions.** Write `CLAUDE.md` from [`agent-instructions.md`](agent-instructions.md): everything below its line, word for word, with `[top workspace]` replaced by this folder's full path. Add nothing about the person: their facts live in the three files, which `CLAUDE.md` names in backticks so they are read when needed rather than loaded into every conversation.
-4. **Memory off here too.** A workspace's setting outranks the one the installer made for the whole laptop, so set it here as well, in `.claude\settings.local.json`: if the file is missing, create it as `{ "autoMemoryEnabled": false }`; if it holds a JSON object, set `autoMemoryEnabled` to `false` and keep every other key. If it isn't valid JSON, leave it alone and tell them in one line that memory couldn't be switched off for this folder.
+   If they kept their own `CLAUDE.md`, it doesn't name the three files, so their agent won't know to read them. Ask in one line whether to add a short line to the end of their `CLAUDE.md` naming them; add only that line, only if they say yes, and change nothing else in it. If they kept one of the three files, its approved lines aren't saved anywhere: tell them so in one line.
+4. **Memory off here too.** Skip this if the settings file's `autoMemory` is `"left on"`: they chose to keep Claude's memory. Otherwise: a workspace's setting outranks the one the installer made for the whole laptop, so set it here as well, in `.claude\settings.local.json`: if the file is missing, create it as `{ "autoMemoryEnabled": false }`; if it holds a JSON object, set `autoMemoryEnabled` to `false` and keep every other key. If it isn't valid JSON, leave it alone and tell them in one line that memory couldn't be switched off for this folder.
 
-Done when `CLAUDE.md`, `me.md`, `work.md` and `people.md` are here, `CLAUDE.md` matches the template with only the path filled in, every line of the three files is one the person approved, and the settings file turns memory off (or they've been told why not).
+Done when every file they kept is exactly as it was, every other one of `CLAUDE.md`, `me.md`, `work.md` and `people.md` is here, a `CLAUDE.md` you wrote matches the template with only the path filled in, every line you wrote in the three files is one the person approved, and the settings file turns memory off (or they chose to keep memory, or they've been told why not).
 
 ## 8. Write the workspaces
 
@@ -113,13 +118,13 @@ Tell them in a line that you're setting up their workspaces and checking their s
 
 For each of their `workspaces`, in the folder of that name inside this one:
 
-1. **Put old files aside**, as in step 7.1, for its `CLAUDE.md` and `CLAUDE.local.md`.
+1. **Their own files first**, as they chose in step 7.1: if they kept the files in this folder, leave them as they are, and skip step 2 when `CLAUDE.md` is one of them; if they chose new ones, rename them as step 7.1 says.
 2. **Its agent instructions.** Its template is the file in [`workspaces/`](workspaces/) named after it, such as `workspaces/Thinking space.md`. Write the workspace's `CLAUDE.md` as that template's header (above its line) says: its fixed lines word for word, its slots filled from the approved profile. The top `CLAUDE.md` loads in every workspace, so the workspace's file holds only what the workspace is for and how to help there.
    With no template of that name, write a `CLAUDE.md` in the templates' shape: a heading with the workspace's name, a line on what it's for (from its name and what the person told you), and two to four lines on how to help there.
    Either way the file is standing guidance, never a script: the first conversation starts from whatever the person brings, so it holds no greeting, opening question or tour.
 3. **Memory off**, as in step 7.4, in the workspace's own `.claude\settings.local.json`.
 
-Done when every chosen workspace has a `CLAUDE.md` whose fixed lines match its template, whose filled lines rest only on the approved profile, and whose folder's settings turn memory off (or they've been told why not).
+Done when every chosen workspace either has the `CLAUDE.md` they kept, exactly as it was, or one you wrote whose fixed lines match its template and whose filled lines rest only on the approved profile, and its folder's settings turn memory off (or they chose to keep memory, or they've been told why not).
 
 ## 9. Add the workspaces to T3
 
@@ -143,7 +148,7 @@ Done when every connector has a result.
 
 Close with one short message in plain words:
 
-- **What you kept**: in this folder, `CLAUDE.md` holds how you'll work with them, and `me.md`, `work.md` and `people.md` hold what they approved about themselves, their work and the people they work with. They can open and change these files at any time, and you'll suggest additions and make them only once they agree.
+- **What you kept**: in this folder, `CLAUDE.md` holds how you'll work with them, and `me.md`, `work.md` and `people.md` hold what they approved about themselves, their work and the people they work with. They can open and change these files at any time, and you'll suggest additions and make them only once they agree. Where they kept their own files, say which, and that you left them exactly as they were.
 - **What you put aside**: only if steps 7 and 8 renamed anything. Name each file you renamed with " (before Jumpstart)" and the folder it's in, say that nothing in it was changed or lost, and that it no longer loads, so they can open it, copy back anything they still want, and delete it when they're done.
 - **Their workspaces**: each one, with a line on what it's for and whether it's in T3. For one that isn't, tell them to add its folder as a project in T3, giving the full path.
 - **Their services**: each one by name, working or not, from step 10, with the fix for each that isn't.
