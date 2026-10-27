@@ -252,6 +252,45 @@ test('a folder of their own, whatever its name and with nothing in T3 Code like 
   assert.ok(log.text.includes(`Workspace created: ${join(top, 'Personal assistant')}`), log.text);
 });
 
+test("a folder of their own that isn't there yet is made, with the ticked workspaces inside it, when the folder it goes in is there", async (t) => {
+  const where = await makeHome(t, {}, { googleDrive: 'missing' });
+  const top = join(where.home, 'Steve', 'Agents');
+  await mkdir(join(where.home, 'Steve'));
+  await writeFile(where.answersFile, JSON.stringify({ topWorkspace: top }));
+
+  const result = await runWith(where, 'york');
+
+  assert.equal(result.code, 0, result.stdout + result.stderr);
+  assert.deepEqual(await foldersIn(join(where.home, 'Steve')), ['Agents']);
+  assert.deepEqual(await foldersIn(top), ['Personal assistant', 'Thinking space']);
+  assert.equal(await exists(join(where.home, 'My Drive')), false, 'no top workspace was made in Google Drive');
+  const settings = await readSettings(where.home);
+  assert.deepEqual([settings.topWorkspace, settings.workspacesLocation, settings.googleDriveFolder], [top, join(where.home, 'Steve'), null]);
+  const log = await readOnlyLog(where.home);
+  assert.ok(log.text.includes(`Workspace created: ${top}`), log.text);
+});
+
+for (const [what, prepare, problem] of /** @type {[string, (home: string) => Promise<unknown>, (top: string) => string][]} */ ([
+  ['the folder it would go in is missing', async () => {}, (top) => `There is no folder at ${join(top, '..')} to make it in.`],
+  ['a file is where the folder would be', (home) => mkdir(join(home, 'Steve')).then(() => writeFile(join(home, 'Steve', 'Agents'), 'a file')), (top) => `${top} is a file, not a folder.`],
+  ['the path is not a whole one', async () => {}, () => `it should be one of "new", or a folder's whole path.`],
+])) {
+  test(`a folder of their own is a wrong answer when ${what}: the run stops with a plain message and makes nothing`, async (t) => {
+    const where = await makeHome(t, {}, { googleDrive: 'missing' });
+    const top = join(where.home, 'Steve', 'Agents');
+    await prepare(where.home);
+    await writeFile(where.answersFile, JSON.stringify({ topWorkspace: what === 'the path is not a whole one' ? 'Steve\\Agents' : top }));
+
+    const result = await runWith(where, 'york');
+
+    assert.equal(result.code, 1, result.stdout + result.stderr);
+    assert.ok(result.stdout.includes(`The answers file's "topWorkspace" is wrong: ${problem(top)}`), result.stdout);
+    assert.ok(result.stdout.includes('Nothing has been changed.'), result.stdout);
+    await assert.rejects(readSettings(where.home), { code: 'ENOENT' });
+    assert.equal(await exists(join(where.home, 'My Drive')), false);
+  });
+}
+
 test("a T3 database that can't be read offers nothing, says so in the log, and the run carries on as before", async (t) => {
   const where = await makeHome(t);
   await mkdir(join(where.home, '.t3', 'userdata'), { recursive: true });
