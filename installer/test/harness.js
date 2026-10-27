@@ -16,7 +16,11 @@ export async function readProfile(name) {
   return JSON.parse(await readFile(join(repo, 'profiles', `${name}.json`), 'utf8'));
 }
 
-/** @typedef {'signed-in' | 'signed-out' | 'missing'} GoogleDriveState */
+/**
+ * `signed-in, no My Drive yet`: signed in, but My Drive hasn't appeared yet, as it can take a few
+ * seconds to after the sign-in (a test can make it appear later, with the fake machine's `setWaiting`).
+ * @typedef {'signed-in' | 'signed-out' | 'missing' | 'signed-in, no My Drive yet'} GoogleDriveState
+ */
 
 /** @typedef {{ code?: number, output?: string, creates?: string[], writes?: Record<string, string> }} Reply What a faked program run returns and leaves behind. */
 
@@ -56,10 +60,8 @@ export async function fakeGoogleDrive(home, state) {
   if (state === 'missing') return;
   const data = join(home, 'AppData', 'Local', 'Google', 'DriveFS');
   await mkdir(join(data, 'Logs'), { recursive: true });
-  if (state === 'signed-in') {
-    await mkdir(join(data, driveAccount), { recursive: true });
-    await mkdir(join(home, 'My Drive'));
-  }
+  if (state === 'signed-in' || state === 'signed-in, no My Drive yet') await mkdir(join(data, driveAccount), { recursive: true });
+  if (state === 'signed-in') await mkdir(join(home, 'My Drive'));
 }
 
 /** @param {string} home */

@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdir, readdir, writeFile } from 'node:fs/promises';
 import { basename, join } from 'node:path';
-import { fakeMachine, makeHome, readOnlyLog, readSettings, runWith } from './harness.js';
+import { fakeMachine, makeHome, readOnlyLog, readProfile, readSettings, runWith } from './harness.js';
 
 /**
  * Everything in a home except the installer's own folder, which always holds a log, and the fake
@@ -141,19 +141,26 @@ test('a york run answering "new" for the top workspace makes it in the Drive fol
   );
 });
 
+/** @param {string} text */
+const flowing = (text) => text.replace(/[│|]/g, ' ').replace(/\s+/g, ' ');
+
 for (const [state, message, answers] of /** @type {['missing' | 'signed-out', string, object][]} */ ([
   ['missing', "Google Drive for desktop is needed first, and it isn't on this laptop", {}],
   ['signed-out', 'Google Drive for desktop is installed but not signed in.', {}],
   ['missing', "Google Drive for desktop is needed first, and it isn't on this laptop", { topWorkspace: 'new' }],
   ['signed-out', 'Google Drive for desktop is installed but not signed in.', { topWorkspace: 'new' }],
 ])) {
-  test(`a york run making a new top workspace${'topWorkspace' in answers ? ' (answered "new")' : ' (the default)'} with Google Drive for desktop ${state} says so plainly and stops before creating anything`, async (t) => {
+  test(`a york run making a new top workspace${'topWorkspace' in answers ? ' (answered "new")' : ' (the default)'} with Google Drive for desktop ${state} says how to get it ready, and with nobody to wait for, stops before creating anything`, async (t) => {
     const where = await makeHome(t, answers, { googleDrive: state });
+    const profile = await readProfile('york');
     const before = await homeContents(where.home);
 
     const result = await runWith(where, 'york');
 
     assert.equal(result.code, 1);
+    // How to get it, in the profile's words where it's missing.
+    const how = state === 'missing' ? profile.googleDrive.install : 'Open Google Drive from the Start menu and sign in';
+    assert.ok(flowing(result.stdout).includes(flowing(how)), result.stdout);
     assert.ok(result.stdout.includes(message), result.stdout);
     assert.ok(result.stdout.includes('Nothing has been changed.'), result.stdout);
     await assert.rejects(readSettings(where.home), { code: 'ENOENT' });
@@ -162,3 +169,27 @@ for (const [state, message, answers] of /** @type {['missing' | 'signed-out', st
     assert.match(log.text, /Stopped: .*Google Drive for desktop/);
   });
 }
+
+test('My Drive that appears a few seconds after Google Drive signs in is looked for again, and offered, rather than asked for', async (t) => {
+  const where = await makeHome(t, {}, { googleDrive: 'signed-in, no My Drive yet' });
+  const myDrive = join(where.home, 'My Drive');
+  await fakeMachine(where.home).setWaiting({ patience: 10_000, appears: [{ after: 4_000, folders: ['My Drive'] }] });
+
+  const result = await runWith(where, 'york');
+
+  assert.equal(result.code, 0, result.stdout + result.stderr);
+  const settings = await readSettings(where.home);
+  assert.deepEqual([settings.googleDriveFolder, settings.topWorkspace], [myDrive, join(myDrive, 'Claude')]);
+  assert.ok((await readOnlyLog(where.home)).text.includes(`Google Drive for desktop: My Drive found at ${myDrive} after 4 seconds`));
+});
+
+test("My Drive that doesn't appear while the installer waits for it is asked for, as before", async (t) => {
+  const where = await makeHome(t, {}, { googleDrive: 'signed-in, no My Drive yet' });
+  await fakeMachine(where.home).setWaiting({ patience: 6_000 });
+
+  const result = await runWith(where, 'york');
+
+  assert.equal(result.code, 1, result.stdout + result.stderr);
+  assert.ok(result.stdout.includes(`The answers file's "googleDriveFolder" is wrong: it is needed, because no folder was found to offer as the default.`), result.stdout);
+  assert.ok((await readOnlyLog(where.home)).text.includes('Google Drive for desktop: My Drive not found after 6 seconds, so where it is is asked'));
+});

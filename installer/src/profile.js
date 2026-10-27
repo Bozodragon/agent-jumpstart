@@ -19,6 +19,9 @@ const profilesFolder = fileURLToPath(new URL('../../profiles/', import.meta.url)
  *   `top` is the top workspace's folder name, created in the confirmed location with the chosen
  *   workspaces inside it. `defaultLocation` is the folder, within the user's profile folder,
  *   offered for workspaces when they aren't in Google Drive.
+ * @property {{ install?: string }} [googleDrive] For a profile whose workspaces are in Google Drive:
+ *   `install` says, in the person's words, how to get Google Drive for desktop and sign in, for
+ *   a laptop that hasn't got it. Without it, they're sent to Google's download page.
  * @property {Choice[]} connectors
  * @property {string} [connectorsPage] The address of the page where the person connects the connectors they ticked.
  * @property {{ signUpPage: string, email: string }} [github] For the person who chooses to set up

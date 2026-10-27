@@ -140,7 +140,7 @@ async function main() {
       return undefined;
     });
     const found = { earlier, memoryInUse, t3Channel: foundT3?.channel };
-    const choices = await askQuestions(profile, places, earlier ? knownFrom(earlier, asker, log) : asker, log, found);
+    const choices = await askQuestions(profile, places, earlier ? knownFrom(earlier, asker, log) : asker, log, found, { machine, attended: !unattended });
 
     // Keys this run doesn't write (another program's, or a later version's) are kept.
     /** @type {Record<string, unknown>} */
