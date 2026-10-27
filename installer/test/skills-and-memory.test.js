@@ -2,13 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { basename, join } from 'node:path';
-import { fakeMachine, makeHome, readOnlyLog, readProfile, readSettings, runWith, seedSettings, supplyDownloads } from './harness.js';
-
-/** @param {string} stdout @param {string} label @param {string} value */
-function checklistSays(stdout, label, value) {
-  const line = stdout.split('\n').find((row) => row.includes(label) && row.includes(value));
-  assert.ok(line, `expected a checklist line "${label} … ${value}" in:\n${stdout}`);
-}
+import { checklistSays, fakeMachine, makeHome, readOnlyLog, readProfile, readSettings, runWith, seedSettings, supplyDownloads } from './harness.js';
 
 /** Where a skill's SKILL.md is, relative to the home. @param {string} name */
 const skillFile = (name) => join('.claude', 'skills', name, 'SKILL.md');

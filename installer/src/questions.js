@@ -24,6 +24,8 @@ import { Stop } from './stop.js';
  * @typedef {object} Found
  * @property {Record<string, unknown>} [earlier] The settings file an earlier run wrote, if any.
  * @property {boolean} memoryInUse Whether the person has been using Claude's automatic memory.
+ * @property {'stable' | 'nightly'} [t3Channel] The channel of a T3 Code already installed, which
+ *   is left as it is, so the channel isn't asked.
  */
 
 /**
@@ -105,15 +107,19 @@ export async function askQuestions(profile, places, ask, log, found) {
     });
   }
 
-  const channel = await ask.choose({
-    key: 'channel',
-    message: 'Which T3 Code?',
-    options: /** @type {Option<'stable' | 'nightly'>[]} */ ([
-      { value: 'stable', label: 'Stable', hint: 'recommended' },
-      { value: 'nightly', label: 'Nightly', hint: 'the newest build, which can need troubleshooting' },
-    ]),
-    initial: 'stable',
-  });
+  if (found.t3Channel) log.write(`T3 Code is already installed (${found.t3Channel}), so which T3 Code isn't asked`);
+  /** @type {'stable' | 'nightly'} */
+  const channel =
+    found.t3Channel ??
+    (await ask.choose({
+      key: 'channel',
+      message: 'Which T3 Code?',
+      options: /** @type {Option<'stable' | 'nightly'>[]} */ ([
+        { value: 'stable', label: 'Stable', hint: 'recommended' },
+        { value: 'nightly', label: 'Nightly', hint: 'the newest build, which can need troubleshooting' },
+      ]),
+      initial: 'stable',
+    }));
 
   const github = await ask.confirm({ key: 'github', message: "Set up GitHub now? A later run won't ask this again.", initial: false });
 

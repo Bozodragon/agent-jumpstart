@@ -28,7 +28,7 @@ import { loadProfile } from './profile.js';
 import { answersFrom, askQuestions, knownFrom } from './questions.js';
 import { installSkills } from './skills.js';
 import { messageOf, Stop } from './stop.js';
-import { installT3 } from './t3.js';
+import { findT3, installT3 } from './t3.js';
 import { installTools } from './tools.js';
 import * as ui from './ui.js';
 import { addToT3, createWorkspaces, topWorkspaceIn } from './workspaces.js';
@@ -133,8 +133,16 @@ async function main() {
     if (earlier) ui.step('Using your answers from last time.');
     /** @type {import('./tools.js').Context} */
     const context = { places, machine, downloads: options.downloads, keepDownloads: options.debug, log, attended: !unattended };
+    // What's already on the laptop decides what's asked. A list of versions that can't be read
+    // isn't a reason to stop yet: the first install stops on it, once the answers are saved.
     const memoryInUse = await autoMemoryInUse(context);
-    const choices = await askQuestions(profile, places, earlier ? knownFrom(earlier, asker, log) : asker, log, { earlier, memoryInUse });
+    const foundT3 = await findT3(context).catch((error) => {
+      if (!(error instanceof Stop)) throw error;
+      log.write(`T3 Code: couldn't look for an earlier install: ${error.message}`);
+      return undefined;
+    });
+    const found = { earlier, memoryInUse, t3Channel: foundT3?.channel };
+    const choices = await askQuestions(profile, places, earlier ? knownFrom(earlier, asker, log) : asker, log, found);
 
     const topWorkspace = topWorkspaceIn(profile, choices.workspacesLocation);
     // Keys this run doesn't write (another program's, or a later version's) are kept.
@@ -173,7 +181,7 @@ async function main() {
     const extraTools = await setUpExtraTools(profile, choices.extraTools, context);
     done.push(...extraTools);
     // Last of the installs, after every other tool and its PATH entry: T3 reads PATH only when it starts.
-    const t3 = await installT3(choices.channel, context);
+    const t3 = await installT3(choices.channel, foundT3, context);
     done.push(['T3 Code', t3.row]);
     // After T3's first start, which leaves the command-line shim that adds a project.
     const workspacesLine = await addToT3(workspaces, t3, context);

@@ -228,6 +228,17 @@ export async function t3Projects(home) {
   return [...projects.values()];
 }
 
+/**
+ * Asserts the printed checklist (or another summary) has a row with this label and value. A row
+ * can be long enough for its box to wrap it, so the output is read as flowing text: borders gone
+ * and each run of spaces and line breaks one space.
+ * @param {string} stdout @param {string} label @param {string} value
+ */
+export function checklistSays(stdout, label, value) {
+  const flowing = (/** @type {string} */ text) => text.replace(/[│|]/g, ' ').replace(/\s+/g, ' ');
+  assert.ok(flowing(stdout).includes(flowing(`${label} ${value}`)), `expected a checklist line "${label} … ${value}" in:\n${stdout}`);
+}
+
 /** @param {string} home */
 export async function readOnlyLog(home) {
   const logs = await readdir(join(stateFolder(home), 'logs'));

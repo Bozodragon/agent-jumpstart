@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { basename, join } from 'node:path';
-import { fakeMachine, makeHome, programsFolder, readManifest, readOnlyLog, readProfile, runWith } from './harness.js';
+import { checklistSays, fakeMachine, makeHome, programsFolder, readManifest, readOnlyLog, readProfile, runWith } from './harness.js';
 
 /**
  * A stand-in for clasp's package from the npm registry, and a copy of the pinned manifest
@@ -20,12 +20,6 @@ async function supplyClasp(where) {
   download.sha256 = createHash('sha256').update(bytes).digest('hex');
   await writeFile(join(where.downloads, 'manifest.json'), JSON.stringify(manifest));
   return { clasp, file };
-}
-
-/** @param {string} stdout @param {string} label @param {string} value */
-function checklistSays(stdout, label, value) {
-  const line = stdout.split('\n').find((row) => row.includes(label) && row.includes(value));
-  assert.ok(line, `expected a checklist line "${label} … ${value}" in:\n${stdout}`);
 }
 
 test('with the Apps Script extra tool unticked, clasp appears only as a skipped checklist line', async (t) => {

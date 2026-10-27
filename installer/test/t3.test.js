@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { basename, dirname, join } from 'node:path';
-import { exists, fakeMachine, makeHome, programsFolder, readManifest, readOnlyLog, readSettings, runWith, supplyT3 } from './harness.js';
+import { checklistSays, exists, fakeMachine, makeHome, programsFolder, readManifest, readOnlyLog, readSettings, runWith, supplyT3 } from './harness.js';
 
 /** T3's uninstall entry, where Windows keeps the installed version. */
 const uninstallKey = 'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\e9197887-efb3-55e0-985e-d6d3b5dd594a';
@@ -18,12 +18,6 @@ async function seed(home, paths) {
     await mkdir(dirname(join(home, path)), { recursive: true });
     await writeFile(join(home, path), 'already here');
   }
-}
-
-/** @param {string} stdout @param {string} label @param {string} value */
-function checklistSays(stdout, label, value) {
-  const line = stdout.split('\n').find((row) => row.includes(label) && row.includes(value));
-  assert.ok(line, `expected a checklist line "${label} … ${value}" in:\n${stdout}`);
 }
 
 const signedIn = {
@@ -176,7 +170,7 @@ test("if Claude Code wasn't installed from T3's welcome screen, the checklist sa
   assert.equal((await machine.runs()).some((run) => basename(run.file) === 'claude.exe'), false);
 });
 
-test('a T3 already at the current version is left alone, and a signed-in Claude is not signed in again', async (t) => {
+test('a T3 already installed is left alone, and a signed-in Claude is not signed in again', async (t) => {
   const where = await makeHome(t, { channel: 'stable' });
   const installer = await supplyT3(where.downloads, 'latest.yml', '0.1.2');
   await seed(where.home, [t3Program('Beta'), t3Shim, claudeProgram]);
@@ -190,30 +184,45 @@ test('a T3 already at the current version is left alone, and a signed-in Claude 
   const result = await runWith(where, 'york');
 
   assert.equal(result.code, 0, result.stderr);
-  checklistSays(result.stdout, 'T3 Code', '0.1.2 (stable, already up to date)');
+  checklistSays(result.stdout, 'T3 Code', '0.1.2 (stable, already installed, left as it is)');
   checklistSays(result.stdout, 'Claude Code', '2.1.306, signed in as jo.bloggs@york.ac.uk');
   const runs = await machine.runs();
   assert.equal(runs.some((run) => basename(run.file) === installer), false, 'the installer was not run');
   assert.equal(runs.some((run) => run.args.join(' ') === 'auth login'), false);
 });
 
-test('a T3 at another version, such as a nightly when stable is chosen, is replaced', async (t) => {
-  const where = await makeHome(t, { channel: 'stable' });
-  const installer = await supplyT3(where.downloads, 'latest.yml', '0.1.2');
+test('a T3 already installed on another channel, or at an older build, is left as it is: no download, no update, no switch, and no channel question', async (t) => {
+  const nightly = '0.1.3-nightly.20261023.3579';
+  // Were the channel asked, this answer would stop the run.
+  const where = await makeHome(t, { channel: 'a question was asked' });
+  const installer = await supplyT3(where.downloads, 'latest.yml', '0.1.4');
   await seed(where.home, [t3Program('Nightly'), t3Shim]);
   const machine = fakeMachine(where.home);
   await machine.setReplies({
-    [`reg.exe query ${uninstallKey} /v DisplayVersion`]: { output: `    DisplayVersion    REG_SZ    0.1.3-nightly.20261023.3579\r\n` },
-    [`${installer} /S --force-run`]: { creates: [t3Program('Beta')] },
+    [`reg.exe query ${uninstallKey} /v DisplayVersion`]: { output: `    DisplayVersion    REG_SZ    ${nightly}\r\n` },
   });
 
   const result = await runWith(where, 'york');
 
-  assert.equal(result.code, 0, result.stderr);
-  checklistSays(result.stdout, 'T3 Code', '0.1.2 (stable, updated from 0.1.3-nightly.20261023.3579)');
-  assert.ok((await machine.runs()).some((run) => basename(run.file) === installer));
+  assert.equal(result.code, 0, result.stdout + result.stderr);
+  checklistSays(result.stdout, 'T3 Code', `${nightly} (nightly, already installed, left as it is)`);
+  assert.equal((await machine.runs()).some((run) => basename(run.file) === installer), false, 'the installer was not run');
+  assert.equal(await exists(join(where.home, t3Program('Beta'))), false);
+  assert.equal((await readSettings(where.home)).channel, 'nightly', 'the channel found is recorded');
   const log = await readOnlyLog(where.home);
-  assert.match(log.text, /T3 Code: replacing 0\.1\.3-nightly\.20261023\.3579/);
+  assert.ok(!log.text.includes('latest.yml'), 'no release feed was even read');
+});
+
+test("a T3 whose program is there but whose version Windows doesn't know is still left as it is, and still waited for if it hasn't been opened", async (t) => {
+  const where = await makeHome(t, { channel: 'a question was asked' });
+  await supplyT3(where.downloads, 'latest.yml', '0.1.4');
+  await seed(where.home, [t3Program('Beta')]);
+
+  const result = await runWith(where, 'york');
+
+  assert.equal(result.code, 0, result.stdout + result.stderr);
+  checklistSays(result.stdout, 'T3 Code', 'Version unknown (stable, already installed, left as it is, not opened yet)');
+  assert.equal((await readSettings(where.home)).channel, 'stable');
 });
 
 test("when T3 hasn't opened after its install, the checklist says it hasn't been opened yet", async (t) => {

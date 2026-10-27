@@ -1,16 +1,21 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdir, readdir, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
-import { makeHome, readOnlyLog, readSettings, runWith } from './harness.js';
+import { basename, join } from 'node:path';
+import { fakeMachine, makeHome, readOnlyLog, readSettings, runWith } from './harness.js';
 
-/** Everything in a home except the installer's own folder, which always holds a log. */
+/**
+ * Everything in a home except the installer's own folder, which always holds a log, and the fake
+ * machine's records of what only looks: the pages opened in the browser, and the programs run if
+ * every one of them was a registry query (such as T3's installed version).
+ */
 async function homeContents(/** @type {string} */ home) {
   const own = join('AppData', 'Local', 'agent-jumpstart');
-  // The fake machine's record of pages opened in the browser: opening one changes nothing.
-  const pages = join('fake-machine', 'pages.json');
+  const lookedOnly = [join('fake-machine', 'pages.json')];
+  const runs = await fakeMachine(home).runs();
+  if (runs.every((run) => basename(run.file) === 'reg.exe' && run.args[0] === 'query')) lookedOnly.push(join('fake-machine', 'runs.json'));
   return (await readdir(home, { recursive: true }))
-    .filter((path) => !path.startsWith(own) && !own.startsWith(path) && path !== pages && !pages.startsWith(path))
+    .filter((path) => !path.startsWith(own) && !own.startsWith(path) && !lookedOnly.some((file) => path === file || file.startsWith(path)))
     .sort();
 }
 

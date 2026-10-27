@@ -2,13 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { access, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { basename, join } from 'node:path';
-import { exists, fakeMachine, fileName, makeHome, programsFolder, readManifest, readOnlyLog, runWith, supplyDownloads } from './harness.js';
-
-/** @param {string} stdout @param {string} label @param {string} value */
-function checklistSays(stdout, label, value) {
-  const line = stdout.split('\n').find((row) => row.includes(label) && row.includes(value));
-  assert.ok(line, `expected a checklist line "${label} … ${value}" in:\n${stdout}`);
-}
+import { checklistSays, exists, fakeMachine, fileName, makeHome, programsFolder, readManifest, readOnlyLog, runWith, supplyDownloads } from './harness.js';
 
 test('Node, Git and gh install per user from checked downloads, with their folders on the user PATH', async (t) => {
   const where = await makeHome(t);
@@ -58,8 +52,9 @@ test('a download that fails its pinned checksum, or is missing, leaves that tool
   checklistSays(result.stdout, 'Git', "Not installed: the download didn't match its pinned checksum");
   checklistSays(result.stdout, 'GitHub CLI', "Not installed: it wasn't in the downloads folder");
   assert.equal(await exists(join(programsFolder(where.home), 'nodejs')), false);
-  // The skills CLI still runs (it may find a Git already there); no tool's installer or check does.
-  assert.deepEqual((await machine.runs()).filter((ran) => ran.file !== 'npx.cmd'), [], 'nothing was run');
+  // No tool's installer or check runs. Only the registry is read, for a T3 already installed.
+  const ran = (await machine.runs()).filter((run) => !(basename(run.file) === 'reg.exe' && run.args[0] === 'query'));
+  assert.deepEqual(ran, [], 'nothing was run');
   assert.deepEqual(await machine.userPath(), []);
   const log = await readOnlyLog(where.home);
   assert.match(log.text, /Node\.js: checksum [0-9a-f]{64} isn't the pinned/);

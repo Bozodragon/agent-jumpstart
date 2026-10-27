@@ -2,13 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdir, readdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { basename, dirname, isAbsolute, join, relative } from 'node:path';
-import { fakeMachine, fileName, makeHome, programsFolder, readOnlyLog, readProfile, readSettings, runWith, seedSettings, supplyDownloads, supplyT3, t3Leaves, t3Projects } from './harness.js';
-
-/** @param {string} stdout @param {string} label @param {string} value */
-function checklistSays(stdout, label, value) {
-  const line = stdout.split('\n').find((row) => row.includes(label) && row.includes(value));
-  assert.ok(line, `expected a checklist line "${label} … ${value}" in:\n${stdout}`);
-}
+import { checklistSays, fakeMachine, fileName, makeHome, programsFolder, readOnlyLog, readProfile, readSettings, runWith, seedSettings, supplyDownloads, supplyT3, t3Leaves, t3Projects } from './harness.js';
 
 /**
  * Leaves files as an earlier run (or the person) would have.
@@ -218,7 +212,7 @@ test('a re-run of a home set up earlier updates what is out of date, re-adds PAT
   checklistSays(result.stdout, 'Git', `${git.version} (updated from 2.50.1.windows.1)`);
   checklistSays(result.stdout, 'GitHub CLI', `${gh.version} (already up to date)`);
   checklistSays(result.stdout, 'clasp', `${clasp.version} (already up to date), signed in as ${email}`);
-  checklistSays(result.stdout, 'T3 Code', `${nightly} (nightly, already up to date)`);
+  checklistSays(result.stdout, 'T3 Code', `${nightly} (nightly, already installed, left as it is)`);
   checklistSays(result.stdout, 'Claude Code', `2.1.306, signed in as ${email}`);
   checklistSays(result.stdout, 'GitHub', 'Signed in as octocat');
   checklistSays(result.stdout, 'Skills CLI', `${skillsCli.version} (already up to date)`);
