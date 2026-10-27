@@ -33,13 +33,6 @@ const pinned = fileURLToPath(new URL('../../manifest.json', import.meta.url));
  */
 
 /**
- * The commit each skill source is installed at, keyed by its GitHub repository
- * (`owner/repo`, the first two parts of a profile's `source`). A source whose repository isn't
- * here is installed from its default branch.
- * @typedef {Record<string, string>} SkillSources
- */
-
-/**
  * @typedef {object} Install
  * @property {'zip' | 'installer' | 'npm'} how A zip is unpacked into the folder (dropping a
  *   single top folder if it has one); an installer is run with `arguments`; an npm package
@@ -102,7 +95,7 @@ export function toolEntry(manifest, id) {
  * A test (or an offline run) can put its own `manifest.json` in the downloads folder,
  * so its stand-in files can pass the checksum check.
  * @param {string | undefined} downloads
- * @returns {Promise<{ tools: Tool[], skillSources: SkillSources, source: string }>}
+ * @returns {Promise<{ tools: Tool[], source: string }>}
  */
 export async function loadManifest(downloads) {
   for (const source of downloads ? [join(downloads, 'manifest.json'), pinned] : [pinned]) {
@@ -120,11 +113,7 @@ export async function loadManifest(downloads) {
       throw new Stop(`The list of versions to install (${source}) isn't valid: ${messageOf(error)}`);
     }
     if (!Array.isArray(manifest.tools)) throw new Stop(`The list of versions to install (${source}) has no tools.`);
-    const skillSources = manifest.skillSources ?? {};
-    if (typeof skillSources !== 'object' || Array.isArray(skillSources) || Object.values(skillSources).some((ref) => typeof ref !== 'string')) {
-      throw new Stop(`The list of versions to install (${source}) has skill sources that aren't each a commit.`);
-    }
-    return { tools: manifest.tools, skillSources, source };
+    return { tools: manifest.tools, source };
   }
   throw new Error('unreachable');
 }

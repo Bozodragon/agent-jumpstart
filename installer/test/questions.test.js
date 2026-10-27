@@ -30,6 +30,7 @@ test('a york run with nothing answered takes every default: the Drive folder it 
     connectors: ['Gmail', 'Google Drive', 'Google Calendar'],
     extraTools: [],
     topWorkspace: join(where.home, 'My Drive', 'Claude'),
+    skillsInstalled: [],
     email: null,
   });
 });
@@ -56,6 +57,7 @@ test('a york run answered from a file asks nothing and writes exactly those answ
     ...answers,
     workspacesLocation: otherDrive,
     topWorkspace: join(otherDrive, 'Claude'),
+    skillsInstalled: [],
     email: null,
   });
   const log = await readOnlyLog(where.home);
@@ -78,6 +80,7 @@ test('a default run asks where workspaces should live, offering Documents, and n
     connectors: ['Gmail', 'Google Drive', 'Google Calendar'],
     extraTools: [],
     topWorkspace: join(where.home, 'Documents', 'Claude'),
+    skillsInstalled: [],
     email: null,
   });
 });

@@ -9,8 +9,9 @@
 //                                         with `onScreen: true` for one run in the person's window
 //   <home>/fake-machine/pages.json        every address it was asked to open in the browser
 //   <home>/fake-machine/replies.json      written by a test: what a run returns, keyed by the
-//                                         file name, or the file name and its arguments
-//                                         ("gh.exe auth status"). No reply means code 0, no output.
+//                                         file name, or the file name and its first arguments
+//                                         ("gh.exe auth status"); the longest key that matches
+//                                         wins. No reply means code 0, no output.
 //                                         A list of replies answers successive runs in turn
 //                                         (the last one repeats), e.g. a status before and
 //                                         after a sign-in. A reply may list files to create,
@@ -173,10 +174,12 @@ function fakeMachine(folder, home, logged) {
       const earlier = runs.filter((run) => keyOf(run) === key).length;
       return found[Math.min(earlier, found.length - 1)];
     };
-    const found =
-      answer([basename(file), ...args].join(' '), (run) => [basename(run.file), ...run.args].join(' ')) ??
-      answer(basename(file), (run) => basename(run.file)) ??
-      {};
+    // The longest key that matches wins: the file name and all its arguments, then fewer of them.
+    let found;
+    for (let count = args.length; found === undefined && count >= 0; count--) {
+      found = answer([basename(file), ...args.slice(0, count)].join(' '), (run) => [basename(run.file), ...run.args.slice(0, count)].join(' '));
+    }
+    found ??= {};
     for (const path of found.creates ?? []) {
       const target = resolve(home, path);
       if (relative(home, target).startsWith('..')) throw new Error(`a fake run can't create ${path}: it's outside the home`);

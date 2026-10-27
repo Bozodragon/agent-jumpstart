@@ -2,13 +2,16 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { basename, join } from 'node:path';
-import { fakeMachine, makeHome, readOnlyLog, readProfile, runWith, supplyDownloads } from './harness.js';
+import { fakeMachine, makeHome, readOnlyLog, readProfile, readSettings, runWith, seedSettings, supplyDownloads } from './harness.js';
 
 /** @param {string} stdout @param {string} label @param {string} value */
 function checklistSays(stdout, label, value) {
   const line = stdout.split('\n').find((row) => row.includes(label) && row.includes(value));
   assert.ok(line, `expected a checklist line "${label} … ${value}" in:\n${stdout}`);
 }
+
+/** Where a skill's SKILL.md is, relative to the home. @param {string} name */
+const skillFile = (name) => join('.claude', 'skills', name, 'SKILL.md');
 
 /** @param {string} home */
 const claudeSettingsFile = (home) => join(home, '.claude', 'settings.json');
@@ -38,7 +41,7 @@ async function skillsCliRuns(home) {
   return (await fakeMachine(home).runs()).filter((ran) => basename(ran.file) === 'skills.cmd' && ran.args[0] === 'add');
 }
 
-test('each skill in the profile is installed with the pinned skills CLI, at its pinned commit, globally, for Claude Code, with no prompts', async (t) => {
+test('each skill in the profile is installed with the pinned skills CLI, from its source as the profile gives it, globally, for Claude Code, with no prompts', async (t) => {
   const where = await homeWithSkillsCli(t);
 
   const result = await runWith(where, 'york');
@@ -46,14 +49,13 @@ test('each skill in the profile is installed with the pinned skills CLI, at its 
   assert.equal(result.code, 0, result.stderr);
   const runs = await skillsCliRuns(where.home);
   // The flags the skills CLI's research settled: add <source> -g -a claude-code -y, with
-  // -s <names> last because it takes every word after it. Each source from another repo is
-  // pinned at the commit the research checked, as <source>#<commit>; this repo's own isn't.
+  // -s <names> last because it takes every word after it. Skill sources aren't pinned at a commit.
   assert.deepEqual(runs.map((ran) => ran.args), [
-    ['add', 'mattpocock/skills#5beb35b040e3de97e54fa9e386d7e42d15c295c2', '-g', '-a', 'claude-code', '-y', '-s',
+    ['add', 'mattpocock/skills', '-g', '-a', 'claude-code', '-y', '-s',
       'grilling', 'grill-me', 'grill-with-docs', 'domain-modeling', 'teach', 'to-questionnaire', 'handoff', 'wait-what',
       'research', 'wayfinder', 'to-spec', 'to-tickets', 'setup-matt-pocock-skills', 'prototype', 'wizard'],
-    ['add', 'anthropics/skills#dbd4588f9e1033efb41dad4bef2f7947c8993d44', '-g', '-a', 'claude-code', '-y', '-s', 'frontend-design'],
-    ['add', 'cursor/plugins/pstack/skills/unslop#190d28736eff128ec94f502a22c7fe0c4b56cd37', '-g', '-a', 'claude-code', '-y'],
+    ['add', 'anthropics/skills', '-g', '-a', 'claude-code', '-y', '-s', 'frontend-design'],
+    ['add', 'cursor/plugins/pstack/skills/unslop', '-g', '-a', 'claude-code', '-y'],
     ['add', 'Bozodragon/agent-jumpstart', '-g', '-a', 'claude-code', '-y', '-s', 'jumpstart'],
   ]);
 });
@@ -84,23 +86,69 @@ test('a skills CLI that fails is reported, with its output in the log', async (t
   assert.match((await readOnlyLog(where.home)).text, /Failed to clone repository/);
 });
 
-test("skills found in Claude's skills folder after the skills CLI ran are reported as installed", async (t) => {
+test("skills found in Claude's skills folder after the skills CLI ran are reported as installed, and recorded as the installer's", async (t) => {
   const where = await homeWithSkillsCli(t);
-  for (const { names } of await yorkSkills()) {
-    for (const name of names) {
-      await mkdir(join(where.home, '.claude', 'skills', name), { recursive: true });
-      await writeFile(join(where.home, '.claude', 'skills', name, 'SKILL.md'), `---\nname: ${name}\n---\n`);
-    }
-  }
+  const all = (await yorkSkills()).flatMap(({ names }) => names);
+  await fakeMachine(where.home).setReplies({ 'skills.cmd add': { creates: all.map(skillFile) } });
 
   const result = await runWith(where, 'york');
 
   assert.equal(result.code, 0, result.stderr);
-  for (const { names } of await yorkSkills()) {
-    for (const name of names) checklistSays(result.stdout, `/${name} `, 'Installed');
-  }
+  for (const name of all) checklistSays(result.stdout, `/${name} `, 'Installed');
   assert.doesNotMatch(result.stdout, /Not installed: it didn't arrive/);
   checklistSays(result.stdout, 'Skills', 'All 18 installed');
+  assert.deepEqual((await readSettings(where.home)).skillsInstalled, all);
+});
+
+test("a skill already in Claude's skills folder that the installer didn't put there is left as it is, and only the missing ones are added", async (t) => {
+  const where = await homeWithSkillsCli(t);
+  // The person's own copies: one of Matt Pocock's, the only one from Anthropic, and unslop.
+  const theirs = ['grilling', 'frontend-design', 'unslop'];
+  for (const name of theirs) {
+    await mkdir(join(where.home, '.claude', 'skills', name), { recursive: true });
+    await writeFile(join(where.home, skillFile(name)), 'their own version');
+  }
+  const all = (await yorkSkills()).flatMap(({ names }) => names);
+  await fakeMachine(where.home).setReplies({ 'skills.cmd add': { creates: all.filter((name) => !theirs.includes(name)).map(skillFile) } });
+
+  const result = await runWith(where, 'york');
+
+  assert.equal(result.code, 0, result.stderr);
+  const runs = await skillsCliRuns(where.home);
+  // No call at all for a source whose skills are all there already.
+  assert.deepEqual(runs.map((ran) => ran.args[1]), ['mattpocock/skills', 'Bozodragon/agent-jumpstart']);
+  assert.ok(!runs[0].args.includes('grilling'), runs[0].args.join(' '));
+  assert.ok(runs[0].args.includes('grill-me'), runs[0].args.join(' '));
+  for (const name of theirs) {
+    checklistSays(result.stdout, `/${name} `, 'Already there, left as it is');
+    assert.equal(await readFile(join(where.home, skillFile(name)), 'utf8'), 'their own version');
+  }
+  checklistSays(result.stdout, '/grill-me ', 'Installed');
+  checklistSays(result.stdout, 'Skills', 'All 18 there: 15 installed, 3 already there');
+  const recorded = (await readSettings(where.home)).skillsInstalled;
+  assert.deepEqual(recorded, all.filter((name) => !theirs.includes(name)));
+});
+
+test('on a re-run, the skills the installer put there before are added again, so they update', async (t) => {
+  const where = await homeWithSkillsCli(t);
+  const all = (await yorkSkills()).flatMap(({ names }) => names);
+  for (const name of all) {
+    await mkdir(join(where.home, '.claude', 'skills', name), { recursive: true });
+    await writeFile(join(where.home, skillFile(name)), 'an earlier copy');
+  }
+  // An earlier run installed all but jumpstart, which the person had already.
+  const ours = all.filter((name) => name !== 'jumpstart');
+  await seedSettings(where.home, { profile: 'york', skillsInstalled: ours });
+
+  const result = await runWith(where, 'york');
+
+  assert.equal(result.code, 0, result.stderr);
+  const runs = await skillsCliRuns(where.home);
+  assert.deepEqual(runs.map((ran) => ran.args[1]), ['mattpocock/skills', 'anthropics/skills', 'cursor/plugins/pstack/skills/unslop']);
+  assert.ok(runs[0].args.includes('grilling'), runs[0].args.join(' '));
+  checklistSays(result.stdout, '/jumpstart ', 'Already there, left as it is');
+  checklistSays(result.stdout, '/frontend-design ', 'Installed');
+  assert.deepEqual((await readSettings(where.home)).skillsInstalled, ours);
 });
 
 test("Claude's automatic memory is switched off in its settings, keeping what was there, and in the user environment", async (t) => {

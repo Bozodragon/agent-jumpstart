@@ -149,8 +149,8 @@ export function fakeMachine(home) {
     /** @param {Record<string, string>} variables */
     setEnvironment: (variables) => writeJson('environment.json', variables),
     /**
-     * Keyed by the program's file name, optionally followed by its arguments
-     * (`"node.exe --version"`); the longer key wins. Runs with no reply succeed with no output.
+     * Keyed by the program's file name, optionally followed by its first arguments
+     * (`"node.exe --version"`, `"skills.cmd add"`); the longest key that matches wins. Runs with no reply succeed with no output.
      * A list answers successive runs with that key in turn, and its last reply repeats.
      * A reply may also list files the run leaves, relative to the home (`creates`).
      * @param {Record<string, Reply | Reply[]>} replies

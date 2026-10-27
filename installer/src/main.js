@@ -150,11 +150,17 @@ async function main() {
     done.push(...tools);
     const github = await setUpGitHub(profile, choices.github, context);
     done.push(['GitHub', github]);
-    const skills = await installSkills(profile, context);
+    const ours = Array.isArray(earlier?.skillsInstalled) ? earlier.skillsInstalled.filter((name) => typeof name === 'string') : [];
+    const skills = await installSkills(profile, ours, context);
     /** @type {[string, string][]} */
     const skillsRows = skills.cli === undefined ? [] : [['Skills CLI', skills.cli]];
     skillsRows.push(['Skills', skills.line]);
     done.push(...skillsRows);
+    // Written now, so a run that stops later still knows which skills are the installer's to update.
+    const skillsInstalled = [...new Set([...ours, ...skills.installed])];
+    settings.skillsInstalled = skillsInstalled;
+    await writeSettings(places.settings, settings);
+    log.write(`Skills this installer has installed, written to settings: ${skillsInstalled.join(', ') || 'none'}`);
     const memory = await switchOffAutoMemory(context);
     done.push(['Memory', memory]);
     // Settings' connectors are kept only when every one is still offered, so equal means known.
