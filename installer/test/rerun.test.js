@@ -29,7 +29,7 @@ async function seed(home, files) {
  */
 async function refuseEveryQuestion(answersFile) {
   const asked = 'a question was asked';
-  const keys = ['googleDriveFolder', 'workspacesLocation', 'channel', 'github', 'workspaces', 'connectors', 'extraTools'];
+  const keys = ['googleDriveFolder', 'workspacesLocation', 'channel', 'github', 'workspaces', 'connectors', 'extraTools', 'switchOffMemory'];
   await writeFile(answersFile, JSON.stringify(Object.fromEntries(keys.map((key) => [key, asked]))));
 }
 
@@ -56,7 +56,7 @@ test('a second run with a settings file present asks none of the four questions 
   assert.equal(result.code, 0, result.stdout + result.stderr);
   // Claude isn't there in this home, so the email it last saw is no longer confirmed. The top
   // workspace's path is worked out from the answers, so a settings file without it gains it.
-  assert.deepEqual(await readSettings(where.home), { ...earlier, email: null, topWorkspace: join(myDrive, profile.workspaces.top), skillsInstalled: [] });
+  assert.deepEqual(await readSettings(where.home), { ...earlier, email: null, topWorkspace: join(myDrive, profile.workspaces.top), skillsInstalled: [], switchOffMemory: true, autoMemory: 'off' });
   assert.match(result.stdout, /Using your answers from last time/);
   const log = await readOnlyLog(where.home);
   assert.ok(log.text.includes('Known from settings: channel: "nightly"'), log.text);
@@ -155,6 +155,8 @@ test('a re-run of a home set up earlier updates what is out of date, re-adds PAT
     email,
     topWorkspace: top,
     skillsInstalled: skills,
+    switchOffMemory: true,
+    autoMemory: 'off',
   };
   await seedSettings(where.home, earlier);
   await refuseEveryQuestion(where.answersFile);

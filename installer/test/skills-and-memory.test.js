@@ -151,8 +151,8 @@ test('on a re-run, the skills the installer put there before are added again, so
   assert.deepEqual((await readSettings(where.home)).skillsInstalled, ours);
 });
 
-test("Claude's automatic memory is switched off in its settings, keeping what was there, and in the user environment", async (t) => {
-  const where = await makeHome(t);
+test("someone using Claude's automatic memory who says to switch it off has it switched off in its settings, keeping what was there, and in the user environment", async (t) => {
+  const where = await makeHome(t, { switchOffMemory: true });
   await mkdir(join(where.home, '.claude'));
   await writeFile(claudeSettingsFile(where.home), JSON.stringify({ theme: 'dark', autoMemoryEnabled: true }));
 
@@ -164,15 +164,70 @@ test("Claude's automatic memory is switched off in its settings, keeping what wa
   // 1, not 0: set to 0 the variable forces memory back on.
   assert.equal((await fakeMachine(where.home).environment()).CLAUDE_CODE_DISABLE_AUTO_MEMORY, '1');
   checklistSays(result.stdout, 'Memory', "Claude's automatic memory is off");
+  const ours = await readSettings(where.home);
+  assert.equal(ours.switchOffMemory, true);
+  assert.equal(ours.autoMemory, 'off');
 });
 
-test("With no Claude settings yet, the installer creates them with automatic memory off", async (t) => {
-  const where = await makeHome(t);
+test("With no Claude settings yet, the installer creates them with automatic memory off, without asking", async (t) => {
+  // Were it asked, this answer would stop the run.
+  const where = await makeHome(t, { switchOffMemory: 'a question was asked' });
 
   const result = await runWith(where, 'default');
 
-  assert.equal(result.code, 0, result.stderr);
+  assert.equal(result.code, 0, result.stdout + result.stderr);
   assert.deepEqual(JSON.parse(await readFile(claudeSettingsFile(where.home), 'utf8')), { autoMemoryEnabled: false });
+  assert.equal((await readSettings(where.home)).autoMemory, 'off');
+});
+
+/**
+ * The three signs that someone has been using Claude's automatic memory, each set up in a home.
+ * @type {Record<string, (home: string) => Promise<void>>}
+ */
+const usingMemory = {
+  'their Claude settings switch it on': async (home) => {
+    await mkdir(join(home, '.claude'), { recursive: true });
+    await writeFile(claudeSettingsFile(home), JSON.stringify({ theme: 'dark', autoMemoryEnabled: true }));
+  },
+  'its Windows variable is set to something other than 1': (home) => fakeMachine(home).setEnvironment({ CLAUDE_CODE_DISABLE_AUTO_MEMORY: '0' }),
+  'Claude has written memory files for a project': async (home) => {
+    const memory = join(home, '.claude', 'projects', 'C--Users-jo-Documents-Claude', 'memory');
+    await mkdir(memory, { recursive: true });
+    await writeFile(join(memory, 'MEMORY.md'), '- Jo prefers short answers');
+  },
+};
+
+for (const [sign, setUp] of Object.entries(usingMemory)) {
+  test(`when ${sign}, the person is asked, and by default their memory is left on and nothing of theirs is changed`, async (t) => {
+    const where = await makeHome(t);
+    await setUp(where.home);
+    const settingsBefore = await readFile(claudeSettingsFile(where.home), 'utf8').catch(() => undefined);
+    const environmentBefore = await fakeMachine(where.home).environment();
+
+    const result = await runWith(where, 'york');
+
+    assert.equal(result.code, 0, result.stdout + result.stderr);
+    assert.equal(await readFile(claudeSettingsFile(where.home), 'utf8').catch(() => undefined), settingsBefore);
+    assert.equal((await fakeMachine(where.home).environment()).CLAUDE_CODE_DISABLE_AUTO_MEMORY, environmentBefore.CLAUDE_CODE_DISABLE_AUTO_MEMORY);
+    checklistSays(result.stdout, 'Memory', 'Left on, as you had it');
+    const ours = await readSettings(where.home);
+    assert.equal(ours.switchOffMemory, false);
+    assert.equal(ours.autoMemory, 'left on');
+    assert.match((await readOnlyLog(where.home)).text, /Answer: switchOffMemory: false/);
+  });
+}
+
+test('a re-run that already knows to leave memory on asks nothing and leaves it on', async (t) => {
+  const where = await makeHome(t, { switchOffMemory: 'a question was asked' });
+  await usingMemory['their Claude settings switch it on'](where.home);
+  await seedSettings(where.home, { profile: 'york', switchOffMemory: false });
+
+  const result = await runWith(where, 'york');
+
+  assert.equal(result.code, 0, result.stdout + result.stderr);
+  checklistSays(result.stdout, 'Memory', 'Left on, as you had it');
+  assert.deepEqual(JSON.parse(await readFile(claudeSettingsFile(where.home), 'utf8')), { theme: 'dark', autoMemoryEnabled: true });
+  assert.equal((await readSettings(where.home)).autoMemory, 'left on');
 });
 
 test("Claude settings that aren't valid JSON are left untouched and memory is switched off only through the environment", async (t) => {

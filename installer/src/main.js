@@ -23,7 +23,7 @@ import { setUpGitHub } from './github.js';
 import { showPage } from './open-page.js';
 import { findPlaces } from './places.js';
 import { openMachine } from './machine.js';
-import { switchOffAutoMemory } from './memory.js';
+import { autoMemoryInUse, switchOffAutoMemory } from './memory.js';
 import { loadProfile } from './profile.js';
 import { answersFrom, askQuestions, knownFrom } from './questions.js';
 import { installSkills } from './skills.js';
@@ -131,7 +131,10 @@ async function main() {
     const earlier = await readEarlierSettings(places.settings, profile.id, log);
     const asker = unattended ? answersFrom(answers) : ui.ask;
     if (earlier) ui.step('Using your answers from last time.');
-    const choices = await askQuestions(profile, places, earlier ? knownFrom(earlier, asker, log) : asker, log);
+    /** @type {import('./tools.js').Context} */
+    const context = { places, machine, downloads: options.downloads, keepDownloads: options.debug, log, attended: !unattended };
+    const memoryInUse = await autoMemoryInUse(context);
+    const choices = await askQuestions(profile, places, earlier ? knownFrom(earlier, asker, log) : asker, log, { earlier, memoryInUse });
 
     const topWorkspace = topWorkspaceIn(profile, choices.workspacesLocation);
     // Keys this run doesn't write (another program's, or a later version's) are kept.
@@ -144,8 +147,6 @@ async function main() {
     const workspaces = await createWorkspaces(topWorkspace, choices.workspaces, log);
     done.push(...workspaces.rows);
 
-    /** @type {import('./tools.js').Context} */
-    const context = { places, machine, downloads: options.downloads, keepDownloads: options.debug, log, attended: !unattended };
     const tools = await installTools(context);
     done.push(...tools);
     const github = await setUpGitHub(profile, choices.github, context);
@@ -156,13 +157,15 @@ async function main() {
     const skillsRows = skills.cli === undefined ? [] : [['Skills CLI', skills.cli]];
     skillsRows.push(['Skills', skills.line]);
     done.push(...skillsRows);
-    // Written now, so a run that stops later still knows which skills are the installer's to update.
     const skillsInstalled = [...new Set([...ours, ...skills.installed])];
-    settings.skillsInstalled = skillsInstalled;
-    await writeSettings(places.settings, settings);
-    log.write(`Skills this installer has installed, written to settings: ${skillsInstalled.join(', ') || 'none'}`);
-    const memory = await switchOffAutoMemory(context);
+    const memoryResult = await switchOffAutoMemory(choices.switchOffMemory, context);
+    const memory = memoryResult.row;
     done.push(['Memory', memory]);
+    // Written now, so a run that stops later still knows which skills are the installer's to
+    // update, and Jumpstart knows whether memory is off.
+    Object.assign(settings, { skillsInstalled, autoMemory: memoryResult.autoMemory });
+    await writeSettings(places.settings, settings);
+    log.write(`Written to settings: skillsInstalled: ${JSON.stringify(skillsInstalled)}, autoMemory: "${memoryResult.autoMemory}"`);
     // Settings' connectors are kept only when every one is still offered, so equal means known.
     const connectedBefore = JSON.stringify(earlier?.connectors) === JSON.stringify(choices.connectors);
     const connectors = await walkThroughConnectors(profile, choices.connectors, { ...context, connectedBefore });

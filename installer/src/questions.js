@@ -15,6 +15,15 @@ import { Stop } from './stop.js';
  * @property {string[]} workspaces The names of the ticked workspaces.
  * @property {string[]} connectors The names of the ticked connectors.
  * @property {string[]} extraTools The ids of the ticked extra tools.
+ * @property {boolean} switchOffMemory Whether to switch off Claude's automatic memory. Asked only
+ *   of someone who has been using it, with No as the default; otherwise true.
+ */
+
+/**
+ * What the installer found before asking, which decides what is asked.
+ * @typedef {object} Found
+ * @property {Record<string, unknown>} [earlier] The settings file an earlier run wrote, if any.
+ * @property {boolean} memoryInUse Whether the person has been using Claude's automatic memory.
  */
 
 /**
@@ -57,9 +66,10 @@ async function mustBeAPath(value) {
  * @param {import('./places.js').Places} places
  * @param {Asker} ask
  * @param {{ write(line: string): void }} log
+ * @param {Found} found
  * @returns {Promise<Answers>}
  */
-export async function askQuestions(profile, places, ask, log) {
+export async function askQuestions(profile, places, ask, log, found) {
   let googleDriveFolder = null;
   let workspacesLocation;
   if (profile.workspaces.inGoogleDrive) {
@@ -126,8 +136,19 @@ export async function askQuestions(profile, places, ask, log) {
     initial: profile.extraTools.filter((tool) => tool.default).map(({ id }) => id),
   });
 
+  // Someone who has been using it is asked, and keeps it unless they say otherwise. So is anyone
+  // who answered before, so that answer is kept even once the signs of use have gone.
+  const switchOffMemory =
+    found.memoryInUse || (found.earlier !== undefined && 'switchOffMemory' in found.earlier)
+      ? await ask.confirm({
+          key: 'switchOffMemory',
+          message: "Claude has been keeping its own memory on this laptop. Switch it off, so it only remembers what's in files you can read?",
+          initial: false,
+        })
+      : true;
+
   /** @type {Answers} */
-  const answers = { googleDriveFolder, workspacesLocation, channel, github, workspaces, connectors, extraTools };
+  const answers = { googleDriveFolder, workspacesLocation, channel, github, workspaces, connectors, extraTools, switchOffMemory };
   for (const [key, value] of Object.entries(answers)) log.write(`Answer: ${key}: ${JSON.stringify(value)}`);
   return answers;
 }

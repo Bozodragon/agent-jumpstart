@@ -33,6 +33,8 @@ import { basename, dirname, join, relative, resolve } from 'node:path';
  * @property {() => Promise<string[]>} userPath The user PATH, one entry per item, unexpanded.
  * @property {(folder: string) => Promise<boolean>} addToUserPath Adds a folder to the end of the
  *   user PATH unless it's already there. Returns whether it was added.
+ * @property {(name: string) => Promise<string | undefined>} userVariable A user environment
+ *   variable's value, or undefined if it isn't set.
  * @property {(name: string, value: string) => Promise<void>} setUserVariable Sets a user
  *   environment variable, seen by programs started afterwards.
  * @property {(file: string, args: string[]) => Promise<Ran>} run Runs a program and waits for it.
@@ -148,6 +150,9 @@ function fakeMachine(folder, home, logged) {
       await write('environment.json', { ...variables, Path: [...entries, entry].join(';') });
       return true;
     },
+    async userVariable(name) {
+      return (await environment())[name];
+    },
     async setUserVariable(name, value) {
       await write('environment.json', { ...(await environment()), [name]: value });
     },
@@ -238,6 +243,7 @@ function realMachine(runProgram) {
       if (!includesFolder(splitPath(process.env.Path ?? ''), folder)) process.env.Path = `${process.env.Path};${folder}`;
       return !includesFolder(entries, folder);
     },
+    userVariable: readVariable,
     async setUserVariable(name, value) {
       const { code, output } = await runProgram(system32('setx.exe'), [name, value]);
       if (code !== 0) throw new Error(`${name} couldn't be set: ${output.trim()}`);

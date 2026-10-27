@@ -31,6 +31,8 @@ test('a york run with nothing answered takes every default: the Drive folder it 
     extraTools: [],
     topWorkspace: join(where.home, 'My Drive', 'Claude'),
     skillsInstalled: [],
+    switchOffMemory: true,
+    autoMemory: 'off',
     email: null,
   });
 });
@@ -58,6 +60,8 @@ test('a york run answered from a file asks nothing and writes exactly those answ
     workspacesLocation: otherDrive,
     topWorkspace: join(otherDrive, 'Claude'),
     skillsInstalled: [],
+    switchOffMemory: true,
+    autoMemory: 'off',
     email: null,
   });
   const log = await readOnlyLog(where.home);
@@ -81,6 +85,8 @@ test('a default run asks where workspaces should live, offering Documents, and n
     extraTools: [],
     topWorkspace: join(where.home, 'Documents', 'Claude'),
     skillsInstalled: [],
+    switchOffMemory: true,
+    autoMemory: 'off',
     email: null,
   });
 });
