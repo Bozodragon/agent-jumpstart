@@ -10,7 +10,8 @@
 // Skill sources aren't pinned: each is added from its default branch, as the profile gives it.
 // -a claude-code is always given: with -y alone the CLI installs to every agent it knows. -s
 // comes last because it takes every word after it. The CLI clones public sources with Git, so
-// it runs after the tools, and needs no GitHub account.
+// it runs after the tools, and needs no GitHub account; with no Git on the machine or user PATH
+// it isn't run at all, and each skill's row says Git is needed.
 //
 // A skill already in Claude's skills folder is the person's and is left exactly as it is, unless
 // this installer put it there on an earlier run (the settings file's `skillsInstalled`): those
@@ -44,6 +45,9 @@ export async function installSkills(profile, ours, context) {
   const program = cli.installed ? cli.program : undefined;
   const folder = join(places.claudeConfig, 'skills');
   if (cli.installed) log.write(`Skills: each counts as installed once ${join(folder, '<name>', 'SKILL.md')} is there`);
+  // The CLI clones each source with Git, found on the PATH it's given: the machine and user PATH.
+  const git = program ? await machine.findOnPath('git.exe') : [];
+  if (program && git.length === 0) log.write("Skills: no git.exe on the machine or user PATH, so the skills CLI isn't run");
 
   // A source with no names is the path to a single skill, which is named by its last part.
   const named = sources.map(({ source, names }) => ({ source, names, skills: names ?? [source.split('/').at(-1) ?? source] }));
@@ -59,7 +63,7 @@ export async function installSkills(profile, ours, context) {
   for (const { source, names, skills } of named) {
     const wanted = skills.filter((name) => !theirs.includes(name));
     let ran;
-    if (program && wanted.length > 0) {
+    if (program && git.length > 0 && wanted.length > 0) {
       ui.step(`Installing ${wanted.length === 1 ? 'the skill' : `${wanted.length} skills`} from ${source}`);
       const args = ['add', source, '-g', '-a', 'claude-code', '-y', ...(names ? ['-s', ...wanted] : [])];
       ran = await machine.run(program.file, [...program.args, ...args]);
@@ -68,7 +72,8 @@ export async function installSkills(profile, ours, context) {
       let value;
       // Kept short: skill names make the label column wide, and clack wraps long rows.
       if (theirs.includes(name)) value = leftAlone;
-      else if (!ran) value = "Not installed: the skills CLI isn't installed";
+      else if (!program) value = "Not installed: the skills CLI isn't installed";
+      else if (!ran) value = "Not installed: Git is needed and isn't installed";
       else if (ran.code !== 0) value = `Not installed: its installer stopped (code ${ran.code})`;
       else if (!(await exists(join(folder, name, 'SKILL.md')))) value = "Not installed: it didn't arrive";
       else value = 'Installed';
