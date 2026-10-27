@@ -119,9 +119,18 @@
   button.copy.copied .icon-copy { display: none; }
   button.copy.copied .icon-done { display: block; }
 
+  /* Troubleshooting: closed until someone needs it */
+  details.help > summary { list-style: none; cursor: pointer; color: var(--secondary); }
+  details.help > summary::-webkit-details-marker { display: none; }
+  details.help > summary:hover, details.help[open] > summary { color: var(--text); }
+  details.help > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+  details.help .chevron { display: grid; place-items: center; color: var(--muted); }
+  details.help .chevron svg { width: 16px; height: 16px; transition: transform .15s ease; }
+  details.help[open] .chevron svg { transform: rotate(180deg); }
+
   .foot { margin-top: 40px; padding: 0 4px; text-align: center; color: var(--muted); font-size: 13.5px; }
 
-  @media (prefers-reduced-motion: reduce) { button { transition: none; } }
+  @media (prefers-reduced-motion: reduce) { button, details.help .chevron svg { transition: none; } }
   @media (max-width: 600px) {
     main { padding: 48px 16px 72px; }
     h1 { font-size: 26px; }
@@ -171,19 +180,21 @@
   </section>
 
   <section>
-    <div class="section-head"><h2>If something went wrong</h2></div>
-    <div class="panel">
-      <div class="plain">
-        <p class="step-body">Paste this into <strong>Windows PowerShell</strong>. It copies the installer's log for you.</p>
-        <div class="copybox">
-          <div class="copybox-head">
-            <div class="copybox-label"><b>Share the log</b><span>Paste into PowerShell</span></div>
+    <details class="help">
+      <summary class="section-head"><h2>If something went wrong</h2><span class="chevron" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></span></summary>
+      <div class="panel">
+        <div class="plain">
+          <p class="step-body">Paste this into <strong>Windows PowerShell</strong>. It copies the installer's log for you.</p>
+          <div class="copybox">
+            <div class="copybox-head">
+              <div class="copybox-label"><b>Share the log</b><span>Paste into PowerShell</span></div>
+            </div>
+            <div class="copybox-body cmd"><span class="prompt-sign" aria-hidden="true">&gt;</span><span class="line">{{shareLogLine}}</span></div>
           </div>
-          <div class="copybox-body cmd"><span class="prompt-sign" aria-hidden="true">&gt;</span><span class="line">{{shareLogLine}}</span></div>
+          <p class="after">Then paste the log into a message (Ctrl+V) and send it to <strong>{{logGoesTo}}</strong>.</p>
         </div>
-        <p class="after">Then paste the log into a message (Ctrl+V) and send it to <strong>{{logGoesTo}}</strong>.</p>
       </div>
-    </div>
+    </details>
   </section>
 
   <p class="foot">An agent only knows what it can see in the workspace you open it in. Start each conversation in the workspace the work belongs to.</p>
