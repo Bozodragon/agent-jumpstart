@@ -25,30 +25,37 @@
   "connectors": [
     {
       "name": "Gmail",
+      "what": "search and read your email, and write drafts for you to check and send",
       "default": true
     },
     {
       "name": "Google Drive",
+      "what": "search and read your files",
       "default": true
     },
     {
       "name": "Google Calendar",
+      "what": "see your calendar and, when you ask, add or change events",
       "default": true
     },
     {
       "name": "Asana",
+      "what": "see your tasks and projects and, when you ask, create or update tasks",
       "default": false
     },
     {
       "name": "Google Docs",
+      "what": "read and edit your docs when you ask",
       "default": false
     },
     {
       "name": "Google Sheets",
+      "what": "read and edit your spreadsheets when you ask",
       "default": false
     },
     {
       "name": "Google Slides",
+      "what": "read and edit your slides when you ask",
       "default": false
     }
   ],

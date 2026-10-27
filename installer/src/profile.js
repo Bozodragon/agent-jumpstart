@@ -22,7 +22,7 @@ const profilesFolder = fileURLToPath(new URL('../../profiles/', import.meta.url)
  * @property {{ install?: string }} [googleDrive] For a profile whose workspaces are in Google Drive:
  *   `install` says, in the person's words, how to get Google Drive for desktop and sign in, for
  *   a laptop that hasn't got it. Without it, they're sent to Google's download page.
- * @property {Choice[]} connectors
+ * @property {Connector[]} connectors
  * @property {string} [connectorsPage] The address of the page where the person connects the connectors they ticked.
  * @property {{ signUpPage: string, email: string }} [github] For the person who chooses to set up
  *   GitHub: the sign-up page, and which email to sign up with, in words ("your university email address").
@@ -44,6 +44,12 @@ const profilesFolder = fileURLToPath(new URL('../../profiles/', import.meta.url)
  */
 
 /** @typedef {{ name: string, default: boolean }} Choice */
+
+/**
+ * A connector the person can tick. `what` says what it lets the agent do, in a few plain words
+ * that follow its name in the connectors notice ("Gmail: search and read your email").
+ * @typedef {Choice & { what?: string }} Connector
+ */
 
 /** @returns {Promise<string[]>} */
 async function profileIds() {

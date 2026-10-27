@@ -38,11 +38,16 @@ export async function walkThroughConnectors(profile, connectors, { attended, con
   if (typeof page !== 'string') throw new Stop(`The "${profile.id}" profile needs a connectors page address.`);
 
   await showPage('Connectors page', page, { machine, log });
+  /** @param {string} name */
+  const whatItDoes = (name) => profile.connectors.find((connector) => connector.name === name)?.what;
   ui.notice(
     [
-      'On the connectors page, click Connect next to each of these and sign in when asked:',
+      // The page's own heading reads Customize, which can look like the wrong page.
+      "This opens claude.ai's Customize page, on Connectors. Click Connect next to each of these and sign in when asked:",
       '',
-      ...connectors.map((name) => `  ${ui.bullet} ${name}`),
+      ...connectors.map((name) => `  ${ui.bullet} ${name}${whatItDoes(name) ? `: ${whatItDoes(name)}` : ''}`),
+      '',
+      'The agent uses them as you, and only for what you ask it to do. You can disconnect any of them on the same page.',
       '',
       "If one isn't there or won't connect, carry on. Jumpstart checks each one later.",
       '',
