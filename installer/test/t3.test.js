@@ -46,6 +46,9 @@ test('with stable chosen, the current stable T3 is installed per user after its 
   assert.equal(result.code, 0, result.stderr);
   checklistSays(result.stdout, 'T3 Code', '0.1.2 (stable, installed)');
   checklistSays(result.stdout, 'Claude Code', '2.1.306, signed in as jo.bloggs@york.ac.uk');
+  // The silent install shows nothing of its own for about half a minute. In a terminal this is
+  // a spinner; here, where the output isn't one, a plain line.
+  assert.ok(result.stdout.replace(/\s+/g, ' ').includes("Installing T3 Code. This takes about a minute, and T3 Code opens by itself when it's done."), result.stdout);
 
   const runs = await machine.runs();
   const t3 = runs.findIndex((run) => basename(run.file) === installer);

@@ -98,12 +98,14 @@ export async function readyGoogleDrive(profile, places, drive, { machine, log, a
   }
   if (drive.folder) return drive;
 
-  if (machine.patience > 0) ui.step('Looking for My Drive, which can take a few seconds to appear after Google Drive signs in');
-  const { result, waited } = await keepTrying(
-    { machine, every: 1000 },
-    () => findGoogleDrive(places),
-    (found) => found.status === 'signed-in' && found.folder !== undefined,
-  );
+  const look = () =>
+    keepTrying(
+      { machine, every: 1000 },
+      () => findGoogleDrive(places),
+      (found) => found.status === 'signed-in' && found.folder !== undefined,
+    );
+  const message = 'Looking for My Drive, which can take a few seconds to appear after Google Drive signs in';
+  const { result, waited } = machine.patience > 0 ? await ui.busy(message, look, ({ result }) => ({ text: 'Looked for My Drive', ok: result.status === 'signed-in' && result.folder !== undefined })) : await look();
   const folder = result.status === 'signed-in' ? result.folder : undefined;
   say(folder ? `My Drive found at ${folder} after ${waited / 1000} seconds` : `My Drive not found after ${waited / 1000} seconds, so where it is is asked`);
   return { status: 'signed-in', folder };

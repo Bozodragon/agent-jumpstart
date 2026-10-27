@@ -64,9 +64,11 @@ export async function installSkills(profile, ours, context) {
     const wanted = skills.filter((name) => !theirs.includes(name));
     let ran;
     if (program && git.length > 0 && wanted.length > 0) {
-      ui.step(`Installing ${wanted.length === 1 ? 'the skill' : `${wanted.length} skills`} from ${source}`);
       const args = ['add', source, '-g', '-a', 'claude-code', '-y', ...(names ? ['-s', ...wanted] : [])];
-      ran = await machine.run(program.file, [...program.args, ...args]);
+      const what = `${wanted.length === 1 ? 'the skill' : `${wanted.length} skills`} from ${source}`;
+      ran = await ui.busy(`Installing ${what}`, () => machine.run(program.file, [...program.args, ...args]), ({ code }) =>
+        code === 0 ? { text: `Installed ${what}`, ok: true } : { text: `Couldn't install ${what}`, ok: false },
+      );
     }
     for (const name of skills) {
       let value;

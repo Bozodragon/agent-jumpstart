@@ -9,6 +9,7 @@ import { basename, dirname, join } from 'node:path';
 import { isFolder } from './google-drive.js';
 import { keepTrying } from './machine.js';
 import { messageOf } from './stop.js';
+import * as ui from './ui.js';
 
 /**
  * @typedef {object} Workspaces
@@ -110,11 +111,15 @@ export async function addToT3(workspaces, t3, { machine, log }) {
   // Just after T3's first start its server is still starting: until it has published itself the
   // command line tries to take T3's folder for itself, and T3 says a server already owns it.
   const shim = t3.shim;
-  const { result: ran, waited } = await keepTrying(
-    { machine, every: 2000 },
-    () => machine.run(shim, ['project', 'add', top, '--title', name]),
-    (ran) => !stillStarting(ran),
-    () => say(`T3 Code is still starting, so adding ${top} is tried again in 2 seconds`),
+  const add = () =>
+    keepTrying(
+      { machine, every: 2000 },
+      () => machine.run(shim, ['project', 'add', top, '--title', name]),
+      (ran) => !stillStarting(ran),
+      () => say(`T3 Code is still starting, so adding ${top} is tried again in 2 seconds`),
+    );
+  const { result: ran, waited } = await ui.busy(`Adding ${name} to T3 Code`, add, ({ result }) =>
+    result.code === 0 ? { text: `Added ${name} to T3 Code`, ok: true } : { text: `${name} isn't added to T3 Code yet`, ok: /already exists/i.test(result.output) },
   );
   if (stillStarting(ran)) {
     say(`${top} not added: T3 Code was still starting after ${waited / 1000} seconds`);

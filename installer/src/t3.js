@@ -83,35 +83,45 @@ export async function installT3(channel, found, context) {
     return { row: `${found.version ?? 'Version unknown'} (${state})`, installed: true, opened, shim };
   }
 
-  ui.step(`Installing ${entry.name} (${channel})`);
-  let release;
-  try {
-    const where = entry.channels[channel];
-    if (!where) throw new NotInstalled(`the list of versions has no ${channel} channel`);
-    release = await findRelease(entry, where, { downloads, say });
-    say(`${channel} is ${release.version}, ${basename(new URL(release.url).pathname)}`);
-
-    const program = join(places.programs, entry.install.folder, where.program);
-    const file = await obtain({ url: release.url }, { downloads, saveIn: join(places.state, 'downloads'), say });
+  /** @returns {Promise<{ release: { version: string, url: string, sha512: string } } | { reason: string }>} */
+  const install = async () => {
     try {
-      await checkSha512(file, release.sha512, say);
-      const ran = await machine.run(file, entry.install.arguments);
-      if (ran.code !== 0) throw new NotInstalled(`its installer stopped with code ${ran.code}`);
-    } finally {
-      if (keepDownloads) say(`kept ${file}`);
-      else await rm(file, { force: true });
+      const where = entry.channels[channel];
+      if (!where) throw new NotInstalled(`the list of versions has no ${channel} channel`);
+      const release = await findRelease(entry, where, { downloads, say });
+      say(`${channel} is ${release.version}, ${basename(new URL(release.url).pathname)}`);
+
+      const program = join(places.programs, entry.install.folder, where.program);
+      const file = await obtain({ url: release.url }, { downloads, saveIn: join(places.state, 'downloads'), say });
+      try {
+        await checkSha512(file, release.sha512, say);
+        const ran = await machine.run(file, entry.install.arguments);
+        if (ran.code !== 0) throw new NotInstalled(`its installer stopped with code ${ran.code}`);
+      } finally {
+        if (keepDownloads) say(`kept ${file}`);
+        else await rm(file, { force: true });
+      }
+      if (!(await exists(program))) {
+        say(`${program} isn't there after the install`);
+        throw new NotInstalled("its installer didn't leave it in place");
+      }
+      say(`installed ${release.version}`);
+      return { release };
+    } catch (error) {
+      if (!(error instanceof NotInstalled)) say(`failed: ${error instanceof Error ? error.stack : String(error)}`);
+      const reason = error instanceof NotInstalled ? error.message : messageOf(error);
+      say(`not installed: ${reason}`);
+      return { reason };
     }
-    if (!(await exists(program))) {
-      say(`${program} isn't there after the install`);
-      throw new NotInstalled("its installer didn't leave it in place");
-    }
-    say(`installed ${release.version}`);
-  } catch (error) {
-    if (!(error instanceof NotInstalled)) say(`failed: ${error instanceof Error ? error.stack : String(error)}`);
-    const reason = error instanceof NotInstalled ? error.message : messageOf(error);
-    say(`not installed: ${reason}`);
-    return { row: `Not installed: ${reason}`, installed: false, opened: await exists(shim), shim };
-  }
+  };
+  // The download and the silent install show nothing of their own for about half a minute.
+  const outcome = await ui.busy(`Installing ${entry.name}. This takes about a minute, and ${entry.name} opens by itself when it's done.`, install, (outcome) =>
+    'release' in outcome
+      ? { text: `${entry.name} ${outcome.release.version} installed`, ok: true }
+      : { text: `${entry.name} not installed: ${outcome.reason}`, ok: false },
+  );
+  if (!('release' in outcome)) return { row: `Not installed: ${outcome.reason}`, installed: false, opened: await exists(shim), shim };
+  const { release } = outcome;
 
   // The silent install starts T3 (--force-run).
   const opened = await waitForFirstLaunch(shim, machine.patience, { machine, attended, say, name: entry.name });
@@ -138,8 +148,8 @@ async function installedVersion(machine, key) {
  * @param {{ machine: import('./machine.js').Machine, attended: boolean, say: (line: string) => void, name: string }} how
  */
 async function waitForFirstLaunch(shim, patience, { machine, attended, say, name }) {
-  if (patience > 0 && !(await exists(shim))) ui.step(`Waiting for ${name} to open`);
-  await keepTrying({ machine, every: 1000, patience }, () => exists(shim), (there) => there);
+  const wait = () => keepTrying({ machine, every: 1000, patience }, () => exists(shim), (there) => there);
+  if (patience > 0 && !(await exists(shim))) await ui.busy(`Waiting for ${name} to open`, wait, ({ result }) => ({ text: result ? `${name} is open` : `${name} hasn't opened`, ok: result }));
   if (!(await exists(shim)) && attended) {
     ui.notice(`Open ${name} from the Start menu and wait for its window to appear.`, `Open ${name}`);
     await ui.pressEnter(`Press Enter once ${name} is open.`);
