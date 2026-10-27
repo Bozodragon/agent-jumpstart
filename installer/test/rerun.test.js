@@ -23,7 +23,7 @@ async function seed(home, files) {
  */
 async function refuseEveryQuestion(answersFile) {
   const asked = 'a question was asked';
-  const keys = ['googleDriveFolder', 'workspacesLocation', 'channel', 'github', 'workspaces', 'connectors', 'extraTools', 'switchOffMemory'];
+  const keys = ['topWorkspace', 'googleDriveFolder', 'workspacesLocation', 'channel', 'github', 'workspaces', 'connectors', 'extraTools', 'switchOffMemory'];
   await writeFile(answersFile, JSON.stringify(Object.fromEntries(keys.map((key) => [key, asked]))));
 }
 

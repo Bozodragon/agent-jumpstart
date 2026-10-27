@@ -1,15 +1,19 @@
-// The four questions, built from the profile. Each has a default, so pressing
-// Enter (or leaving it out of an answers file) gives a sensible setup.
-import { isAbsolute, join } from 'node:path';
+// The questions, built from the profile and what is already on the laptop. Each has a default,
+// so pressing Enter (or leaving it out of an answers file) gives a sensible setup.
+import { dirname, isAbsolute, join } from 'node:path';
 import { findGoogleDrive, isFolder } from './google-drive.js';
 import { Stop } from './stop.js';
+import { existingTopWorkspaces, topWorkspaceIn } from './workspaces.js';
 
 /**
  * What the person chose. These are the settings file's keys, which Jumpstart
  * and a re-run read, and the keys an answers file uses.
  * @typedef {object} Answers
  * @property {string | null} googleDriveFolder The confirmed My Drive folder, or null when the profile doesn't use Drive.
- * @property {string} workspacesLocation The folder the top workspace goes in.
+ * @property {string} workspacesLocation The folder the top workspace is in.
+ * @property {string} topWorkspace The top workspace: a new one, named by the profile, in Google
+ *   Drive or the folder the person gave; or one already in T3 Code that they chose to use, under
+ *   whatever name it has. Jumpstart reads it.
  * @property {'stable' | 'nightly'} channel Which T3 Code.
  * @property {boolean} github Whether to set up GitHub now.
  * @property {string[]} workspaces The names of the ticked workspaces.
@@ -61,9 +65,13 @@ async function mustBeAPath(value) {
   return isAbsolute(value) ? undefined : 'Give the whole path, starting with the drive letter.';
 }
 
+/** The `topWorkspace` answer that sets up a new top workspace rather than using one T3 Code lists. */
+const newTopWorkspace = 'new';
+
 /**
  * Under a profile that keeps workspaces in Google Drive, stops before asking
- * anything if Drive for desktop isn't there or isn't signed in.
+ * anything if Drive for desktop isn't there or isn't signed in, unless the
+ * person uses a top workspace they already have.
  * @param {import('./profile.js').Profile} profile
  * @param {import('./places.js').Places} places
  * @param {Asker} ask
@@ -72,6 +80,70 @@ async function mustBeAPath(value) {
  * @returns {Promise<Answers>}
  */
 export async function askQuestions(profile, places, ask, log, found) {
+  return theRest(profile, ask, log, found, await whereWorkspacesLive(profile, places, ask, log, found));
+}
+
+/**
+ * On a re-run, an earlier run's top workspace that's still there.
+ * @param {Record<string, unknown> | undefined} earlier
+ * @param {{ write(line: string): void }} log
+ */
+async function earlierTopWorkspace(earlier, log) {
+  const top = earlier?.topWorkspace;
+  if (typeof top !== 'string' || !isAbsolute(top)) return undefined;
+  if (await isFolder(top)) return top;
+  log.write(`Settings: topWorkspace ${top} is no longer there, so where workspaces live is asked again`);
+  return undefined;
+}
+
+/** @typedef {Pick<Answers, 'googleDriveFolder' | 'workspacesLocation' | 'topWorkspace'>} Location */
+
+/**
+ * Where the top workspace is: an earlier run's, if it's still there; one already in T3 Code, if
+ * the person chooses it (no Google Drive check then: it's used wherever it is); or else a new one
+ * in Google Drive or the folder the person gives, as the profile says.
+ * @param {import('./profile.js').Profile} profile @param {import('./places.js').Places} places
+ * @param {Asker} ask @param {{ write(line: string): void }} log @param {Found} found
+ * @returns {Promise<Location>}
+ */
+async function whereWorkspacesLive(profile, places, ask, log, found) {
+  /** @param {string} top @returns {Location} */
+  const using = (top) => ({
+    googleDriveFolder: typeof found.earlier?.googleDriveFolder === 'string' && top === found.earlier.topWorkspace ? found.earlier.googleDriveFolder : null,
+    workspacesLocation: dirname(top),
+    topWorkspace: top,
+  });
+  const earlier = await earlierTopWorkspace(found.earlier, log);
+  if (earlier) {
+    log.write(`Known from settings: topWorkspace: ${JSON.stringify(earlier)}`);
+    return using(earlier);
+  }
+  const existing = await existingTopWorkspaces(profile, places, log);
+  if (existing.length > 0) {
+    const chosen = await ask.choose({
+      key: 'topWorkspace',
+      message: 'T3 Code already has a workspace like this. Use it as your top workspace, or set up a new one?',
+      options: [
+        ...existing.map((folder) => ({ value: folder, label: `Use ${folder}` })),
+        { value: newTopWorkspace, label: 'Set up a new one' },
+      ],
+      initial: existing[0],
+    });
+    if (chosen !== newTopWorkspace) {
+      log.write(`Answer: topWorkspace: ${JSON.stringify(chosen)} (already there, so it's used as it is)`);
+      return using(chosen);
+    }
+  }
+  return newLocation(profile, places, ask, log);
+}
+
+/**
+ * The questions for a new top workspace: the Google Drive folder, or the folder workspaces live in.
+ * @param {import('./profile.js').Profile} profile @param {import('./places.js').Places} places
+ * @param {Asker} ask @param {{ write(line: string): void }} log
+ * @returns {Promise<Location>}
+ */
+async function newLocation(profile, places, ask, log) {
   let googleDriveFolder = null;
   let workspacesLocation;
   if (profile.workspaces.inGoogleDrive) {
@@ -106,7 +178,16 @@ export async function askQuestions(profile, places, ask, log, found) {
       validate: mustBeAPath,
     });
   }
+  return { googleDriveFolder, workspacesLocation, topWorkspace: topWorkspaceIn(profile, workspacesLocation) };
+}
 
+/**
+ * The rest of the questions.
+ * @param {import('./profile.js').Profile} profile @param {Asker} ask
+ * @param {{ write(line: string): void }} log @param {Found} found @param {Location} location
+ * @returns {Promise<Answers>}
+ */
+async function theRest(profile, ask, log, found, { googleDriveFolder, workspacesLocation, topWorkspace }) {
   if (found.t3Channel) log.write(`T3 Code is already installed (${found.t3Channel}), so which T3 Code isn't asked`);
   /** @type {'stable' | 'nightly'} */
   const channel =
@@ -154,7 +235,7 @@ export async function askQuestions(profile, places, ask, log, found) {
       : true;
 
   /** @type {Answers} */
-  const answers = { googleDriveFolder, workspacesLocation, channel, github, workspaces, connectors, extraTools, switchOffMemory };
+  const answers = { googleDriveFolder, workspacesLocation, topWorkspace, channel, github, workspaces, connectors, extraTools, switchOffMemory };
   for (const [key, value] of Object.entries(answers)) log.write(`Answer: ${key}: ${JSON.stringify(value)}`);
   return answers;
 }

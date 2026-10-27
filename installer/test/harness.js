@@ -228,6 +228,32 @@ export async function t3Projects(home) {
   return [...projects.values()];
 }
 
+/** Where T3 Code keeps its state, relative to the home, project list among it. */
+export const t3Database = join('.t3', 'userdata', 'statev2.sqlite');
+
+/**
+ * Leaves T3 Code's database in the home with these projects in it, as T3 keeps them (its
+ * `projection_projects` table; a removed project keeps its row with `deleted_at` set).
+ * @param {string} home
+ * @param {{ title: string, folder: string, deleted?: boolean }[]} projects
+ */
+export async function seedT3Projects(home, projects) {
+  const { DatabaseSync } = await import('node:sqlite');
+  const file = join(home, t3Database);
+  await mkdir(join(file, '..'), { recursive: true });
+  const db = new DatabaseSync(file);
+  try {
+    db.exec(`CREATE TABLE projection_projects (
+      project_id TEXT PRIMARY KEY, title TEXT NOT NULL, workspace_root TEXT NOT NULL, scripts_json TEXT NOT NULL,
+      created_at TEXT NOT NULL, updated_at TEXT NOT NULL, deleted_at TEXT)`);
+    const add = db.prepare('INSERT INTO projection_projects VALUES (?, ?, ?, ?, ?, ?, ?)');
+    const when = '2026-10-01T09:00:00.000Z';
+    projects.forEach(({ title, folder, deleted }, index) => add.run(`project-${index}`, title, folder, '[]', when, when, deleted ? when : null));
+  } finally {
+    db.close();
+  }
+}
+
 /**
  * Asserts the printed checklist (or another summary) has a row with this label and value. A row
  * can be long enough for its box to wrap it, so the output is read as flowing text: borders gone

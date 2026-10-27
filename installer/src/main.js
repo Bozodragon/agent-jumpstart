@@ -31,7 +31,7 @@ import { messageOf, Stop } from './stop.js';
 import { findT3, installT3 } from './t3.js';
 import { installTools } from './tools.js';
 import * as ui from './ui.js';
-import { addToT3, createWorkspaces, topWorkspaceIn } from './workspaces.js';
+import { addToT3, createWorkspaces } from './workspaces.js';
 
 /** @returns {{ profile: string, debug: boolean, home?: string, answers?: string, downloads?: string }} */
 function readOptions() {
@@ -144,15 +144,14 @@ async function main() {
     const found = { earlier, memoryInUse, t3Channel: foundT3?.channel };
     const choices = await askQuestions(profile, places, earlier ? knownFrom(earlier, asker, log) : asker, log, found);
 
-    const topWorkspace = topWorkspaceIn(profile, choices.workspacesLocation);
     // Keys this run doesn't write (another program's, or a later version's) are kept.
     /** @type {Record<string, unknown>} */
-    const settings = { ...earlier, profile: profile.id, ...choices, topWorkspace };
+    const settings = { ...earlier, profile: profile.id, ...choices };
     await writeSettings(places.settings, settings);
     log.write(`Settings written to ${places.settings}`);
     done.push(['Settings', 'Your answers, saved for next time']);
 
-    const workspaces = await createWorkspaces(topWorkspace, choices.workspaces, log);
+    const workspaces = await createWorkspaces(choices.topWorkspace, choices.workspaces, log);
     done.push(...workspaces.rows);
 
     const tools = await installTools(context);
