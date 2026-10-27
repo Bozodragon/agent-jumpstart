@@ -175,3 +175,23 @@ test('a tool the installer put there before, at the pinned version, is left in p
   assert.equal(await readFile(join(nodeFolder, 'node.exe'), 'utf8'), 'the copy already there');
   assert.ok((await machine.userPath()).includes(nodeFolder));
 });
+
+test("an installer that keeps a log of its own is told where, and a failed one's log is copied into the installer's", async (t) => {
+  const where = await makeHome(t);
+  const manifest = await supplyDownloads(where);
+  const git = manifest.tools.find((/** @type {any} */ tool) => tool.id === 'git');
+  const setupLog = join('AppData', 'Local', 'agent-jumpstart', 'git-setup.log');
+  const machine = fakeMachine(where.home);
+  await machine.setReplies({
+    [fileName(git.downloads[process.arch].url)]: { code: 2, writes: { [setupLog]: 'Skipping downgrade from 2.57.0 to 2.56.0.4' } },
+  });
+
+  const result = await runWith(where, 'default');
+
+  assert.equal(result.code, 0, result.stderr);
+  checklistSays(result.stdout, 'Git', 'Not installed: its installer stopped with code 2');
+  const gitInstaller = (await machine.runs()).find((run) => basename(run.file).startsWith('Git-'));
+  assert.ok(gitInstaller?.args.includes(`/LOG=${join(where.home, setupLog)}`), gitInstaller?.args.join(' '));
+  const log = await readOnlyLog(where.home);
+  assert.match(log.text, /Skipping downgrade from 2\.57\.0 to 2\.56\.0\.4/);
+});

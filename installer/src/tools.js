@@ -172,9 +172,20 @@ async function putInPlace(tool, here, { places, machine, downloads, keepDownload
         const ran = await machine.run(npm, args);
         if (ran.code !== 0) throw new NotInstalled(`npm stopped with code ${ran.code}`);
       } else {
-        const args = (tool.install.arguments ?? []).map((arg) => arg.replaceAll('{folder}', folder));
+        // An installer that keeps its own log (Git's) is told to keep it here, since its exit
+        // code alone rarely says why it stopped; a failed one's log is copied into this one's.
+        const setupLog = join(places.state, `${tool.id}-setup.log`);
+        await rm(setupLog, { force: true });
+        const args = (tool.install.arguments ?? []).map((arg) => arg.replaceAll('{folder}', folder).replaceAll('{log}', setupLog));
         const ran = await machine.run(file, args);
-        if (ran.code !== 0) throw new NotInstalled(`its installer stopped with code ${ran.code}`);
+        if (ran.code !== 0) {
+          const kept = await readFile(setupLog, 'utf8').catch(() => undefined);
+          if (kept !== undefined) {
+            const lines = kept.trimEnd().split(/\r?\n/).slice(-60);
+            say([`the end of its installer's own log (${setupLog}):`, ...lines.map((line) => `  | ${line}`)].join('\n'));
+          }
+          throw new NotInstalled(`its installer stopped with code ${ran.code}`);
+        }
       }
     } finally {
       if (keepDownloads) say(`kept ${file}`);

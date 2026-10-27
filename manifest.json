@@ -24,21 +24,21 @@
     {
       "id": "git",
       "name": "Git",
-      "version": "2.56.0.windows.3",
+      "version": "2.56.0.windows.4",
       "downloads": {
         "x64": {
-          "url": "https://github.com/git-for-windows/git/releases/download/v2.56.0.windows.3/Git-2.56.0.3-64-bit.exe",
-          "sha256": "dc6d3db061999136e139f31376c5582a9ed6f36a4ea12f15e54ad7fa2bfc0bf2"
+          "url": "https://github.com/git-for-windows/git/releases/download/v2.56.0.windows.4/Git-2.56.0.4-64-bit.exe",
+          "sha256": "4961a4a8cc778d8b6e00a5819e5fe4d078b754555aff7aedc2d77a5d74c2de80"
         },
         "arm64": {
-          "url": "https://github.com/git-for-windows/git/releases/download/v2.56.0.windows.3/Git-2.56.0.3-arm64.exe",
-          "sha256": "53cfe6358a1f0573c8c777c9ad71151df8f29986759c689c7b8a5cbb84cca495"
+          "url": "https://github.com/git-for-windows/git/releases/download/v2.56.0.windows.4/Git-2.56.0.4-arm64.exe",
+          "sha256": "e7dcc4adbb0eb373064598cd18bc75e60128707d816ead51cd9bd98e356f0075"
         }
       },
       "install": {
         "how": "installer",
         "folder": "Git",
-        "arguments": ["/VERYSILENT", "/NORESTART", "/NOCANCEL", "/SP-", "/SUPPRESSMSGBOXES", "/o:PathOption=Cmd", "/DIR={folder}"],
+        "arguments": ["/VERYSILENT", "/NORESTART", "/NOCANCEL", "/SP-", "/SUPPRESSMSGBOXES", "/o:PathOption=Cmd", "/DIR={folder}", "/LOG={log}"],
         "path": ["cmd"],
         "check": "cmd/git.exe"
       }
