@@ -128,12 +128,27 @@ for (const [answers, message] of /** @type {[object, string][]} */ ([
   });
 }
 
-for (const [state, message] of [
-  ['missing', "Google Drive for desktop is needed first, and it isn't on this laptop"],
-  ['signed-out', 'Google Drive for desktop is installed but not signed in.'],
-]) {
-  test(`a york run with Google Drive for desktop ${state} says so plainly and stops before creating anything`, async (t) => {
-    const where = await makeHome(t, {}, { googleDrive: /** @type {'missing' | 'signed-out'} */ (state) });
+test('a york run answering "new" for the top workspace makes it in the Drive folder it found, as a run that answers nothing does', async (t) => {
+  const where = await makeHome(t, { topWorkspace: 'new' });
+
+  const result = await runWith(where, 'york');
+
+  assert.equal(result.code, 0, result.stdout + result.stderr);
+  const settings = await readSettings(where.home);
+  assert.deepEqual(
+    [settings.topWorkspace, settings.workspacesLocation, settings.googleDriveFolder],
+    [join(where.home, 'My Drive', 'Claude'), join(where.home, 'My Drive'), join(where.home, 'My Drive')],
+  );
+});
+
+for (const [state, message, answers] of /** @type {['missing' | 'signed-out', string, object][]} */ ([
+  ['missing', "Google Drive for desktop is needed first, and it isn't on this laptop", {}],
+  ['signed-out', 'Google Drive for desktop is installed but not signed in.', {}],
+  ['missing', "Google Drive for desktop is needed first, and it isn't on this laptop", { topWorkspace: 'new' }],
+  ['signed-out', 'Google Drive for desktop is installed but not signed in.', { topWorkspace: 'new' }],
+])) {
+  test(`a york run making a new top workspace${'topWorkspace' in answers ? ' (answered "new")' : ' (the default)'} with Google Drive for desktop ${state} says so plainly and stops before creating anything`, async (t) => {
+    const where = await makeHome(t, answers, { googleDrive: state });
     const before = await homeContents(where.home);
 
     const result = await runWith(where, 'york');
