@@ -73,3 +73,22 @@ test('each profile names the line its page shows, and that line runs the bootstr
     assert.equal(top, `$AgentJumpstart = @{ Profile = '${id}'; Debug = $false }`, file);
   }
 });
+
+test('the york page links to a Gmail draft to Jacob, with the subject and a place for the log', async (t) => {
+  const html = await readFile(join(await render(t), 'york', 'index.html'), 'utf8');
+  const href = html.match(/href="(https:\/\/mail\.google\.com\/[^"]+)"/)?.[1];
+  assert.ok(href, 'no Gmail link on the page');
+  const draft = new URL(href.replace(/&amp;/g, '&')).searchParams;
+  assert.equal(draft.get('to'), 'jacob.hamood@york.ac.uk');
+  assert.equal(draft.get('su'), 'Jumpstart Support');
+  const body = draft.get('body') ?? '';
+  assert.match(body, /^Hi Jacob,\n/);
+  assert.match(body, /Installer logs\n```text\nDelete this line and paste the installer logs here \(Ctrl\+V\)\.\n```/);
+  assert.ok(textOf(html).includes('email it to Jacob'));
+});
+
+test('the default page, with no email to send the log to, says who to send it to and links nowhere', async (t) => {
+  const html = await readFile(join(await render(t), 'default', 'index.html'), 'utf8');
+  assert.doesNotMatch(html, /mail\.google\.com|mailto:/);
+  assert.ok(textOf(html).includes('send it to the person who sent you this page'));
+});

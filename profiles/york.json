@@ -4,6 +4,7 @@
   "pastedLine": "irm https://jumpstart-install.arcforge.uk/york.ps1 | iex",
   "shareLogLine": "irm https://jumpstart-install.arcforge.uk/share-log.ps1 | iex",
   "logGoesTo": "Jacob",
+  "logEmail": "jacob.hamood@york.ac.uk",
   "workspaces": {
     "top": "Claude",
     "inGoogleDrive": true,
