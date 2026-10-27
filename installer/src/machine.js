@@ -17,7 +17,11 @@
 //                                         after a sign-in. A reply may list files to create,
 //                                         relative to the home ("creates": [...]), standing in
 //                                         for what the program leaves behind (an installer's
-//                                         program, the files an app writes when it starts).
+//                                         program, the files an app writes when it starts), and
+//                                         files to write with their contents ("writes": { path:
+//                                         contents }), such as the package.json npm leaves.
+//   <home>/fake-machine/machine-path.json written by a test: the machine-wide PATH, a list of
+//                                         folders. The real one is read from the registry.
 //
 // Every program the installer runs goes through `run`, `runHere` or `runOnScreen`, real or fake,
 // so a debug run's log holds each one with its exit code and full output (for `runOnScreen`,
@@ -25,7 +29,7 @@
 // each `run` or `runHere` that failed (a code other than 0), with its output. Nothing else has
 // to log a program's command or output.
 import { spawn } from 'node:child_process';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { access, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { basename, dirname, join, relative, resolve } from 'node:path';
 
 /**
@@ -33,6 +37,9 @@ import { basename, dirname, join, relative, resolve } from 'node:path';
  * @property {() => Promise<string[]>} userPath The user PATH, one entry per item, unexpanded.
  * @property {(folder: string) => Promise<boolean>} addToUserPath Adds a folder to the end of the
  *   user PATH unless it's already there. Returns whether it was added.
+ * @property {(name: string) => Promise<string[]>} findOnPath The folders on the machine PATH and
+ *   then the user PATH (expanded, in that order, as Windows searches them) that hold a file of
+ *   this name, such as `git.exe`. Only reads.
  * @property {(name: string) => Promise<string | undefined>} userVariable A user environment
  *   variable's value, or undefined if it isn't set.
  * @property {(name: string, value: string) => Promise<void>} setUserVariable Sets a user
@@ -56,7 +63,7 @@ import { basename, dirname, join, relative, resolve } from 'node:path';
 
 /** @typedef {{ code: number, output: string }} Ran */
 
-/** @typedef {Partial<Ran> & { creates?: string[] }} Reply What a fake run returns and leaves behind. */
+/** @typedef {Partial<Ran> & { creates?: string[], writes?: Record<string, string> }} Reply What a fake run returns and leaves behind. */
 
 /**
  * @param {import('./places.js').Places} places
@@ -115,6 +122,21 @@ const includesFolder = (entries, folder) => entries.some((entry) => sameFolder(e
 const splitPath = (raw) => raw.split(';').filter((entry) => entry.trim() !== '');
 
 /**
+ * The folders among PATH entries that hold a file of this name, each once, in order.
+ * @param {string[]} entries @param {string} name
+ */
+async function foldersHolding(entries, name) {
+  /** @type {string[]} */
+  const found = [];
+  for (const entry of entries) {
+    const folder = expand(entry.trim()).replace(/[\\/]+$/, '');
+    if (includesFolder(found, folder)) continue;
+    if (await access(join(folder, name)).then(() => true, () => false)) found.push(folder);
+  }
+  return found;
+}
+
+/**
  * @param {string} folder
  * @param {string} home Where a reply's `creates` paths are, and the only place they may be.
  * @param {(run: Runner) => Runner} logged
@@ -149,6 +171,11 @@ function fakeMachine(folder, home, logged) {
       if (includesFolder(entries, entry)) return false;
       await write('environment.json', { ...variables, Path: [...entries, entry].join(';') });
       return true;
+    },
+    async findOnPath(name) {
+      /** @type {string[]} */
+      const machinePath = await read('machine-path.json', []);
+      return foldersHolding([...machinePath, ...splitPath((await environment()).Path ?? '')], name);
     },
     async userVariable(name) {
       return (await environment())[name];
@@ -185,11 +212,15 @@ function fakeMachine(folder, home, logged) {
       found = answer([basename(file), ...args.slice(0, count)].join(' '), (run) => [basename(run.file), ...run.args.slice(0, count)].join(' '));
     }
     found ??= {};
-    for (const path of found.creates ?? []) {
+    const leaves = [
+      ...(found.creates ?? []).map((path) => [path, `left by a fake run of ${basename(file)}`]),
+      ...Object.entries(found.writes ?? {}),
+    ];
+    for (const [path, contents] of leaves) {
       const target = resolve(home, path);
       if (relative(home, target).startsWith('..')) throw new Error(`a fake run can't create ${path}: it's outside the home`);
       await mkdir(dirname(target), { recursive: true });
-      await writeFile(target, `left by a fake run of ${basename(file)}`);
+      await writeFile(target, contents);
     }
     return { code: found.code ?? 0, output: found.output ?? '' };
   }
@@ -208,9 +239,9 @@ export const system32 = (name) => join(process.env.SystemRoot ?? 'C:\\Windows', 
 function realMachine(runProgram) {
   const reg = system32('reg.exe');
 
-  /** @param {string} name @returns {Promise<string | undefined>} */
-  async function readVariable(name) {
-    const { code, output } = await runProgram(reg, ['query', 'HKCU\\Environment', '/v', name]);
+  /** @param {string} name @param {string} [key] @returns {Promise<string | undefined>} */
+  async function readVariable(name, key = 'HKCU\\Environment') {
+    const { code, output } = await runProgram(reg, ['query', key, '/v', name]);
     if (code !== 0) return undefined;
     const match = new RegExp(`^\\s+${name}\\s+REG_(?:EXPAND_)?SZ\\s+(.*)$`, 'im').exec(output);
     return match ? match[1].trimEnd() : '';
@@ -243,7 +274,11 @@ function realMachine(runProgram) {
       if (!includesFolder(splitPath(process.env.Path ?? ''), folder)) process.env.Path = `${process.env.Path};${folder}`;
       return !includesFolder(entries, folder);
     },
-    userVariable: readVariable,
+    async findOnPath(name) {
+      const machinePath = splitPath((await readVariable('Path', 'HKLM\\SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Environment')) ?? '');
+      return foldersHolding([...machinePath, ...splitPath((await readVariable('Path')) ?? '')], name);
+    },
+    userVariable: (name) => readVariable(name),
     async setUserVariable(name, value) {
       const { code, output } = await runProgram(system32('setx.exe'), [name, value]);
       if (code !== 0) throw new Error(`${name} couldn't be set: ${output.trim()}`);

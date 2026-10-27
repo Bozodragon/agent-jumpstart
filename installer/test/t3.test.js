@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { basename, dirname, join } from 'node:path';
-import { checklistSays, exists, fakeMachine, makeHome, programsFolder, readManifest, readOnlyLog, readSettings, runWith, supplyT3 } from './harness.js';
+import { checklistSays, exists, fakeMachine, makeHome, markAsInstalledByUs, programsFolder, readManifest, readOnlyLog, readSettings, runWith, supplyT3 } from './harness.js';
 
 /** T3's uninstall entry, where Windows keeps the installed version. */
 const uninstallKey = 'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\e9197887-efb3-55e0-985e-d6d3b5dd594a';
@@ -27,9 +27,10 @@ const signedIn = {
 test('with stable chosen, the current stable T3 is installed per user after its hash is checked, then Claude is confirmed signed in', async (t) => {
   const where = await makeHome(t, { channel: 'stable' });
   const installer = await supplyT3(where.downloads, 'latest.yml', '0.1.2');
-  // Node is already in place, as the bootstrap leaves it.
+  // Node is already in place, as an earlier run left it.
   const node = (await readManifest()).tools.find((/** @type {any} */ tool) => tool.id === 'node');
   await seed(where.home, [join('AppData', 'Local', 'Programs', 'nodejs', 'node.exe')]);
+  await markAsInstalledByUs(join(programsFolder(where.home), 'nodejs'));
   const machine = fakeMachine(where.home);
   await machine.setReplies({
     'node.exe --version': { output: `v${node.version}\r\n` },

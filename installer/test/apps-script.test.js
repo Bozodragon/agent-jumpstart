@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { basename, join } from 'node:path';
-import { checklistSays, fakeMachine, makeHome, programsFolder, readManifest, readOnlyLog, readProfile, runWith } from './harness.js';
+import { checklistSays, fakeMachine, makeHome, markAsInstalledByUs, programsFolder, readManifest, readOnlyLog, readProfile, runWith } from './harness.js';
 
 /**
  * A stand-in for clasp's package from the npm registry, and a copy of the pinned manifest
@@ -58,7 +58,7 @@ test('with Apps Script ticked, clasp installs per user at the pinned version, ou
   assert.deepEqual(npm.args.slice(0, 4), ['install', '--global', '--prefix', prefix]);
   assert.equal(basename(npm.args.at(-1) ?? ''), basename(file), 'the checked download is what npm installs');
   assert.ok(runs.some((run) => run.file === join(prefix, 'clasp.cmd') && run.args.join(' ') === '--version'));
-  // The bootstrap replaces the Node folder when Node's pin changes, so nothing global may live in it.
+  // The installer replaces its Node folder when Node's pin changes, so nothing global may live in it.
   assert.ok(!prefix.startsWith(join(programs, 'nodejs')));
   assert.ok((await machine.userPath()).includes(prefix));
   assert.deepEqual(runs.filter((run) => /\.ps1$/i.test(run.file)), []);
@@ -127,7 +127,7 @@ test('on a re-run with clasp at the pinned version and signed in, nothing is rei
   const profile = await readProfile('york');
   const appsScript = profile.extraTools.find((/** @type {any} */ extra) => extra.id === 'apps-script');
   const prefix = join(programsFolder(where.home), 'npm');
-  await mkdir(prefix, { recursive: true });
+  await markAsInstalledByUs(prefix);
   await writeFile(join(prefix, 'clasp.cmd'), 'the copy already there');
   const machine = fakeMachine(where.home);
   await machine.setReplies({
@@ -157,4 +157,29 @@ test("if clasp can't be installed, the checklist says why and there is no sign-i
   checklistSays(result.stdout, 'clasp', "Not installed: it wasn't in the downloads folder");
   assert.deepEqual((await machine.runs()).filter((run) => /clasp|npm/i.test(basename(run.file))), []);
   assert.ok(!result.stdout.includes(appsScript.settingsPage), result.stdout);
+});
+
+test('a clasp the person already has on the PATH is left as it is, gets no PATH entry, and is the one signed in', async (t) => {
+  const where = await makeHome(t, { extraTools: ['apps-script'] });
+  await supplyClasp(where);
+  // Where npm puts a global package by default, outside the installer's folders.
+  const theirs = join(where.home, 'AppData', 'Roaming', 'npm');
+  await mkdir(theirs, { recursive: true });
+  await writeFile(join(theirs, 'clasp.cmd'), 'their own clasp');
+  const machine = fakeMachine(where.home);
+  await machine.setEnvironment({ Path: theirs });
+  await machine.setReplies({
+    'clasp.cmd --version': { output: '2.4.2\n' },
+    'clasp.cmd show-authorized-user': [{ output: 'Not logged in.\n' }, { output: 'You are logged in as a.person@york.ac.uk.\n' }],
+  });
+
+  const result = await runWith(where, 'york');
+
+  assert.equal(result.code, 0, result.stdout + result.stderr);
+  checklistSays(result.stdout, 'clasp', `2.4.2 (already installed at ${theirs}, left as it is), signed in as a.person@york.ac.uk`);
+  const runs = await machine.runs();
+  assert.deepEqual(runs.filter((run) => basename(run.file) === 'npm.cmd'), [], 'nothing was installed');
+  const login = runs.find((run) => run.args[0] === 'login');
+  assert.equal(login?.file, join(theirs, 'clasp.cmd'));
+  assert.deepEqual(await machine.userPath(), [theirs]);
 });

@@ -4,13 +4,13 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdir, readdir, writeFile } from 'node:fs/promises';
 import { basename, join } from 'node:path';
-import { fakeMachine, makeHome, programsFolder, readManifest, readOnlyLog, runWith } from './harness.js';
+import { fakeMachine, makeHome, markAsInstalledByUs, programsFolder, readManifest, readOnlyLog, runWith } from './harness.js';
 
 /** What the Node already on the machine says when asked its version: more than one line. */
 const nodeSays = (/** @type {string} */ version) => `v${version}\r\nfirst detail line\r\nsecond detail line\r\n`;
 
 /**
- * A home where Node is already at the pinned version (so the installer runs it and gets
+ * A home where an earlier run left Node at the pinned version (so the installer runs it and gets
  * output back) and Git and gh are in the downloads folder under their vendors' names, but
  * aren't the vendors' files (so they're obtained, then fail their checksums).
  * @param {import('node:test').TestContext} t
@@ -21,7 +21,7 @@ async function aLaptop(t) {
   const tool = (/** @type {string} */ id) => manifest.tools.find((/** @type {any} */ entry) => entry.id === id);
   const node = tool('node');
   const nodeFolder = join(programsFolder(where.home), 'nodejs');
-  await mkdir(nodeFolder, { recursive: true });
+  await markAsInstalledByUs(nodeFolder);
   await writeFile(join(nodeFolder, 'node.exe'), 'the copy already there');
   const downloaded = ['git', 'gh'].map((id) => basename(new URL(tool(id).downloads[process.arch].url).pathname));
   for (const name of downloaded) await writeFile(join(where.downloads, name), `not really ${name}`);

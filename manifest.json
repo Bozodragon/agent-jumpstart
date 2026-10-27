@@ -110,7 +110,8 @@
         "how": "npm",
         "folder": "skills-cli",
         "path": [],
-        "check": "skills.cmd"
+        "check": "skills.cmd",
+        "package": "skills"
       }
     },
     {

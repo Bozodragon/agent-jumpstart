@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdir, readdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { basename, dirname, isAbsolute, join, relative } from 'node:path';
-import { checklistSays, fakeMachine, fileName, makeHome, programsFolder, readOnlyLog, readProfile, readSettings, runWith, seedSettings, supplyDownloads, supplyT3, t3Leaves, t3Projects } from './harness.js';
+import { checklistSays, fakeMachine, fileName, makeHome, markAsInstalledByUs, programsFolder, readOnlyLog, readProfile, readSettings, runWith, seedSettings, skillsCli, supplyDownloads, supplyT3, t3Leaves, t3Projects } from './harness.js';
 
 /**
  * Leaves files as an earlier run (or the person) would have.
@@ -80,13 +80,14 @@ test('a settings file missing an answer, or holding one the profile no longer of
   assert.deepEqual(settings.extraTools, ['apps-script'], 'asked: it was never answered');
 });
 
-test('a tool at another version is moved to the pinned one, a tool at the pinned version is left alone, and each row says which', async (t) => {
+test('a tool the installer put there at another version is moved to the pinned one, one at the pinned version is left alone, and each row says which', async (t) => {
   const where = await makeHome(t);
   const manifest = await supplyDownloads(where);
   const [node, git, gh] = ['node', 'git', 'gh'].map((id) => manifest.tools.find((/** @type {any} */ tool) => tool.id === id));
   const programs = programsFolder(where.home);
   // An older Node from an earlier run, the pinned gh, and no Git yet.
   await seed(where.home, { [join(programs, 'nodejs', 'node.exe')]: 'the older copy', [join(programs, 'GitHub CLI', 'bin', 'gh.exe')]: 'the copy already there' });
+  for (const folder of ['nodejs', 'GitHub CLI']) await markAsInstalledByUs(join(programs, folder));
   const machine = fakeMachine(where.home);
   await machine.setReplies({
     'node.exe --version': { output: 'v24.11.0\r\n' },
@@ -124,7 +125,7 @@ test('a re-run of a home set up earlier updates what is out of date, re-adds PAT
   const where = await makeHome(t);
   const profile = await readProfile('york');
   const manifest = await supplyDownloads(where);
-  const [node, git, gh, clasp, skillsCli] = ['node', 'git', 'gh', 'clasp', 'skills'].map((id) => manifest.tools.find((/** @type {any} */ tool) => tool.id === id));
+  const [node, git, gh, clasp, skillsTool] = ['node', 'git', 'gh', 'clasp', 'skills'].map((id) => manifest.tools.find((/** @type {any} */ tool) => tool.id === id));
   const nightly = '0.1.3-nightly.20261023.3579';
   await writeFile(join(where.downloads, 'releases'), JSON.stringify([{ tag_name: `v${nightly}`, draft: false, prerelease: true }]));
   const t3Installer = await supplyT3(where.downloads, 'nightly.yml', nightly);
@@ -133,6 +134,7 @@ test('a re-run of a home set up earlier updates what is out of date, re-adds PAT
   const top = join(myDrive, profile.workspaces.top);
   const email = 'jo.bloggs@york.ac.uk';
   const uninstallKey = manifest.tools.find((/** @type {any} */ tool) => tool.id === 't3').install.versionIn;
+  const cli = skillsCli(where.home);
   /** @type {string[]} */
   const skills = profile.skills.flatMap((/** @type {any} */ source) => source.names ?? [source.source.split('/').at(-1)]);
 
@@ -160,6 +162,7 @@ test('a re-run of a home set up earlier updates what is out of date, re-adds PAT
     [join(programs, 'GitHub CLI', 'bin', 'gh.exe')]: 'the copy already there',
     [join(programs, 'npm', 'clasp.cmd')]: 'the copy already there',
     [join(programs, 'skills-cli', 'skills.cmd')]: 'the copy already there',
+    ...cli.leaves,
     [join(programs, 't3code', 'T3 Code (Nightly).exe')]: 'the copy already there',
     [join('.t3', 'bin', 't3.cmd')]: 'left by T3',
     [join('.local', 'bin', 'claude.exe')]: 'installed from T3',
@@ -173,6 +176,8 @@ test('a re-run of a home set up earlier updates what is out of date, re-adds PAT
     [join(top, 'Thinking space', 'ideas.md')]: 'half an idea',
     [join(myDrive, 'Budget 2026.xlsx')]: 'not ours',
   });
+  // Each tool's folder, marked as the installer's by the run that put it there.
+  for (const folder of ['nodejs', 'Git', 'GitHub CLI', 'npm', 'skills-cli']) await markAsInstalledByUs(join(programs, folder));
   await mkdir(join(top, 'Personal assistant', 'Drafts'));
   const foldersBefore = await snapshot(myDrive);
 
@@ -194,7 +199,7 @@ test('a re-run of a home set up earlier updates what is out of date, re-adds PAT
     'git.exe --version': [{ output: 'git version 2.50.1.windows.1\n' }, { output: `git version ${git.version}\n` }],
     'gh.exe --version': { output: `gh version ${gh.version} (2026-10-01)\n` },
     'clasp.cmd --version': { output: `${clasp.version}\n` },
-    'skills.cmd --version': { output: `${skillsCli.version}\n` },
+    [cli.key('--version')]: { output: `${skillsTool.version}\n` },
     [`reg.exe query ${uninstallKey} /v DisplayVersion`]: { output: `    DisplayVersion    REG_SZ    ${nightly}\r\n` },
     'gh.exe auth status --hostname github.com': { output: 'Logged in to github.com account octocat (keyring)\n' },
     'gh.exe api user --jq .login': { output: 'octocat\n' },
@@ -215,7 +220,7 @@ test('a re-run of a home set up earlier updates what is out of date, re-adds PAT
   checklistSays(result.stdout, 'T3 Code', `${nightly} (nightly, already installed, left as it is)`);
   checklistSays(result.stdout, 'Claude Code', `2.1.306, signed in as ${email}`);
   checklistSays(result.stdout, 'GitHub', 'Signed in as octocat');
-  checklistSays(result.stdout, 'Skills CLI', `${skillsCli.version} (already up to date)`);
+  checklistSays(result.stdout, 'Skills CLI', `${skillsTool.version} (already up to date)`);
   checklistSays(result.stdout, 'Skills', `All ${skills.length} installed`);
   checklistSays(result.stdout, 'Memory', "Claude's automatic memory is off");
 

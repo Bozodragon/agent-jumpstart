@@ -2,7 +2,6 @@
 // entries whose `when` is its id. Unticked, they are only a skipped line in the checklist.
 // Ticked, each is installed, the person signs in to it in the browser if it has a sign-in,
 // and is then sent to the profile's settings page for anything only they can switch on.
-import { join } from 'node:path';
 import { loadManifest } from './manifest.js';
 import { showPage } from './open-page.js';
 import { installTool } from './tools.js';
@@ -26,12 +25,12 @@ export async function setUpExtraTools(profile, ticked, context) {
         rows.push([tool.name, 'Skipped (not chosen)']);
         continue;
       }
-      const { installed, row } = await installTool(tool, context);
-      if (!installed || !tool.signIn) {
+      // The copy in place: the person's own, if they had one, or the installer's.
+      const { installed, row, program } = await installTool(tool, context);
+      if (!installed || !program || !tool.signIn) {
         rows.push([tool.name, row]);
         continue;
       }
-      const program = join(context.places.programs, tool.install.folder, tool.install.check);
       const { account, already } = await signIn(tool, program, extra, context);
       if (!already) signInRan = true;
       rows.push([tool.name, `${row}, ${account ? `signed in as ${account}` : 'not signed in'}`]);
@@ -65,7 +64,7 @@ async function walkThroughSettings(extra, { attended, machine, log }) {
  * sign-in runs in the person's window, so they see its address if no browser opens, and the
  * installer waits for it to finish.
  * @param {import('./manifest.js').Tool} tool
- * @param {string} program
+ * @param {import('./tools.js').Command} program
  * @param {import('./profile.js').ExtraTool} extra
  * @param {import('./tools.js').Context} context
  * @returns {Promise<{ account?: string, already: boolean }>} the account signed in, if any, and
@@ -75,7 +74,7 @@ async function signIn(tool, program, extra, { machine, log }) {
   const say = (/** @type {string} */ line) => log.write(`${tool.name}: ${line}`);
   const how = /** @type {import('./manifest.js').SignIn} */ (tool.signIn);
   const whoIsSignedIn = async () => {
-    const ran = await machine.run(program, how.check);
+    const ran = await machine.run(program.file, [...program.args, ...how.check]);
     const match = ran.code === 0 ? new RegExp(how.signedInAs, 'm').exec(ran.output) : null;
     if (!match) say('not signed in');
     return match?.[1];
@@ -87,7 +86,7 @@ async function signIn(tool, program, extra, { machine, log }) {
     return { account: before, already: true };
   }
   ui.notice(extra.signIn ?? 'A browser window will open for you to sign in.', `Sign in to ${tool.name}`);
-  const code = await machine.runOnScreen(program, how.run);
+  const code = await machine.runOnScreen(program.file, [...program.args, ...how.run]);
   say(`sign-in finished with code ${code}`);
   const after = await whoIsSignedIn();
   if (after) say(`signed in as ${after}`);

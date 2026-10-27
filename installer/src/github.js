@@ -1,13 +1,12 @@
 // The optional GitHub flow, for the person who said yes. The installer can't make the account
 // for them, so it opens the profile's sign-up page, says what to do and waits. Then the GitHub
-// CLI (the copy the installer put in place, not whatever else is on the machine) signs them in
-// through the browser and makes itself Git's credential helper, so a later clone needs no
-// password. Someone already signed in keeps Git set up the way they had it. No organisation invites: the username goes in the checklist so Jacob can send one.
-import { join } from 'node:path';
+// CLI (the copy the tools step found or put in place: the person's own, if they had one) signs
+// them in through the browser and makes itself Git's credential helper, so a later clone needs
+// no password. Someone already signed in keeps Git set up the way they had it. No organisation
+// invites: the username goes in the checklist so Jacob can send one.
 import { githubHost as host, loadManifest, toolEntry } from './manifest.js';
 import { showPage } from './open-page.js';
 import { Stop } from './stop.js';
-import { exists } from './tools.js';
 import * as ui from './ui.js';
 
 /**
@@ -16,11 +15,12 @@ import * as ui from './ui.js';
  * The page and gh go through the machine, which under a home override is the fake.
  * @param {import('./profile.js').Profile} profile
  * @param {boolean} wanted Whether the person chose to set up GitHub now.
+ * @param {Partial<Record<string, import('./tools.js').Command>>} programs The tools in place, by id.
  * @param {import('./tools.js').Context} context
  * @returns {Promise<string>} The checklist's GitHub line.
  */
-export async function setUpGitHub(profile, wanted, context) {
-  const { places, machine, downloads, log } = context;
+export async function setUpGitHub(profile, wanted, programs, context) {
+  const { machine, downloads, log } = context;
   const say = (/** @type {string} */ line) => log.write(`GitHub: ${line}`);
   if (!wanted) {
     say('not chosen, so it was skipped');
@@ -31,13 +31,17 @@ export async function setUpGitHub(profile, wanted, context) {
     throw new Stop(`The "${profile.id}" profile needs a GitHub sign-up page address and the email to sign up with.`);
   }
 
-  const gh = await installedGh(places, downloads);
-  if (!gh) {
+  const entry = toolEntry(await loadManifest(downloads), 'gh');
+  const program = entry && programs[entry.id];
+  if (!program) {
     say("the GitHub CLI isn't installed, so nobody could be signed in");
     return "Not set up: the GitHub CLI isn't installed";
   }
+  say(`using ${program.file}`);
+  /** @param {string[]} args */
+  const gh = (args) => machine.run(program.file, [...program.args, ...args]);
 
-  const status = await machine.run(gh, ['auth', 'status', '--hostname', host]);
+  const status = await gh(['auth', 'status', '--hostname', host]);
   /** @type {import('./machine.js').Ran | undefined} */
   let git;
   if (status.code === 0) {
@@ -56,17 +60,17 @@ export async function setUpGitHub(profile, wanted, context) {
       ].join('\n'),
       'Sign in to GitHub',
     );
-    const code = await machine.runOnScreen(gh, ['auth', 'login', '--hostname', host, '--git-protocol', 'https', '--web', '--clipboard']);
+    const code = await machine.runOnScreen(program.file, [...program.args, 'auth', 'login', '--hostname', host, '--git-protocol', 'https', '--web', '--clipboard']);
     if (code !== 0) {
       say(`gh auth login stopped with code ${code}`);
       return "Not signed in: the GitHub sign-in didn't finish";
     }
     // Covers someone who answered No to gh's own Git question. Only after this run's sign-in:
     // it rewrites Git's credential settings, which someone already signed in has set up already.
-    git = await machine.run(gh, ['auth', 'setup-git', '--hostname', host]);
+    git = await gh(['auth', 'setup-git', '--hostname', host]);
   }
 
-  const user = await machine.run(gh, ['api', 'user', '--jq', '.login']);
+  const user = await gh(['api', 'user', '--jq', '.login']);
   const username = user.output.trim();
   if (user.code !== 0 || username === '') {
     say("GitHub didn't say who is signed in");
@@ -101,16 +105,4 @@ async function walkThroughSignUp({ signUpPage, email }, { attended, machine, log
   } else {
     say('account taken as made from the answers file');
   }
-}
-
-/**
- * Where the installer put the GitHub CLI, if it's there.
- * @param {import('./places.js').Places} places
- * @param {string | undefined} downloads
- */
-async function installedGh(places, downloads) {
-  const tool = toolEntry(await loadManifest(downloads), 'gh');
-  if (!tool) return undefined;
-  const gh = join(places.programs, tool.install.folder, tool.install.check);
-  return (await exists(gh)) ? gh : undefined;
 }

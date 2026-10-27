@@ -1,8 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
-import { basename, join } from 'node:path';
-import { checklistSays, fakeMachine, makeHome, readOnlyLog, readProfile, readSettings, runWith, seedSettings, supplyDownloads } from './harness.js';
+import { join } from 'node:path';
+import { checklistSays, fakeMachine, makeHome, readOnlyLog, readProfile, readSettings, runWith, seedSettings, skillsCli, supplyDownloads } from './harness.js';
 
 /** Where a skill's SKILL.md is, relative to the home. @param {string} name */
 const skillFile = (name) => join('.claude', 'skills', name, 'SKILL.md');
@@ -23,16 +23,26 @@ async function yorkSkills() {
   }));
 }
 
-/** A home where the pinned skills CLI can be installed (see skills-pinning.test.js). @param {import('node:test').TestContext} t */
+/**
+ * A home where the pinned skills CLI can be installed (see skills-pinning.test.js). A test that
+ * sets its own replies keeps `cli.install` among them, so npm still leaves the CLI in place.
+ * @param {import('node:test').TestContext} t
+ */
 async function homeWithSkillsCli(t) {
   const where = await makeHome(t);
   await supplyDownloads(where, ['skills']);
-  return where;
+  const cli = skillsCli(where.home);
+  await fakeMachine(where.home).setReplies(cli.install);
+  return { ...where, cli };
 }
 
-/** @param {string} home */
+/**
+ * Each `add` the skills CLI was run with, with the arguments it was given (after its script).
+ * @param {string} home
+ */
 async function skillsCliRuns(home) {
-  return (await fakeMachine(home).runs()).filter((ran) => basename(ran.file) === 'skills.cmd' && ran.args[0] === 'add');
+  const cli = skillsCli(home);
+  return (await fakeMachine(home).runs()).filter((ran) => cli.isRun(ran) && ran.args[1] === 'add').map((ran) => ({ ...ran, args: ran.args.slice(1) }));
 }
 
 test('each skill in the profile is installed with the pinned skills CLI, from its source as the profile gives it, globally, for Claude Code, with no prompts', async (t) => {
@@ -69,8 +79,8 @@ test("with no network, every skill is reported as not installed, since none arri
 test('a skills CLI that fails is reported, with its output in the log', async (t) => {
   const where = await homeWithSkillsCli(t);
   await fakeMachine(where.home).setReplies({
-    'skills.cmd --version': { output: '1.7.4\n' },
-    'skills.cmd': { code: 1, output: 'Failed to clone repository' },
+    ...where.cli.install,
+    [where.cli.key('add')]: { code: 1, output: 'Failed to clone repository' },
   });
 
   const result = await runWith(where, 'york');
@@ -83,7 +93,7 @@ test('a skills CLI that fails is reported, with its output in the log', async (t
 test("skills found in Claude's skills folder after the skills CLI ran are reported as installed, and recorded as the installer's", async (t) => {
   const where = await homeWithSkillsCli(t);
   const all = (await yorkSkills()).flatMap(({ names }) => names);
-  await fakeMachine(where.home).setReplies({ 'skills.cmd add': { creates: all.map(skillFile) } });
+  await fakeMachine(where.home).setReplies({ ...where.cli.install, [where.cli.key('add')]: { creates: all.map(skillFile) } });
 
   const result = await runWith(where, 'york');
 
@@ -103,7 +113,7 @@ test("a skill already in Claude's skills folder that the installer didn't put th
     await writeFile(join(where.home, skillFile(name)), 'their own version');
   }
   const all = (await yorkSkills()).flatMap(({ names }) => names);
-  await fakeMachine(where.home).setReplies({ 'skills.cmd add': { creates: all.filter((name) => !theirs.includes(name)).map(skillFile) } });
+  await fakeMachine(where.home).setReplies({ ...where.cli.install, [where.cli.key('add')]: { creates: all.filter((name) => !theirs.includes(name)).map(skillFile) } });
 
   const result = await runWith(where, 'york');
 

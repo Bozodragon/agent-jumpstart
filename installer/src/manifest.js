@@ -39,7 +39,12 @@ const pinned = fileURLToPath(new URL('../../manifest.json', import.meta.url));
  *   (the downloaded .tgz) is installed globally with the folder as npm's prefix.
  * @property {string} folder Under `%LOCALAPPDATA%\Programs`.
  * @property {string[]} path Folders inside it to put on the user PATH.
- * @property {string} check The program inside it to run with `--version`.
+ * @property {string} check The program inside it to run with `--version`. Its file name is what's
+ *   looked for on the PATH, for a copy the person already has.
+ * @property {string} [package] For an npm package only the installer runs (no `path`): the
+ *   package's name. It's run with the installer's own Node and the bin script its package.json
+ *   names, rather than through `check` (the .cmd shim npm leaves, which would run whichever node
+ *   is first on PATH).
  * @property {string[]} [arguments] For an installer; `{folder}` is replaced with the folder.
  */
 

@@ -154,9 +154,9 @@ async function main() {
     const workspaces = await createWorkspaces(choices.topWorkspace, choices.workspaces, log);
     done.push(...workspaces.rows);
 
-    const tools = await installTools(context);
+    const { rows: tools, programs } = await installTools(context);
     done.push(...tools);
-    const github = await setUpGitHub(profile, choices.github, context);
+    const github = await setUpGitHub(profile, choices.github, programs, context);
     done.push(['GitHub', github]);
     const ours = Array.isArray(earlier?.skillsInstalled) ? earlier.skillsInstalled.filter((name) => typeof name === 'string') : [];
     const skills = await installSkills(profile, ours, context);

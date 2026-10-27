@@ -18,7 +18,7 @@ export async function readProfile(name) {
 
 /** @typedef {'signed-in' | 'signed-out' | 'missing'} GoogleDriveState */
 
-/** @typedef {{ code?: number, output?: string, creates?: string[] }} Reply What a faked program run returns and leaves behind. */
+/** @typedef {{ code?: number, output?: string, creates?: string[], writes?: Record<string, string> }} Reply What a faked program run returns and leaves behind. */
 
 /**
  * A temporary home with an answers file and an empty downloads folder,
@@ -108,6 +108,51 @@ export function programsFolder(home) {
   return join(home, 'AppData', 'Local', 'Programs');
 }
 
+/**
+ * The file the installer leaves in a tool's folder once it has installed the tool there: how a
+ * later run knows that copy is its own to update, rather than the person's to leave alone.
+ */
+export const installedMarker = '.installed-by-agent-jumpstart';
+
+/**
+ * Leaves the marker in a tool's folder, as an earlier run of the installer would have.
+ * @param {string} folder
+ */
+export async function markAsInstalledByUs(folder) {
+  await mkdir(folder, { recursive: true });
+  await writeFile(join(folder, installedMarker), 'Installed by agent-jumpstart');
+}
+
+/**
+ * The skills CLI as the installer runs it: with the installer's own Node (in a test, the Node
+ * running the tests) and the bin script its package names, never through skills.cmd.
+ * @param {string} home
+ */
+export function skillsCli(home) {
+  const folder = join(programsFolder(home), 'skills-cli');
+  const packageFolder = join(folder, 'node_modules', 'skills');
+  const script = join(packageFolder, 'bin', 'cli.mjs');
+  /** What npm leaves in the CLI's folder: the package's package.json, naming its bin script, and the script. */
+  const leaves = {
+    [join(packageFolder, 'package.json')]: JSON.stringify({ name: 'skills', version: '1.7.4', bin: { skills: 'bin/cli.mjs', 'add-skill': 'bin/cli.mjs' } }),
+    [script]: 'stand-in',
+  };
+  return {
+    folder,
+    script,
+    leaves,
+    /** A reply key for a run of the CLI with these first arguments. @param {string[]} args */
+    key: (...args) => [basename(process.execPath), script, ...args].join(' '),
+    /** Whether a recorded run is a run of the CLI. @param {{ file: string, args: string[] }} run */
+    isRun: (run) => run.file === process.execPath && run.args[0] === script,
+    /**
+     * npm installing the CLI into its folder, as a reply to spread into a test's replies.
+     * @type {Record<string, Reply>}
+     */
+    install: { [`npm.cmd install --global --prefix ${folder}`]: { writes: leaves } },
+  };
+}
+
 /** The pinned manifest in the repo. */
 export async function readManifest() {
   return JSON.parse(await readFile(join(repo, 'manifest.json'), 'utf8'));
@@ -148,11 +193,14 @@ export function fakeMachine(home) {
     pagesOpened: () => readJson('pages.json', []),
     /** @param {Record<string, string>} variables */
     setEnvironment: (variables) => writeJson('environment.json', variables),
+    /** @param {string[]} folders the machine-wide PATH, which Windows searches before the user's */
+    setMachinePath: (folders) => writeJson('machine-path.json', folders),
     /**
      * Keyed by the program's file name, optionally followed by its first arguments
      * (`"node.exe --version"`, `"skills.cmd add"`); the longest key that matches wins. Runs with no reply succeed with no output.
      * A list answers successive runs with that key in turn, and its last reply repeats.
-     * A reply may also list files the run leaves, relative to the home (`creates`).
+     * A reply may also list files the run leaves, relative to the home (`creates`), or files with
+     * their contents (`writes`).
      * @param {Record<string, Reply | Reply[]>} replies
      */
     setReplies: (replies) => writeJson('replies.json', replies),
@@ -256,12 +304,12 @@ export async function seedT3Projects(home, projects) {
 
 /**
  * Asserts the printed checklist (or another summary) has a row with this label and value. A row
- * can be long enough for its box to wrap it, so the output is read as flowing text: borders gone
- * and each run of spaces and line breaks one space.
+ * can be long enough for its box to wrap it, even in the middle of a path, so the output is read
+ * with its borders and all its spaces and line breaks taken out.
  * @param {string} stdout @param {string} label @param {string} value
  */
 export function checklistSays(stdout, label, value) {
-  const flowing = (/** @type {string} */ text) => text.replace(/[│|]/g, ' ').replace(/\s+/g, ' ');
+  const flowing = (/** @type {string} */ text) => text.replace(/[│|]|\s/g, '');
   assert.ok(flowing(stdout).includes(flowing(`${label} ${value}`)), `expected a checklist line "${label} … ${value}" in:\n${stdout}`);
 }
 

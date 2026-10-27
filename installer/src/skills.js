@@ -1,9 +1,11 @@
 // Installs the profile's skills for Claude Code with the skills CLI. The CLI is pinned like
 // clasp: its npm package, checked against the manifest's checksum and installed per user into
-// a folder of its own (off the user PATH: only the installer runs it). Then, per source, with
-// the flags that stop it asking anything:
+// a folder of its own (off the user PATH: only the installer runs it), and run with the
+// installer's own Node and the bin script the package names, never through skills.cmd, which
+// would run whichever node is first on PATH. Then, per source, with the flags that stop it
+// asking anything:
 //
-//   <folder>\skills.cmd add <source> -g -a claude-code -y [-s <name> ...]
+//   <installer's node> <folder>\node_modules\skills\<bin script> add <source> -g -a claude-code -y [-s <name> ...]
 //
 // Skill sources aren't pinned: each is added from its default branch, as the profile gives it.
 // -a claude-code is always given: with -y alone the CLI installs to every agent it knows. -s
@@ -37,8 +39,9 @@ export async function installSkills(profile, ours, context) {
 
   const manifest = await loadManifest(downloads);
   const entry = toolEntry(manifest, 'skills');
+  /** @type {import('./tools.js').Installed} */
   const cli = entry ? await installTool(entry, context) : { installed: false, row: 'Not installed: the list of versions has no entry for it' };
-  const program = entry && join(places.programs, entry.install.folder, entry.install.check);
+  const program = cli.installed ? cli.program : undefined;
   const folder = join(places.claudeConfig, 'skills');
   if (cli.installed) log.write(`Skills: each counts as installed once ${join(folder, '<name>', 'SKILL.md')} is there`);
 
@@ -56,10 +59,10 @@ export async function installSkills(profile, ours, context) {
   for (const { source, names, skills } of named) {
     const wanted = skills.filter((name) => !theirs.includes(name));
     let ran;
-    if (cli.installed && program && wanted.length > 0) {
+    if (program && wanted.length > 0) {
       ui.step(`Installing ${wanted.length === 1 ? 'the skill' : `${wanted.length} skills`} from ${source}`);
       const args = ['add', source, '-g', '-a', 'claude-code', '-y', ...(names ? ['-s', ...wanted] : [])];
-      ran = await machine.run(program, args);
+      ran = await machine.run(program.file, [...program.args, ...args]);
     }
     for (const name of skills) {
       let value;
