@@ -291,6 +291,39 @@ for (const [what, prepare, problem] of /** @type {[string, (home: string) => Pro
   });
 }
 
+test('a re-run whose own folder is still there, with nothing in T3 Code like it, asks nothing about where the top workspace is', async (t) => {
+  const where = await makeHome(t, { topWorkspace: 'a question was asked', googleDriveFolder: 'a question was asked' }, { googleDrive: 'missing' });
+  const top = join(where.home, 'Steve', 'Agents');
+  await mkdir(join(top, 'Thinking space'), { recursive: true });
+  await seedSettings(where.home, { profile: 'york', googleDriveFolder: null, workspacesLocation: join(where.home, 'Steve'), topWorkspace: top });
+
+  const result = await runWith(where, 'york');
+
+  assert.equal(result.code, 0, result.stdout + result.stderr);
+  assert.equal((await readSettings(where.home)).topWorkspace, top);
+  assert.deepEqual(await foldersIn(top), ['Personal assistant', 'Thinking space']);
+  const log = await readOnlyLog(where.home);
+  assert.ok(log.text.includes(`Known from settings: topWorkspace: ${JSON.stringify(top)}`), log.text);
+});
+
+test("a re-run whose top workspace has gone asks again where it is, rather than quietly making it again", async (t) => {
+  const where = await makeHome(t, {}, { googleDrive: 'missing' });
+  const gone = join(where.home, 'Steve', 'Agents');
+  const now = join(where.home, 'Work', 'Claude');
+  await mkdir(join(where.home, 'Steve'));
+  await mkdir(now, { recursive: true });
+  await seedSettings(where.home, { profile: 'york', googleDriveFolder: null, workspacesLocation: join(where.home, 'Steve'), topWorkspace: gone });
+  await writeFile(where.answersFile, JSON.stringify({ topWorkspace: now }));
+
+  const result = await runWith(where, 'york');
+
+  assert.equal(result.code, 0, result.stdout + result.stderr);
+  assert.equal(await exists(gone), false, 'the one that went is not made again');
+  const settings = await readSettings(where.home);
+  assert.deepEqual([settings.topWorkspace, settings.workspacesLocation], [now, join(where.home, 'Work')]);
+  assert.deepEqual(await foldersIn(now), ['Personal assistant', 'Thinking space']);
+});
+
 test("a T3 database that can't be read offers nothing, says so in the log, and the run carries on as before", async (t) => {
   const where = await makeHome(t);
   await mkdir(join(where.home, '.t3', 'userdata'), { recursive: true });
