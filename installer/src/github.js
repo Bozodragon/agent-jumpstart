@@ -2,7 +2,7 @@
 // for them, so it opens the profile's sign-up page, says what to do and waits. Then the GitHub
 // CLI (the copy the installer put in place, not whatever else is on the machine) signs them in
 // through the browser and makes itself Git's credential helper, so a later clone needs no
-// password. No organisation invites: the username goes in the checklist so Jacob can send one.
+// password. Someone already signed in keeps Git set up the way they had it. No organisation invites: the username goes in the checklist so Jacob can send one.
 import { join } from 'node:path';
 import { githubHost as host, loadManifest, toolEntry } from './manifest.js';
 import { showPage } from './open-page.js';
@@ -38,6 +38,8 @@ export async function setUpGitHub(profile, wanted, context) {
   }
 
   const status = await machine.run(gh, ['auth', 'status', '--hostname', host]);
+  /** @type {import('./machine.js').Ran | undefined} */
+  let git;
   if (status.code === 0) {
     say('already signed in, so the sign-up page and sign-in were skipped');
   } else {
@@ -59,10 +61,11 @@ export async function setUpGitHub(profile, wanted, context) {
       say(`gh auth login stopped with code ${code}`);
       return "Not signed in: the GitHub sign-in didn't finish";
     }
+    // Covers someone who answered No to gh's own Git question. Only after this run's sign-in:
+    // it rewrites Git's credential settings, which someone already signed in has set up already.
+    git = await machine.run(gh, ['auth', 'setup-git', '--hostname', host]);
   }
 
-  // Safe to repeat, and covers someone who answered No to gh's own Git question.
-  const git = await machine.run(gh, ['auth', 'setup-git', '--hostname', host]);
   const user = await machine.run(gh, ['api', 'user', '--jq', '.login']);
   const username = user.output.trim();
   if (user.code !== 0 || username === '') {
@@ -70,7 +73,7 @@ export async function setUpGitHub(profile, wanted, context) {
     return "Not signed in: GitHub didn't say who you are";
   }
   say(`signed in as ${username}`);
-  if (git.code !== 0) {
+  if (git && git.code !== 0) {
     say("Git couldn't be set up to use the sign-in");
     return `Signed in as ${username}, but Git isn't set up to use it`;
   }

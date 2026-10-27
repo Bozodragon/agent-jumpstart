@@ -79,7 +79,7 @@ test('with GitHub chosen, the sign-up page is shown with what to do, then gh (th
   assert.ok(log.text.includes('Checklist: GitHub: Signed in as octocat-york'), log.text);
 });
 
-test('someone already signed in to gh is left signed in, sent to no sign-up page, and their username still goes in the checklist', async (t) => {
+test("someone already signed in to gh is left signed in, sent to no sign-up page, their Git settings aren't touched, and their username still goes in the checklist", async (t) => {
   const where = await makeHome(t, { github: true });
   const { gh, replies } = await ghAlreadyInstalled(where.home);
   await fakeMachine(where.home).setReplies({ ...replies, 'gh.exe api user --jq .login': { output: 'already-here\n' } });
@@ -89,9 +89,9 @@ test('someone already signed in to gh is left signed in, sent to no sign-up page
 
   assert.equal(result.code, 0, result.stdout + result.stderr);
   assert.ok(!result.stdout.includes(profile.github.signUpPage), result.stdout);
+  // gh auth setup-git rewrites Git's credential settings, which someone already signed in has set up their own way.
   assert.deepEqual(ghCommands(await fakeMachine(where.home).runs(), gh), [
     'auth status --hostname github.com',
-    'auth setup-git --hostname github.com',
     'api user --jq .login',
   ]);
   checklistSays(result.stdout, 'GitHub', 'Signed in as already-here');
