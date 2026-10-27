@@ -1,5 +1,6 @@
 // The questions, built from the profile and what is already on the laptop. Each has a default,
 // so pressing Enter (or leaving it out of an answers file) gives a sensible setup.
+import { stat } from 'node:fs/promises';
 import { dirname, isAbsolute, join } from 'node:path';
 import { findGoogleDrive, isFolder } from './google-drive.js';
 import { Stop } from './stop.js';
@@ -42,7 +43,9 @@ import { existingTopWorkspaces, topWorkspaceIn } from './workspaces.js';
  * file. `key` names the answer in an answers file.
  * @typedef {object} Asker
  * @property {(q: { key: string, message: string, initial: string | undefined, placeholder: string, validate: (value: string) => Promise<string | undefined> }) => Promise<string>} folder
- * @property {<T extends string>(q: { key: string, message: string, options: Option<T>[], initial: T }) => Promise<T>} choose
+ * @property {<T extends string>(q: { key: string, message: string, options: Option<T>[], initial: T, other?: T }) => Promise<T>} choose
+ *   `other`, if given, is the option whose answer a follow-up `folder` question with the same key
+ *   asks for; an answers file gives that folder's whole path in place of the option.
  * @property {(q: { key: string, message: string, initial: boolean }) => Promise<boolean>} confirm
  * @property {<T extends string>(q: { key: string, message: string, options: Option<T>[], initial: T[] }) => Promise<T[]>} pick
  */
@@ -65,13 +68,24 @@ async function mustBeAPath(value) {
   return isAbsolute(value) ? undefined : 'Give the whole path, starting with the drive letter.';
 }
 
-/** The `topWorkspace` answer that sets up a new top workspace rather than using one T3 Code lists. */
+/** @param {string} value */
+async function mustBeAFolderOrMakeable(value) {
+  if (!isAbsolute(value)) return 'Give the whole path, starting with the drive letter.';
+  const found = await stat(value).catch(() => undefined);
+  if (found?.isDirectory()) return undefined;
+  if (found) return `${value} is a file, not a folder.`;
+  if (!(await isFolder(dirname(value)))) return `There is no folder at ${dirname(value)} to make it in.`;
+  return undefined;
+}
+
+/** The `topWorkspace` answer that sets up a new top workspace, where the profile says. */
 const newTopWorkspace = 'new';
+/** The `topWorkspace` answer that uses a folder the person names. An answers file gives the folder's path instead. */
+const anotherFolder = 'another';
 
 /**
- * Under a profile that keeps workspaces in Google Drive, stops before asking
- * anything if Drive for desktop isn't there or isn't signed in, unless the
- * person uses a top workspace they already have.
+ * Under a profile that keeps workspaces in Google Drive, stops if Drive for desktop isn't there
+ * or isn't signed in, but only once the person has chosen to make a new top workspace.
  * @param {import('./profile.js').Profile} profile
  * @param {import('./places.js').Places} places
  * @param {Asker} ask
@@ -92,16 +106,17 @@ async function earlierTopWorkspace(earlier, log) {
   const top = earlier?.topWorkspace;
   if (typeof top !== 'string' || !isAbsolute(top)) return undefined;
   if (await isFolder(top)) return top;
-  log.write(`Settings: topWorkspace ${top} is no longer there, so where workspaces live is asked again`);
+  log.write(`Settings: topWorkspace ${top} is no longer there, so where the top workspace is is asked again`);
   return undefined;
 }
 
 /** @typedef {Pick<Answers, 'googleDriveFolder' | 'workspacesLocation' | 'topWorkspace'>} Location */
 
 /**
- * Where the top workspace is: an earlier run's, if it's still there; one already in T3 Code, if
- * the person chooses it (no Google Drive check then: it's used wherever it is); or else a new one
- * in Google Drive or the folder the person gives, as the profile says.
+ * Where the top workspace is: an earlier run's, if it's still there. Otherwise the person is
+ * asked, and chooses one already in T3 Code, a new one where the profile says (in Google Drive
+ * or the folder they give), or another folder of their own. Only a new one in Google Drive
+ * needs Drive for desktop; the others are used wherever they are.
  * @param {import('./profile.js').Profile} profile @param {import('./places.js').Places} places
  * @param {Asker} ask @param {{ write(line: string): void }} log @param {Found} found
  * @returns {Promise<Location>}
@@ -118,37 +133,70 @@ async function whereWorkspacesLive(profile, places, ask, log, found) {
     log.write(`Known from settings: topWorkspace: ${JSON.stringify(earlier)}`);
     return using(earlier);
   }
-  const existing = await existingTopWorkspaces(profile, places, log);
-  if (existing.length > 0) {
-    const chosen = await ask.choose({
-      key: 'topWorkspace',
-      message: 'T3 Code already has a workspace like this. Use it as your top workspace, or set up a new one?',
-      options: [
-        ...existing.map((folder) => ({ value: folder, label: `Use ${folder}` })),
-        { value: newTopWorkspace, label: 'Set up a new one' },
-      ],
-      initial: existing[0],
-    });
-    if (chosen !== newTopWorkspace) {
-      log.write(`Answer: topWorkspace: ${JSON.stringify(chosen)} (already there, so it's used as it is)`);
-      return using(chosen);
-    }
+  // Only looked at here, to say where a new one would go; whether it stops the run waits for the answer.
+  const drive = profile.workspaces.inGoogleDrive ? await findGoogleDrive(places) : undefined;
+  if (drive) log.write(`Google Drive for desktop: ${drive.status}${drive.status === 'signed-in' ? `, My Drive ${drive.folder ?? 'not found'}` : ''}`);
+  // Settings from before this was asked: that run set up a new one where its answers say.
+  const earlierLocation = drive ? 'googleDriveFolder' : 'workspacesLocation';
+  if (found.earlier && !('topWorkspace' in found.earlier) && earlierLocation in found.earlier) {
+    log.write(`Known from settings: topWorkspace: "${newTopWorkspace}" (an earlier run set one up where its ${earlierLocation} says)`);
+    return newLocation(profile, places, ask, drive);
   }
-  return newLocation(profile, places, ask, log);
+  const existing = await existingTopWorkspaces(profile, places, log);
+  const chosen = await ask.choose({
+    key: 'topWorkspace',
+    message: "Where's your top workspace? Your other workspaces go inside it.",
+    options: [
+      ...existing.map((folder) => ({ value: folder, label: `Use ${folder}`, hint: 'already in T3 Code' })),
+      { value: newTopWorkspace, label: `Make a new one ${whereNewGoes(profile, places, drive)}` },
+      { value: anotherFolder, label: 'Use another folder', hint: "you'll type where it is next" },
+    ],
+    initial: existing[0] ?? newTopWorkspace,
+    other: anotherFolder,
+  });
+  if (chosen === newTopWorkspace) {
+    log.write(`Answer: topWorkspace: "${newTopWorkspace}"`);
+    return newLocation(profile, places, ask, drive);
+  }
+  if (chosen !== anotherFolder) {
+    log.write(`Answer: topWorkspace: ${JSON.stringify(chosen)} (already there, so it's used as it is)`);
+    return using(chosen);
+  }
+  const folder = await ask.folder({
+    key: 'topWorkspace',
+    message: "What's the folder's whole path? If it's already there, it's used as it is; if not, it's made.",
+    initial: undefined,
+    placeholder: join(places.home, 'Documents', profile.workspaces.top),
+    validate: mustBeAFolderOrMakeable,
+  });
+  const there = await isFolder(folder);
+  log.write(`Answer: topWorkspace: ${JSON.stringify(folder)} (${there ? "already there, so it's used as it is" : "not there yet, so it's made"})`);
+  return { googleDriveFolder: null, workspacesLocation: dirname(folder), topWorkspace: folder };
 }
 
 /**
- * The questions for a new top workspace: the Google Drive folder, or the folder workspaces live in.
+ * Where a new top workspace would go, for the option that makes one.
  * @param {import('./profile.js').Profile} profile @param {import('./places.js').Places} places
- * @param {Asker} ask @param {{ write(line: string): void }} log
+ * @param {import('./google-drive.js').GoogleDrive | undefined} drive what was found, under a Google Drive profile
+ */
+function whereNewGoes(profile, places, drive) {
+  if (!drive) return `at ${topWorkspaceIn(profile, join(places.home, profile.workspaces.defaultLocation ?? ''))}`;
+  if (drive.status === 'signed-in' && drive.folder) return `at ${topWorkspaceIn(profile, drive.folder)}`;
+  return `called ${profile.workspaces.top} in your Google Drive`;
+}
+
+/**
+ * The questions for a new top workspace: the Google Drive folder, or the folder workspaces live
+ * in. Under a Google Drive profile, stops first if Drive for desktop isn't there or isn't signed in.
+ * @param {import('./profile.js').Profile} profile @param {import('./places.js').Places} places
+ * @param {Asker} ask
+ * @param {import('./google-drive.js').GoogleDrive | undefined} drive what was found, under a Google Drive profile
  * @returns {Promise<Location>}
  */
-async function newLocation(profile, places, ask, log) {
+async function newLocation(profile, places, ask, drive) {
   let googleDriveFolder = null;
   let workspacesLocation;
-  if (profile.workspaces.inGoogleDrive) {
-    const drive = await findGoogleDrive(places);
-    log.write(`Google Drive for desktop: ${drive.status}${drive.status === 'signed-in' ? `, My Drive ${drive.folder ?? 'not found'}` : ''}`);
+  if (drive) {
     if (drive.status === 'not-installed') {
       throw new Stop(
         "Your workspaces live in Google Drive, so Google Drive for desktop is needed first, and it isn't on this laptop (or hasn't been opened yet). Install it, sign in, then paste the same line again.",
@@ -244,21 +292,24 @@ async function theRest(profile, ask, log, found, { googleDriveFolder, workspaces
  * On a re-run: answers from the settings file an earlier run wrote, so nothing already known is
  * asked again. Only an answer that's missing (a key added since), or no longer right (a folder
  * that's gone, a name the profile no longer offers), goes to `ask`, the person or the answers
- * file.
+ * file. The top workspace is the exception: askQuestions uses the settings' one itself while
+ * it's there, so the question is put only when it's gone or was never written down, and the
+ * settings never answer it.
  * @param {Record<string, unknown>} settings
  * @param {Asker} ask
  * @param {{ write(line: string): void }} log
  * @returns {Asker}
  */
 export function knownFrom(settings, ask, log) {
-  const known = answersFrom(settings);
+  const { topWorkspace, ...answerable } = settings;
+  const known = answersFrom(answerable);
   /**
    * @template T
    * @param {string} key @param {() => Promise<T>} fromSettings @param {() => Promise<T>} otherwise
    * @returns {Promise<T>}
    */
   const either = async (key, fromSettings, otherwise) => {
-    if (key in settings) {
+    if (key in answerable) {
       try {
         const value = await fromSettings();
         log.write(`Known from settings: ${key}: ${JSON.stringify(value)}`);
@@ -299,11 +350,14 @@ export function answersFrom(file) {
       if (problem) throw wrong(key, problem);
       return value;
     },
-    async choose({ key, options, initial }) {
+    async choose({ key, options, initial, other }) {
       const value = file[key] ?? initial;
-      const option = options.find((candidate) => candidate.value === value);
-      if (!option) throw wrong(key, `it should be one of ${listOf(options)}.`);
-      return option.value;
+      // The option for a folder of the person's own is answered with the folder's path.
+      const named = options.filter((candidate) => candidate.value !== other);
+      const option = named.find((candidate) => candidate.value === value);
+      if (option) return option.value;
+      if (other !== undefined && typeof value === 'string' && isAbsolute(value)) return other;
+      throw wrong(key, `it should be one of ${listOf(named)}${other === undefined ? '' : ", or a folder's whole path"}.`);
     },
     async confirm({ key, initial }) {
       const value = file[key] ?? initial;

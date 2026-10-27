@@ -191,7 +191,7 @@ test("a T3 project is offered when its title is the profile's top workspace or i
   const result = await runWith(where, 'york');
 
   assert.equal(result.code, 1, result.stdout + result.stderr);
-  assert.ok(result.stdout.includes(`it should be one of "${named}", "${holding}", "new"`), result.stdout);
+  assert.ok(result.stdout.includes(`it should be one of "${named}", "${holding}", "new", or a folder's whole path.`), result.stdout);
 });
 
 test('choosing to set up a new top workspace makes it where it always went, and T3 lists it beside the old one', async (t) => {
@@ -223,6 +223,33 @@ test('a re-run whose top workspace is still there asks nothing about where works
   assert.equal(result.code, 0, result.stdout + result.stderr);
   assert.equal((await readSettings(where.home)).topWorkspace, top);
   assert.deepEqual(await foldersIn(top), ['Personal assistant', 'Thinking space']);
+});
+
+test('a folder of their own, whatever its name and with nothing in T3 Code like it, is used as it is: no Google Drive check, only the missing workspaces made inside it, and T3 lists it', async (t) => {
+  // Google Drive for desktop isn't even installed: a run that looked for it would stop.
+  const where = await makeHome(t, {}, { googleDrive: 'missing' });
+  const top = join(where.home, 'Steve', 'Agents');
+  await mkdir(join(top, 'Thinking space'), { recursive: true });
+  await writeFile(join(top, 'Thinking space', 'ideas.md'), 'my ideas');
+  await writeFile(where.answersFile, JSON.stringify({ topWorkspace: top }));
+  const installer = await supplyT3(where.downloads, 'latest.yml', '0.1.2');
+  await fakeMachine(where.home).setReplies({ [`${installer} /S --force-run`]: { creates: [t3Leaves.program, t3Leaves.shim] } });
+
+  const result = await runWith(where, 'york');
+
+  assert.equal(result.code, 0, result.stdout + result.stderr);
+  assert.deepEqual(await foldersIn(top), ['Personal assistant', 'Thinking space']);
+  assert.equal(await readFile(join(top, 'Thinking space', 'ideas.md'), 'utf8'), 'my ideas');
+  assert.equal(await exists(join(where.home, 'My Drive')), false, 'no top workspace was made in Google Drive');
+  const settings = await readSettings(where.home);
+  assert.equal(settings.topWorkspace, top);
+  assert.equal(settings.workspacesLocation, join(where.home, 'Steve'));
+  assert.equal(settings.googleDriveFolder, null);
+  assert.deepEqual(await t3Projects(where.home), [{ folder: top, title: 'Agents' }]);
+  const log = await readOnlyLog(where.home);
+  assert.ok(log.text.includes(`Workspace already there: ${top}`), log.text);
+  assert.ok(log.text.includes(`Workspace already there: ${join(top, 'Thinking space')}`), log.text);
+  assert.ok(log.text.includes(`Workspace created: ${join(top, 'Personal assistant')}`), log.text);
 });
 
 test("a T3 database that can't be read offers nothing, says so in the log, and the run carries on as before", async (t) => {
