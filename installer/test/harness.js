@@ -153,6 +153,21 @@ export function skillsCli(home) {
   };
 }
 
+/**
+ * Puts a Git on the machine-wide PATH, as Software Centre would, outside the installer's own
+ * folders: `<home>\Program Files\Git\cmd\git.exe`.
+ * @param {string} home
+ * @returns {Promise<string>} the folder on the machine PATH
+ */
+export async function gitOnMachinePath(home) {
+  const folder = join(home, 'Program Files', 'Git', 'cmd');
+  await mkdir(folder, { recursive: true });
+  await writeFile(join(folder, 'git.exe'), 'stand-in');
+  const machine = fakeMachine(home);
+  await machine.setMachinePath([folder]);
+  return folder;
+}
+
 /** The pinned manifest in the repo. */
 export async function readManifest() {
   return JSON.parse(await readFile(join(repo, 'manifest.json'), 'utf8'));
@@ -187,7 +202,11 @@ export function fakeMachine(home) {
     environment: () => readJson('environment.json'),
     /** @returns {Promise<string[]>} the user PATH, one entry per item */
     userPath: async () => ((await readJson('environment.json')).Path ?? '').split(';').filter(Boolean),
-    /** @returns {Promise<{ file: string, args: string[], onScreen?: boolean }[]>} */
+    /**
+     * Each program it was asked to run, with the PATH it was started with (`path`, entries joined
+     * with `;`), rebuilt at that moment from the machine PATH, the user PATH and the installer's own.
+     * @returns {Promise<{ file: string, args: string[], path: string, onScreen?: boolean }[]>}
+     */
     runs: () => readJson('runs.json', []),
     /** @returns {Promise<string[]>} the addresses it was asked to open in the browser, in order */
     pagesOpened: () => readJson('pages.json', []),
