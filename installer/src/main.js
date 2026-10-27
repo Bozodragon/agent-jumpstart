@@ -180,7 +180,7 @@ async function main() {
     // Last of the installs, after every other tool and its PATH entry, Claude Code's among them
     // though it isn't there yet: T3 reads PATH only when it starts.
     await makeWayForClaude(context);
-    const t3 = await installT3(choices.channel, foundT3, context);
+    const t3 = await installT3(profile, choices.channel, foundT3, context);
     done.push(['T3 Code', t3.row]);
     // After T3's first start, which leaves the command-line shim that adds a project.
     const workspacesLine = await addToT3(workspaces, t3, context);

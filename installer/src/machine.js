@@ -21,6 +21,10 @@
 //                                         program, the files an app writes when it starts), and
 //                                         files to write with their contents ("writes": { path:
 //                                         contents }), such as the package.json npm leaves.
+//                                         It may also list files, relative to the home, that
+//                                         the program reads as it starts ("reads": [...]); the
+//                                         run's record then says which of them were there
+//                                         ("found": [...]), before it left anything.
 //   <home>/fake-machine/machine-path.json written by a test: the machine-wide PATH, a list of
 //                                         folders. The real one is read from the registry.
 //   <home>/fake-machine/waiting.json      written by a test: time, which the fake only counts.
@@ -105,7 +109,7 @@ export async function keepTrying({ machine, every, patience = machine.patience }
 
 /** @typedef {{ code: number, output: string }} Ran */
 
-/** @typedef {Partial<Ran> & { creates?: string[], writes?: Record<string, string> }} Reply What a fake run returns and leaves behind. */
+/** @typedef {Partial<Ran> & { creates?: string[], writes?: Record<string, string>, reads?: string[] }} Reply What a fake run returns, leaves behind, and looks for as it starts. */
 
 /** @typedef {{ machinePath: string[], userPath: string[] }} PathSources The two PATHs, unexpanded. */
 
@@ -304,11 +308,14 @@ function fakeMachine(folder, home) {
     startOnScreen: async (file, args, env) => (await reply(file, args, { file, args, path: env.Path ?? '', onScreen: true })).code,
   };
 
-  /** @param {string} file @param {string[]} args @param {{ file: string, args: string[], path: string, onScreen?: boolean }} record @returns {Promise<Ran>} */
+  /**
+   * @param {string} file @param {string[]} args
+   * @param {{ file: string, args: string[], path: string, onScreen?: boolean, found?: string[] }} record
+   * @returns {Promise<Ran>}
+   */
   async function reply(file, args, record) {
     /** @type {{ file: string, args: string[] }[]} */
     const runs = await read('runs.json', []);
-    await write('runs.json', [...runs, record]);
     /** @type {Record<string, Reply | Reply[]>} */
     const replies = await read('replies.json', {});
     /** @param {string} key @param {(run: { file: string, args: string[] }) => string} keyOf */
@@ -324,6 +331,12 @@ function fakeMachine(folder, home) {
       found = answer([basename(file), ...args.slice(0, count)].join(' '), (run) => [basename(run.file), ...run.args.slice(0, count)].join(' '));
     }
     found ??= {};
+    // What the program reads as it starts, looked at before it leaves anything.
+    if (found.reads) {
+      record.found = [];
+      for (const path of found.reads) if (existsSync(inside(home, path))) record.found.push(path);
+    }
+    await write('runs.json', [...runs, record]);
     const leaves = [
       ...(found.creates ?? []).map((path) => [path, `left by a fake run of ${basename(file)}`]),
       ...Object.entries(found.writes ?? {}),

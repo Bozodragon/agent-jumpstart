@@ -22,6 +22,11 @@
   "googleDrive": {
     "install": "Open Software Centre from the Start menu, search for Google Drive, click Install, then open Google Drive from the Start menu and sign in with your university Google account."
   },
+  "t3": {
+    "defaultModel": "claude-opus-5-5",
+    "effort": "medium",
+    "codex": false
+  },
   "connectors": [
     {
       "name": "Gmail",

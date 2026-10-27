@@ -22,7 +22,7 @@ export async function readProfile(name) {
  * @typedef {'signed-in' | 'signed-out' | 'missing' | 'signed-in, no My Drive yet'} GoogleDriveState
  */
 
-/** @typedef {{ code?: number, output?: string, creates?: string[], writes?: Record<string, string> }} Reply What a faked program run returns and leaves behind. */
+/** @typedef {{ code?: number, output?: string, creates?: string[], writes?: Record<string, string>, reads?: string[] }} Reply What a faked program run returns, leaves behind, and looks for as it starts (its record says which of `reads` it `found`). */
 
 /**
  * A temporary home with an answers file and an empty downloads folder,
@@ -207,7 +207,8 @@ export function fakeMachine(home) {
     /**
      * Each program it was asked to run, with the PATH it was started with (`path`, entries joined
      * with `;`), rebuilt at that moment from the machine PATH, the user PATH and the installer's own.
-     * @returns {Promise<{ file: string, args: string[], path: string, onScreen?: boolean }[]>}
+     * A reply's `reads` adds `found`: which of those files were there when the program started.
+     * @returns {Promise<{ file: string, args: string[], path: string, onScreen?: boolean, found?: string[] }[]>}
      */
     runs: () => readJson('runs.json', []),
     /** @returns {Promise<string[]>} the addresses it was asked to open in the browser, in order */

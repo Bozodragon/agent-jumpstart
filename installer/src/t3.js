@@ -5,9 +5,15 @@
 // PATH only when it starts. The silent install starts T3, and T3's first start leaves its
 // command-line shim, which is how the installer knows T3 has opened at least once.
 //
+// T3 is set up for the person rather than walked through: just before its installer runs, two
+// files go in T3's data folder, which T3 reads only as it starts. client-settings.json marks its
+// first-run wizard done, and settings.json sets what the profile's `t3` says (Codex off; new
+// threads on Claude, with its model and effort). Either file already there is left as it is.
+//
 // A T3 already on the laptop, on either channel and at any build, is left exactly as it is: no
 // download, no update and no switch of channel (T3 updates itself), and the channel isn't asked.
-import { rm } from 'node:fs/promises';
+// Its settings aren't touched.
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { basename, join } from 'node:path';
 import { keepTrying, system32 } from './machine.js';
 import { loadManifest, toolEntry } from './manifest.js';
@@ -62,12 +68,13 @@ export async function findT3({ places, machine, downloads, log }) {
 }
 
 /**
+ * @param {import('./profile.js').Profile} profile Its `t3` says how a T3 installed now is set up.
  * @param {'stable' | 'nightly'} channel
  * @param {FoundT3 | undefined} found A T3 already installed, which is left as it is.
  * @param {import('./tools.js').Context} context
  * @returns {Promise<T3Result>}
  */
-export async function installT3(channel, found, context) {
+export async function installT3(profile, channel, found, context) {
   const { places, machine, downloads, keepDownloads, log, attended } = context;
   const entry = toolEntry(await loadManifest(downloads), 't3');
   if (!entry) return { row: 'Not installed: the list of versions has no entry for it', installed: false, opened: false };
@@ -95,6 +102,8 @@ export async function installT3(channel, found, context) {
       const file = await obtain({ url: release.url }, { downloads, saveIn: join(places.state, 'downloads'), say });
       try {
         await checkSha512(file, release.sha512, say);
+        // The install starts T3, which reads its settings only as it starts.
+        await setUpT3(profile, places.t3UserData, say);
         const ran = await machine.run(file, entry.install.arguments);
         if (ran.code !== 0) throw new NotInstalled(`its installer stopped with code ${ran.code}`);
       } finally {
@@ -127,6 +136,42 @@ export async function installT3(channel, found, context) {
   const opened = await waitForFirstLaunch(shim, machine.patience, { machine, attended, say, name: entry.name });
   const state = [channel, change.installed, ...(opened ? [] : ['not opened yet'])].join(', ');
   return { row: `${release.version} (${state})`, installed: true, opened, shim };
+}
+
+/**
+ * Writes T3's settings for a T3 about to be installed, before it first starts: its first-run
+ * wizard marked done, and what the profile's `t3` says. A file that's already there is left as it
+ * is. Each written is read back and parsed, since T3 ignores one it can't parse. A file that
+ * can't be written is logged, and the install goes ahead: T3 then starts with its own defaults.
+ * @param {import('./profile.js').Profile} profile @param {string} folder T3's data folder
+ * @param {(line: string) => void} say
+ */
+async function setUpT3(profile, folder, say) {
+  const { defaultModel, effort, codex } = profile.t3 ?? {};
+  /** @type {Record<string, unknown>} */
+  const settings = {};
+  if (codex === false) settings.providerInstances = { codex: { driver: 'codex', enabled: false } };
+  if (defaultModel) {
+    settings.defaultModelSelection = { instanceId: 'claudeAgent', model: defaultModel, options: effort ? [{ id: 'effort', value: effort }] : [] };
+  }
+  /** @type {[string, Record<string, unknown>][]} */
+  const files = [['client-settings.json', { onboardingCompletedAt: new Date().toISOString() }]];
+  if (Object.keys(settings).length > 0) files.push(['settings.json', settings]);
+  for (const [name, contents] of files) {
+    const file = join(folder, name);
+    if (await exists(file)) {
+      say(`${file} is already there, so it's left as it is`);
+      continue;
+    }
+    try {
+      await mkdir(folder, { recursive: true });
+      await writeFile(file, `${JSON.stringify(contents, null, 2)}\n`, { flag: 'wx' });
+      JSON.parse(await readFile(file, 'utf8'));
+      say(`wrote ${file}: ${JSON.stringify(contents)}`);
+    } catch (error) {
+      say(`couldn't write ${file}: ${messageOf(error)}`);
+    }
+  }
 }
 
 /**

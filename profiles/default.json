@@ -19,6 +19,11 @@
       }
     ]
   },
+  "t3": {
+    "defaultModel": "claude-opus-5-5",
+    "effort": "medium",
+    "codex": false
+  },
   "connectors": [
     {
       "name": "Gmail",
