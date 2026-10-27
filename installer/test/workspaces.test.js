@@ -126,6 +126,53 @@ test("if T3 won't add the top workspace, the checklist says so and the run still
   assert.ok(log.text.includes('Failed to open the project database.'), log.text);
 });
 
+/** What T3's command line says when T3 has just started and its server hasn't published itself yet. */
+const t3StillStarting = {
+  code: 78,
+  output: 'ERROR (#2): ServerAlreadyRunningError: A T3 Code server already owns C:\\Users\\jo\\.t3\\userdata. Stop that server, or use a separate T3 home and pair with it, then retry. No server was stopped.',
+};
+
+test('while T3 is still starting, adding the top workspace is tried again every 2 seconds, and goes through once T3 is ready', async (t) => {
+  const where = await makeHome(t);
+  const top = join(where.home, 'My Drive', 'Claude');
+  const installer = await supplyT3(where.downloads, 'latest.yml', '0.1.2');
+  const machine = fakeMachine(where.home);
+  await machine.setWaiting({ patience: 10_000 });
+  await machine.setReplies({
+    [`${installer} /S --force-run`]: { creates: [t3Leaves.program, t3Leaves.shim] },
+    't3.cmd project add': [t3StillStarting, t3StillStarting, { code: 0 }],
+  });
+
+  const result = await runWith(where, 'york');
+
+  assert.equal(result.code, 0, result.stdout + result.stderr);
+  const adds = (await machine.runs()).filter((run) => run.args[0] === 'project' && run.args[1] === 'add');
+  assert.equal(adds.length, 3);
+  assert.deepEqual(await t3Projects(where.home), [{ folder: top, title: 'Claude' }]);
+  summarySays(result.stdout, 'Workspaces', 'Claude, added to T3 Code');
+  const log = await readOnlyLog(where.home);
+  assert.equal(log.text.match(/T3 Code project: T3 Code is still starting, so adding .* is tried again in 2 seconds/g)?.length, 2, log.text);
+});
+
+test("if T3 is still starting once the installer's patience runs out, the checklist says so", async (t) => {
+  const where = await makeHome(t);
+  const installer = await supplyT3(where.downloads, 'latest.yml', '0.1.2');
+  const machine = fakeMachine(where.home);
+  await machine.setWaiting({ patience: 6_000 });
+  await machine.setReplies({
+    [`${installer} /S --force-run`]: { creates: [t3Leaves.program, t3Leaves.shim] },
+    't3.cmd project add': t3StillStarting,
+  });
+
+  const result = await runWith(where, 'york');
+
+  assert.equal(result.code, 0, result.stdout + result.stderr);
+  // Tried at once, then after 2, 4 and 6 seconds.
+  assert.equal((await machine.runs()).filter((run) => run.args[0] === 'project' && run.args[1] === 'add').length, 4);
+  summarySays(result.stdout, 'Workspaces', 'Claude, not in T3 Code: T3 Code was still starting. Run the same line again to add it');
+  assert.match((await readOnlyLog(where.home)).text, /T3 Code project: .* not added: T3 Code was still starting after 6 seconds/);
+});
+
 test("a file where the top workspace folder should be is left alone, and the checklist says it's in the way", async (t) => {
   const where = await makeHome(t);
   const top = join(where.home, 'My Drive', 'Claude');

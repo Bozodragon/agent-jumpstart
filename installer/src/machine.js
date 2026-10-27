@@ -23,6 +23,13 @@
 //                                         contents }), such as the package.json npm leaves.
 //   <home>/fake-machine/machine-path.json written by a test: the machine-wide PATH, a list of
 //                                         folders. The real one is read from the registry.
+//   <home>/fake-machine/waiting.json      written by a test: time, which the fake only counts.
+//                                         { "patience": ms } is how long the installer may wait
+//                                         for something (none if not written), and "appears":
+//                                         [{ "after": ms, "folders": [...] }] makes folders,
+//                                         relative to the home, once it has waited that long in
+//                                         all (My Drive a while after Google Drive signs in).
+//                                         Every wait returns at once.
 //
 // Every program is started with a PATH rebuilt at that moment, as a window opened then would
 // get it: the machine PATH, then the user PATH (both with their %VARIABLES% expanded), then any
@@ -39,8 +46,10 @@
 // to log a program's command or output. A debug run's log also holds the PATH programs are
 // given, each time it changes.
 import { spawn } from 'node:child_process';
+import { existsSync, readFileSync } from 'node:fs';
 import { access, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { basename, dirname, join, relative, resolve } from 'node:path';
+import { setTimeout as sleep } from 'node:timers/promises';
 
 /**
  * @typedef {object} Machine
@@ -64,10 +73,33 @@ import { basename, dirname, join, relative, resolve } from 'node:path';
  *   exit code, or -1 if it couldn't start.
  * @property {(url: string) => Promise<void>} openPage Opens an address in the person's default
  *   browser without waiting for it. Rejects if the browser couldn't be started.
- * @property {number} patience How long, in milliseconds, to wait for what a program does after
- *   it has returned, such as an app it started opening. None for the fake, which does everything
- *   a program does before the run returns.
+ * @property {number} patience How long, in milliseconds, to wait for what happens after a
+ *   program has returned, such as an app it started opening. None for the fake, which does
+ *   everything a program does before the run returns, unless a test gives it some.
+ * @property {(ms: number) => Promise<void>} wait Waits this long. The fake only counts it.
  */
+
+/**
+ * Tries something, and while it isn't done tries it again every so often, until the machine's
+ * patience (or the patience given) runs out. Only the waits count towards it.
+ * @template T
+ * @param {{ machine: Machine, every: number, patience?: number }} how
+ * @param {() => Promise<T>} attempt
+ * @param {(result: T) => boolean} done
+ * @param {(result: T) => void} [beforeWaiting] Called before each wait, to say why.
+ * @returns {Promise<{ result: T, waited: number }>} the last try's result, and how long was waited
+ */
+export async function keepTrying({ machine, every, patience = machine.patience }, attempt, done, beforeWaiting) {
+  let result = await attempt();
+  let waited = 0;
+  while (!done(result) && waited < patience) {
+    beforeWaiting?.(result);
+    await machine.wait(every);
+    waited += every;
+    result = await attempt();
+  }
+  return { result, waited };
+}
 
 /** @typedef {(file: string, args: string[]) => Promise<Ran>} Runner */
 
@@ -227,10 +259,22 @@ function fakeMachine(folder, home) {
   const environment = () => read('environment.json', {});
   /** @returns {Promise<PathSources>} */
   const pathSources = async () => ({ machinePath: await read('machine-path.json', []), userPath: splitPath((await environment()).Path ?? '') });
+  // Read once, when the run starts: patience is a number, not a promise.
+  /** @type {{ patience?: number, appears?: { after: number, folders: string[] }[] }} */
+  const waiting = existsSync(join(folder, 'waiting.json')) ? JSON.parse(readFileSync(join(folder, 'waiting.json'), 'utf8')) : {};
+  let waited = 0;
 
   return {
     machine: {
-      patience: 0,
+      patience: waiting.patience ?? 0,
+      async wait(ms) {
+        const before = waited;
+        waited += ms;
+        for (const { after, folders } of waiting.appears ?? []) {
+          if (after <= before || after > waited) continue;
+          for (const path of folders) await mkdir(inside(home, path), { recursive: true });
+        }
+      },
       async userPath() {
         return splitPath((await environment()).Path ?? '');
       },
@@ -285,8 +329,7 @@ function fakeMachine(folder, home) {
       ...Object.entries(found.writes ?? {}),
     ];
     for (const [path, contents] of leaves) {
-      const target = resolve(home, path);
-      if (relative(home, target).startsWith('..')) throw new Error(`a fake run can't create ${path}: it's outside the home`);
+      const target = inside(home, path);
       await mkdir(dirname(target), { recursive: true });
       await writeFile(target, contents);
     }
@@ -294,8 +337,18 @@ function fakeMachine(folder, home) {
   }
 }
 
+/**
+ * A path the fake machine may make something at: relative to the home, and inside it.
+ * @param {string} home @param {string} path
+ */
+function inside(home, path) {
+  const target = resolve(home, path);
+  if (relative(home, target).startsWith('..')) throw new Error(`the fake machine can't make ${path}: it's outside the home`);
+  return target;
+}
+
 /** @param {string} name */
-export const system32 = (name) => join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', name);
+export const system32 =(name) => join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', name);
 
 /**
  * The real user environment lives in HKCU\Environment. It's read and written with reg.exe
@@ -370,6 +423,7 @@ function realMachine(loggedRun) {
         process.env[name] = value;
       },
       patience: 120_000,
+      wait: (ms) => sleep(ms),
       openPage(url) {
         return new Promise((resolve, reject) => {
           const child = spawn(system32('rundll32.exe'), ['url.dll,FileProtocolHandler', url], { detached: true, stdio: 'ignore' });

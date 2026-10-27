@@ -9,8 +9,7 @@
 // download, no update and no switch of channel (T3 updates itself), and the channel isn't asked.
 import { rm } from 'node:fs/promises';
 import { basename, join } from 'node:path';
-import { setTimeout as sleep } from 'node:timers/promises';
-import { system32 } from './machine.js';
+import { keepTrying, system32 } from './machine.js';
 import { loadManifest, toolEntry } from './manifest.js';
 import { messageOf } from './stop.js';
 import { checkSha512, findRelease } from './t3-release.js';
@@ -79,7 +78,7 @@ export async function installT3(channel, found, context) {
     ui.step(`Checking ${entry.name}`);
     say(`${found.version ?? 'a version Windows doesn\'t record'} (${found.channel}) is already installed, so it was left as it is`);
     // An install that was already there may never have been opened.
-    const opened = await waitForFirstLaunch(shim, 0, { attended, say, name: entry.name });
+    const opened = await waitForFirstLaunch(shim, 0, { machine, attended, say, name: entry.name });
     const state = [found.channel, 'already installed, left as it is', ...(opened ? [] : ['not opened yet'])].join(', ');
     return { row: `${found.version ?? 'Version unknown'} (${state})`, installed: true, opened, shim };
   }
@@ -115,7 +114,7 @@ export async function installT3(channel, found, context) {
   }
 
   // The silent install starts T3 (--force-run).
-  const opened = await waitForFirstLaunch(shim, machine.patience, { attended, say, name: entry.name });
+  const opened = await waitForFirstLaunch(shim, machine.patience, { machine, attended, say, name: entry.name });
   const state = [channel, change.installed, ...(opened ? [] : ['not opened yet'])].join(', ');
   return { row: `${release.version} (${state})`, installed: true, opened, shim };
 }
@@ -136,12 +135,11 @@ async function installedVersion(machine, key) {
  * Waits for T3's first start to leave its shim. If it doesn't come, the person (when there is
  * one) is asked to open T3 from the Start menu.
  * @param {string} shim @param {number} patience
- * @param {{ attended: boolean, say: (line: string) => void, name: string }} how
+ * @param {{ machine: import('./machine.js').Machine, attended: boolean, say: (line: string) => void, name: string }} how
  */
-async function waitForFirstLaunch(shim, patience, { attended, say, name }) {
-  const until = Date.now() + patience;
+async function waitForFirstLaunch(shim, patience, { machine, attended, say, name }) {
   if (patience > 0 && !(await exists(shim))) ui.step(`Waiting for ${name} to open`);
-  while (!(await exists(shim)) && Date.now() < until) await sleep(1000);
+  await keepTrying({ machine, every: 1000, patience }, () => exists(shim), (there) => there);
   if (!(await exists(shim)) && attended) {
     ui.notice(`Open ${name} from the Start menu and wait for its window to appear.`, `Open ${name}`);
     await ui.pressEnter(`Press Enter once ${name} is open.`);

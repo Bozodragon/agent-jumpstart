@@ -215,6 +215,14 @@ export function fakeMachine(home) {
     /** @param {string[]} folders the machine-wide PATH, which Windows searches before the user's */
     setMachinePath: (folders) => writeJson('machine-path.json', folders),
     /**
+     * Time, which the fake only counts: how long the installer may wait for something (its
+     * patience; none unless set), and what appears once it has waited so long in all, such as
+     * My Drive a few seconds after Google Drive signs in. Each wait returns at once.
+     * @param {{ patience: number, appears?: { after: number, folders: string[] }[] }} waiting
+     *   `folders` relative to the home
+     */
+    setWaiting: (waiting) => writeJson('waiting.json', waiting),
+    /**
      * Keyed by the program's file name, optionally followed by its first arguments
      * (`"node.exe --version"`, `"skills.cmd add"`); the longest key that matches wins. Runs with no reply succeed with no output.
      * A list answers successive runs with that key in turn, and its last reply repeats.
