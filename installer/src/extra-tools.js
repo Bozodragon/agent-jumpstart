@@ -50,7 +50,7 @@ export async function setUpExtraTools(profile, ticked, context) {
 async function walkThroughSettings(extra, { attended, machine, log }) {
   if (!extra.settingsPage) return;
   await showPage('Settings page', extra.settingsPage, { machine, log });
-  ui.notice(extra.settings ?? 'Change the setting on this page.', 'One setting only you can change');
+  ui.notice([extra.settings ?? 'Change the setting on this page.', '', ui.comeBack].join('\n'), 'One setting only you can change');
   if (attended) {
     await ui.pressEnter("Press Enter once you've done that.");
     log.write(`Settings page for ${extra.id}: the person pressed Enter`);

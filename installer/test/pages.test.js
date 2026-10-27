@@ -1,6 +1,7 @@
-// The pages the run sends the person to (the setup page, GitHub's sign-up page, the connectors
-// page, an extra tool's settings page) are opened through the machine, like any other change to
-// the laptop: under --home the fake records them and no real browser opens.
+// The pages the run sends the person to (GitHub's sign-up page, the connectors page, an extra
+// tool's settings page) are opened through the machine, like any other change to the laptop:
+// under --home the fake records them and no real browser opens. The setup page isn't opened: the
+// person has just pasted its line, so opening it again only takes them away from this window.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdir, writeFile } from 'node:fs/promises';
@@ -34,10 +35,13 @@ test('under --home each page the run sends the person to is opened on the fake m
   const result = await runWith(where, 'york');
 
   assert.equal(result.code, 0, result.stdout + result.stderr);
-  assert.deepEqual(await fakeMachine(where.home).pagesOpened(), [profile.page, profile.github.signUpPage, profile.connectorsPage]);
+  assert.deepEqual(await fakeMachine(where.home).pagesOpened(), [profile.github.signUpPage, profile.connectorsPage]);
   const log = await readOnlyLog(where.home);
-  assert.ok(log.text.includes(`Setup page: ${profile.page} (opened)`), log.text);
+  assert.ok(!log.text.includes(profile.page), log.text);
   assert.ok(log.text.includes(`Connectors page: ${profile.connectorsPage} (opened)`), log.text);
+  // Beside each page, the way back to the window that's waiting for Enter.
+  const back = /come back to this window \(the blue PowerShell window\) and press Enter/g;
+  assert.equal(result.stdout.replace(/[│|]/g, ' ').replace(/\s+/g, ' ').match(back)?.length, 2, result.stdout);
 });
 
 test('a debug run logs each page it opens', async (t) => {
@@ -48,7 +52,7 @@ test('a debug run logs each page it opens', async (t) => {
 
   assert.equal(result.code, 0, result.stdout + result.stderr);
   const { text } = await readOnlyLog(where.home);
-  for (const page of [profile.page, profile.github.signUpPage, profile.connectorsPage]) {
+  for (const page of [profile.github.signUpPage, profile.connectorsPage]) {
     assert.ok(text.includes(`Opening in the browser: ${page}`), `${page} in:\n${text}`);
   }
 });

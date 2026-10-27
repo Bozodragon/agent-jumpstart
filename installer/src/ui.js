@@ -64,6 +64,12 @@ export function summary(rows, title) {
 
 export const bullet = unicodeOr('•', '-');
 
+/**
+ * Said beside every page the installer opens: the browser takes the focus, and the person has to
+ * find their way back to the window that's waiting for them.
+ */
+export const comeBack = "Once you're done in the browser, come back to this window (the blue PowerShell window) and press Enter.";
+
 /** @param {string} text @param {string} title */
 export function notice(text, title) {
   note(text, title);

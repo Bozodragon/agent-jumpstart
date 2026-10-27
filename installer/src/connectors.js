@@ -45,6 +45,8 @@ export async function walkThroughConnectors(profile, connectors, { attended, con
       ...connectors.map((name) => `  ${ui.bullet} ${name}`),
       '',
       "If one isn't there or won't connect, carry on. Jumpstart checks each one later.",
+      '',
+      ui.comeBack,
     ].join('\n'),
     'Connect these',
   );

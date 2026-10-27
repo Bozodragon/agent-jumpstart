@@ -20,7 +20,6 @@ import { checkClaude, makeWayForClaude } from './claude.js';
 import { walkThroughConnectors } from './connectors.js';
 import { setUpExtraTools } from './extra-tools.js';
 import { setUpGitHub } from './github.js';
-import { showPage } from './open-page.js';
 import { findPlaces } from './places.js';
 import { openMachine } from './machine.js';
 import { autoMemoryInUse, switchOffAutoMemory } from './memory.js';
@@ -123,9 +122,8 @@ async function main() {
     const answers = options.answers === undefined ? undefined : await readAnswers(options.answers);
     const unattended = answers !== undefined;
 
+    // The setup page isn't opened: the person has just pasted its line into this window.
     ui.start(`Agent Jumpstart · ${profile.name}`);
-
-    await showPage('Setup page', profile.page, { machine, log });
 
     // A re-run asks nothing an earlier run already wrote down.
     const earlier = await readEarlierSettings(places.settings, profile.id, log);
