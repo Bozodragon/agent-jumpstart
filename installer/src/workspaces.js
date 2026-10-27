@@ -7,7 +7,9 @@
 import { mkdir, stat } from 'node:fs/promises';
 import { basename, dirname, join } from 'node:path';
 import { isFolder } from './google-drive.js';
+import { keepTrying } from './machine.js';
 import { messageOf } from './stop.js';
+import * as ui from './ui.js';
 
 /**
  * @typedef {object} Workspaces
@@ -106,7 +108,23 @@ export async function addToT3(workspaces, t3, { machine, log }) {
     say(`${top} not added: T3 Code hasn't been opened yet`);
     return `${name}, not in T3 Code yet: open T3 Code, then run this again`;
   }
-  const ran = await machine.run(t3.shim, ['project', 'add', top, '--title', name]);
+  // Just after T3's first start its server is still starting: until it has published itself the
+  // command line tries to take T3's folder for itself, and T3 says a server already owns it.
+  const shim = t3.shim;
+  const add = () =>
+    keepTrying(
+      { machine, every: 2000 },
+      () => machine.run(shim, ['project', 'add', top, '--title', name]),
+      (ran) => !stillStarting(ran),
+      () => say(`T3 Code is still starting, so adding ${top} is tried again in 2 seconds`),
+    );
+  const { result: ran, waited } = await ui.busy(`Adding ${name} to T3 Code`, add, ({ result }) =>
+    result.code === 0 ? { text: `Added ${name} to T3 Code`, ok: true } : { text: `${name} isn't added to T3 Code yet`, ok: /already exists/i.test(result.output) },
+  );
+  if (stillStarting(ran)) {
+    say(`${top} not added: T3 Code was still starting after ${waited / 1000} seconds`);
+    return `${name}, not in T3 Code: T3 Code was still starting. Run the same line again to add it`;
+  }
   if (ran.code === 0) {
     say(`added ${top}`);
     return `${name}, added to T3 Code`;
@@ -118,6 +136,9 @@ export async function addToT3(workspaces, t3, { machine, log }) {
   say(`${top} not added: T3 Code refused it (code ${ran.code})`);
   return `${name}, not in T3 Code: T3 Code wouldn't add it`;
 }
+
+/** @param {import('./machine.js').Ran} ran */
+const stillStarting = (ran) => ran.output.includes('ServerAlreadyRunningError');
 
 /**
  * Creates a folder unless it's already there. One that's there is never opened, emptied or replaced.

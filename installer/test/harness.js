@@ -16,9 +16,13 @@ export async function readProfile(name) {
   return JSON.parse(await readFile(join(repo, 'profiles', `${name}.json`), 'utf8'));
 }
 
-/** @typedef {'signed-in' | 'signed-out' | 'missing'} GoogleDriveState */
+/**
+ * `signed-in, no My Drive yet`: signed in, but My Drive hasn't appeared yet, as it can take a few
+ * seconds to after the sign-in (a test can make it appear later, with the fake machine's `setWaiting`).
+ * @typedef {'signed-in' | 'signed-out' | 'missing' | 'signed-in, no My Drive yet'} GoogleDriveState
+ */
 
-/** @typedef {{ code?: number, output?: string, creates?: string[], writes?: Record<string, string> }} Reply What a faked program run returns and leaves behind. */
+/** @typedef {{ code?: number, output?: string, creates?: string[], writes?: Record<string, string>, reads?: string[] }} Reply What a faked program run returns, leaves behind, and looks for as it starts (its record says which of `reads` it `found`). */
 
 /**
  * A temporary home with an answers file and an empty downloads folder,
@@ -56,10 +60,8 @@ export async function fakeGoogleDrive(home, state) {
   if (state === 'missing') return;
   const data = join(home, 'AppData', 'Local', 'Google', 'DriveFS');
   await mkdir(join(data, 'Logs'), { recursive: true });
-  if (state === 'signed-in') {
-    await mkdir(join(data, driveAccount), { recursive: true });
-    await mkdir(join(home, 'My Drive'));
-  }
+  if (state === 'signed-in' || state === 'signed-in, no My Drive yet') await mkdir(join(data, driveAccount), { recursive: true });
+  if (state === 'signed-in') await mkdir(join(home, 'My Drive'));
 }
 
 /** @param {string} home */
@@ -153,6 +155,21 @@ export function skillsCli(home) {
   };
 }
 
+/**
+ * Puts a Git on the machine-wide PATH, as Software Centre would, outside the installer's own
+ * folders: `<home>\Program Files\Git\cmd\git.exe`.
+ * @param {string} home
+ * @returns {Promise<string>} the folder on the machine PATH
+ */
+export async function gitOnMachinePath(home) {
+  const folder = join(home, 'Program Files', 'Git', 'cmd');
+  await mkdir(folder, { recursive: true });
+  await writeFile(join(folder, 'git.exe'), 'stand-in');
+  const machine = fakeMachine(home);
+  await machine.setMachinePath([folder]);
+  return folder;
+}
+
 /** The pinned manifest in the repo. */
 export async function readManifest() {
   return JSON.parse(await readFile(join(repo, 'manifest.json'), 'utf8'));
@@ -187,7 +204,12 @@ export function fakeMachine(home) {
     environment: () => readJson('environment.json'),
     /** @returns {Promise<string[]>} the user PATH, one entry per item */
     userPath: async () => ((await readJson('environment.json')).Path ?? '').split(';').filter(Boolean),
-    /** @returns {Promise<{ file: string, args: string[], onScreen?: boolean }[]>} */
+    /**
+     * Each program it was asked to run, with the PATH it was started with (`path`, entries joined
+     * with `;`), rebuilt at that moment from the machine PATH, the user PATH and the installer's own.
+     * A reply's `reads` adds `found`: which of those files were there when the program started.
+     * @returns {Promise<{ file: string, args: string[], path: string, onScreen?: boolean, found?: string[] }[]>}
+     */
     runs: () => readJson('runs.json', []),
     /** @returns {Promise<string[]>} the addresses it was asked to open in the browser, in order */
     pagesOpened: () => readJson('pages.json', []),
@@ -195,6 +217,14 @@ export function fakeMachine(home) {
     setEnvironment: (variables) => writeJson('environment.json', variables),
     /** @param {string[]} folders the machine-wide PATH, which Windows searches before the user's */
     setMachinePath: (folders) => writeJson('machine-path.json', folders),
+    /**
+     * Time, which the fake only counts: how long the installer may wait for something (its
+     * patience; none unless set), and what appears once it has waited so long in all, such as
+     * My Drive a few seconds after Google Drive signs in. Each wait returns at once.
+     * @param {{ patience: number, appears?: { after: number, folders: string[] }[] }} waiting
+     *   `folders` relative to the home
+     */
+    setWaiting: (waiting) => writeJson('waiting.json', waiting),
     /**
      * Keyed by the program's file name, optionally followed by its first arguments
      * (`"node.exe --version"`, `"skills.cmd add"`); the longest key that matches wins. Runs with no reply succeed with no output.
@@ -275,6 +305,13 @@ export async function t3Projects(home) {
   }
   return [...projects.values()];
 }
+
+/**
+ * The folder Claude Code's own installer puts claude.exe in. Every run puts it on the user PATH,
+ * at the end, before T3 Code starts, whether or not Claude Code is there yet.
+ * @param {string} home
+ */
+export const claudeFolder = (home) => join(home, '.local', 'bin');
 
 /** Where T3 Code keeps its state, relative to the home, project list among it. */
 export const t3Database = join('.t3', 'userdata', 'statev2.sqlite');

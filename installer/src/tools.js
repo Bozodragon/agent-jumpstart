@@ -88,8 +88,10 @@ export async function installTool(tool, { places, machine, downloads, keepDownlo
   const say = (/** @type {string} */ line) => log.write(`${tool.name}: ${line}`);
   const folder = join(places.programs, tool.install.folder);
   const marker = join(folder, installedMarker);
+  /** @type {Command | undefined} */
+  let here;
   try {
-    const here = await commandIn(tool, folder);
+    here = await commandIn(tool, folder);
     const ours = await exists(marker);
     if (here && !ours) {
       say(`${folder} holds it, but the installer didn't put it there`);
@@ -108,8 +110,43 @@ export async function installTool(tool, { places, machine, downloads, keepDownlo
         throw new NotInstalled(`${folder} already holds something else`);
       }
     }
+  } catch (error) {
+    return notInstalled(error, say);
+  }
 
-    ui.step(`Installing ${tool.name} ${tool.version}`);
+  // The download and the install show nothing of their own, for a minute or more.
+  const there = here;
+  return ui.busy(
+    `Installing ${tool.name} ${tool.version}`,
+    () => putInPlace(tool, there, { places, machine, downloads, keepDownloads, say }),
+    ({ installed, row }) => ({ text: `${tool.name}: ${row}`, ok: installed }),
+  );
+}
+
+/**
+ * Why a tool isn't installed, logged, as its result.
+ * @param {unknown} error @param {(line: string) => void} say
+ * @returns {Installed}
+ */
+function notInstalled(error, say) {
+  if (!(error instanceof NotInstalled)) say(`failed: ${error instanceof Error ? error.stack : String(error)}`);
+  const reason = error instanceof NotInstalled ? error.message : messageOf(error);
+  say(`not installed: ${reason}`);
+  return { installed: false, row: `Not installed: ${reason}` };
+}
+
+/**
+ * Puts the pinned version in the tool's folder here, unless the installer's copy there is it
+ * already, and its folders on the user PATH. Prints nothing.
+ * @param {import('./manifest.js').Tool} tool
+ * @param {Command | undefined} here the installer's copy already in the folder, if any
+ * @param {Pick<Context, 'places' | 'machine' | 'downloads' | 'keepDownloads'> & { say: (line: string) => void }} how
+ * @returns {Promise<Installed>}
+ */
+async function putInPlace(tool, here, { places, machine, downloads, keepDownloads, say }) {
+  const folder = join(places.programs, tool.install.folder);
+  const marker = join(folder, installedMarker);
+  try {
     const before = here ? await versionThere(machine, here, tool.version) : { present: false, upToDate: false };
     if (here && before.upToDate) {
       say(`${tool.version} is already in ${folder}`);
@@ -135,9 +172,20 @@ export async function installTool(tool, { places, machine, downloads, keepDownlo
         const ran = await machine.run(npm, args);
         if (ran.code !== 0) throw new NotInstalled(`npm stopped with code ${ran.code}`);
       } else {
-        const args = (tool.install.arguments ?? []).map((arg) => arg.replaceAll('{folder}', folder));
+        // An installer that keeps its own log (Git's) is told to keep it here, since its exit
+        // code alone rarely says why it stopped; a failed one's log is copied into this one's.
+        const setupLog = join(places.state, `${tool.id}-setup.log`);
+        await rm(setupLog, { force: true });
+        const args = (tool.install.arguments ?? []).map((arg) => arg.replaceAll('{folder}', folder).replaceAll('{log}', setupLog));
         const ran = await machine.run(file, args);
-        if (ran.code !== 0) throw new NotInstalled(`its installer stopped with code ${ran.code}`);
+        if (ran.code !== 0) {
+          const kept = await readFile(setupLog, 'utf8').catch(() => undefined);
+          if (kept !== undefined) {
+            const lines = kept.trimEnd().split(/\r?\n/).slice(-60);
+            say([`the end of its installer's own log (${setupLog}):`, ...lines.map((line) => `  | ${line}`)].join('\n'));
+          }
+          throw new NotInstalled(`its installer stopped with code ${ran.code}`);
+        }
       }
     } finally {
       if (keepDownloads) say(`kept ${file}`);
@@ -155,10 +203,7 @@ export async function installTool(tool, { places, machine, downloads, keepDownlo
     say(`installed ${tool.version}`);
     return { installed: true, row: `${tool.version} (${changeFrom(before)})`, program };
   } catch (error) {
-    if (!(error instanceof NotInstalled)) say(`failed: ${error instanceof Error ? error.stack : String(error)}`);
-    const reason = error instanceof NotInstalled ? error.message : messageOf(error);
-    say(`not installed: ${reason}`);
-    return { installed: false, row: `Not installed: ${reason}` };
+    return notInstalled(error, say);
   }
 }
 

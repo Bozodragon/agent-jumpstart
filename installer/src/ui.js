@@ -1,6 +1,6 @@
 // What the person sees. The shape (a guide line, short steps, a closing
 // summary) follows the skills CLI's; the colours and symbols are our own.
-import { confirm, intro, isCancel, log, multiselect, note, outro, select, text, unicodeOr } from '@clack/prompts';
+import { confirm, intro, isCancel, log, multiselect, note, outro, select, spinner, text, unicodeOr } from '@clack/prompts';
 import { styleText } from 'node:util';
 import { Stop } from './stop.js';
 
@@ -51,6 +51,38 @@ export function step(text) {
   log.message(text, { symbol: styleText(accent, unicodeOr('▸', '>')) });
 }
 
+/**
+ * Shows a spinner, with the time so far, beside the message while something slow that prints
+ * nothing runs (a download, a silent install), then puts how it ended in its place. Nothing
+ * else may be shown while it runs. Where the output isn't a terminal (a test) there's no
+ * spinner, which would fill it with cursor movements: the message is a step, as any other.
+ * @template T
+ * @param {string} message
+ * @param {() => Promise<T>} task
+ * @param {(result: T) => { text: string, ok: boolean }} [ended] How it ended; the message, if not given.
+ * @returns {Promise<T>}
+ */
+export async function busy(message, task, ended) {
+  if (!process.stdout.isTTY) {
+    step(message);
+    return task();
+  }
+  // Ctrl+C stops the run, as it does without a spinner, which otherwise catches it.
+  const spin = spinner({ indicator: 'timer', onCancel: () => process.exit(130) });
+  spin.start(message);
+  let result;
+  try {
+    result = await task();
+  } catch (error) {
+    spin.error(message);
+    throw error;
+  }
+  const { text, ok } = ended?.(result) ?? { text: message, ok: true };
+  if (ok) spin.stop(text);
+  else spin.error(text);
+  return result;
+}
+
 /** @param {string} text */
 export function problem(text) {
   log.message(text, { symbol: styleText('red', unicodeOr('✖', 'x')) });
@@ -63,6 +95,12 @@ export function summary(rows, title) {
 }
 
 export const bullet = unicodeOr('•', '-');
+
+/**
+ * Said beside every page the installer opens: the browser takes the focus, and the person has to
+ * find their way back to the window that's waiting for them.
+ */
+export const comeBack = "Once you're done in the browser, come back to this window (the blue PowerShell window) and press Enter.";
 
 /** @param {string} text @param {string} title */
 export function notice(text, title) {

@@ -4,11 +4,12 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { basename, join } from 'node:path';
-import { checklistSays, fakeMachine, fileName, makeHome, readManifest, runWith, skillsCli, supplyDownloads } from './harness.js';
+import { checklistSays, fakeMachine, fileName, gitOnMachinePath, makeHome, readManifest, runWith, skillsCli, supplyDownloads } from './harness.js';
 
 test("the skills CLI is installed from its pinned package, checked, into its own folder, before any skill is added with it, and run with the installer's own Node", async (t) => {
   const where = await makeHome(t);
   await supplyDownloads(where, ['skills']);
+  await gitOnMachinePath(where.home);
   const cli = skillsCli(where.home);
   await fakeMachine(where.home).setReplies(cli.install);
 
@@ -35,6 +36,7 @@ test("the skills CLI is installed from its pinned package, checked, into its own
 test('a skills CLI on the PATH is no reason not to install the pinned one: only the installer runs it', async (t) => {
   const where = await makeHome(t);
   await supplyDownloads(where, ['skills']);
+  await gitOnMachinePath(where.home);
   const cli = skillsCli(where.home);
   const theirs = join(where.home, 'AppData', 'Roaming', 'npm');
   await mkdir(theirs, { recursive: true });
