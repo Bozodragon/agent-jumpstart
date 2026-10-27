@@ -70,6 +70,13 @@ test('the bootstrap pins the same Node.js version and checksums as manifest.json
   }
 });
 
+test("the bootstrap unpacks Node.js into the installer's own folder and never touches a Node.js the person already has", async () => {
+  const text = code((await read('york.ps1')).toString('ascii'));
+  assert.match(text, /\$root = Join-Path \$env:LOCALAPPDATA 'agent-jumpstart'/);
+  assert.match(text, /\$nodeDir = Join-Path \$root 'node'/);
+  assert.doesNotMatch(text, /'Programs'|'nodejs'|\\Programs\\/i, "%LOCALAPPDATA%\\Programs\\nodejs may be the person's own Node.js");
+});
+
 const powershell = process.platform === 'win32' ? 'powershell.exe' : undefined;
 
 test('Windows PowerShell parses all four with no errors and finds no method calls or exit', { skip: !powershell && 'needs Windows PowerShell' }, () => {

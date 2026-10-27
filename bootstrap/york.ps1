@@ -6,9 +6,11 @@ $AgentJumpstart = @{ Profile = 'york'; Debug = $false }
 #
 # york.ps1, install.ps1 and york-debug.ps1 are this same file with a different top line.
 # It asks nothing. It downloads the pinned Node.js zip, checks it against its published
-# checksum and unpacks it to %LOCALAPPDATA%\Programs\nodejs, where the installer keeps
-# Node.js too, so there is one Node.js. It then fetches the installer program from the
-# same Portall item as this file and runs it. The program does everything else.
+# checksum and unpacks it to %LOCALAPPDATA%\agent-jumpstart\node, a folder of the
+# installer's own that is never on PATH, so a Node.js the person already has (in
+# %LOCALAPPDATA%\Programs\nodejs or anywhere else) is never moved, replaced or shadowed.
+# It then fetches the installer program from the same Portall item as this file and runs
+# it with that Node.js. The program does everything else.
 #
 # It runs through iex on Windows PowerShell 5.1, perhaps in Constrained Language Mode, so:
 # plain ASCII with no byte-order mark; no exit (it would close the person's window); no
@@ -40,9 +42,8 @@ function Start-AgentJumpstart {
   $root = Join-Path $env:LOCALAPPDATA 'agent-jumpstart'
   $downloads = Join-Path $root 'downloads'
   $unpacking = Join-Path $root 'unpacking'
-  $replaced = Join-Path $root 'replaced-nodejs'
-  $programs = Join-Path $env:LOCALAPPDATA 'Programs'
-  $nodeDir = Join-Path $programs 'nodejs'
+  $replaced = Join-Path $root 'replaced-node'
+  $nodeDir = Join-Path $root 'node'
   $nodeExe = Join-Path $nodeDir 'node.exe'
   $programDir = Join-Path $root 'program'
 
@@ -119,16 +120,15 @@ function Start-AgentJumpstart {
       }
       Write-Host 'Unpacking Node.js...'
       Expand-Zip $nodeZip $unpacking
-      # Set the old folder aside in one move, so a Node.js still in use is left whole.
+      # Set the installer's old Node.js aside in one move, so one still in use is left whole.
       if (Test-Path -LiteralPath $replaced) { Remove-Item -LiteralPath $replaced -Recurse -Force }
       if (Test-Path -LiteralPath $nodeDir) {
         try {
           Move-Item -LiteralPath $nodeDir -Destination $replaced
         } catch {
-          throw "Node.js $have needs replacing with $nodeVersion, but something is using it. Close T3 Code and any other window that might be using Node.js, then paste the line again."
+          throw "The installer's Node.js $have needs replacing with $nodeVersion, but something is using it. Close any other window running the installer, then paste the line again."
         }
       }
-      New-Item -ItemType Directory -Force -Path $programs | Out-Null
       Move-Item -LiteralPath (Join-Path $unpacking $nodeName) -Destination $nodeDir
       Remove-Item -LiteralPath $unpacking -Recurse -Force
       if (Test-Path -LiteralPath $replaced) { Remove-Item -LiteralPath $replaced -Recurse -Force -ErrorAction SilentlyContinue }
