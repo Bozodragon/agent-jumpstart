@@ -1,7 +1,7 @@
 // The person's workspaces: the top workspace folder in the confirmed location (the profile
 // names it), each ticked workspace inside it, and the top workspace added to T3 Code as a
-// project. Someone who already has a top workspace in T3 Code can use that one instead (see
-// questions.js), whatever it's called and wherever it is. All of it is safe to do again: a
+// project. The person can instead use a top workspace already in T3 Code, or any folder of
+// their own (see questions.js), whatever it's called and wherever it is. All of it is safe to do again: a
 // folder that's already there is left exactly as it is, and T3 itself refuses to add a folder
 // it already lists, which is taken as done.
 import { mkdir, stat } from 'node:fs/promises';

@@ -13,8 +13,8 @@ import { existingTopWorkspaces, topWorkspaceIn } from './workspaces.js';
  * @property {string | null} googleDriveFolder The confirmed My Drive folder, or null when the profile doesn't use Drive.
  * @property {string} workspacesLocation The folder the top workspace is in.
  * @property {string} topWorkspace The top workspace: a new one, named by the profile, in Google
- *   Drive or the folder the person gave; or one already in T3 Code that they chose to use, under
- *   whatever name it has. Jumpstart reads it.
+ *   Drive or the folder the person gave; or one already in T3 Code, or another folder of their
+ *   own, that they chose to use, under whatever name it has. Jumpstart reads it.
  * @property {'stable' | 'nightly'} channel Which T3 Code.
  * @property {boolean} github Whether to set up GitHub now.
  * @property {string[]} workspaces The names of the ticked workspaces.
