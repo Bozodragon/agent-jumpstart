@@ -16,7 +16,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { parseArgs } from 'node:util';
 import { openLog } from './log.js';
-import { checkClaude } from './claude.js';
+import { checkClaude, makeWayForClaude } from './claude.js';
 import { walkThroughConnectors } from './connectors.js';
 import { setUpExtraTools } from './extra-tools.js';
 import { setUpGitHub } from './github.js';
@@ -179,7 +179,9 @@ async function main() {
     done.push(['Connectors', connectors]);
     const extraTools = await setUpExtraTools(profile, choices.extraTools, context);
     done.push(...extraTools);
-    // Last of the installs, after every other tool and its PATH entry: T3 reads PATH only when it starts.
+    // Last of the installs, after every other tool and its PATH entry, Claude Code's among them
+    // though it isn't there yet: T3 reads PATH only when it starts.
+    await makeWayForClaude(context);
     const t3 = await installT3(choices.channel, foundT3, context);
     done.push(['T3 Code', t3.row]);
     // After T3's first start, which leaves the command-line shim that adds a project.

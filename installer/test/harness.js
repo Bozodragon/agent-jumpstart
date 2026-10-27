@@ -295,6 +295,13 @@ export async function t3Projects(home) {
   return [...projects.values()];
 }
 
+/**
+ * The folder Claude Code's own installer puts claude.exe in. Every run puts it on the user PATH,
+ * at the end, before T3 Code starts, whether or not Claude Code is there yet.
+ * @param {string} home
+ */
+export const claudeFolder = (home) => join(home, '.local', 'bin');
+
 /** Where T3 Code keeps its state, relative to the home, project list among it. */
 export const t3Database = join('.t3', 'userdata', 'statev2.sqlite');
 

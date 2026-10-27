@@ -1,12 +1,27 @@
 // Claude Code, after T3's first launch. The installer doesn't install Claude Code: T3's welcome
 // screen does, with Anthropic's own installer, which puts claude.exe in the profile folder's
-// .local\bin and never adds that folder to PATH. So the installer checks it's there, adds the
-// folder to the user PATH, and asks Claude Code whether it's signed in. If it isn't, Claude
-// Code's own sign-in runs in the person's window. The signed-in email is what Jumpstart reads.
+// .local\bin and never adds that folder to PATH. So the installer adds the folder to the user
+// PATH before T3 is installed and started (T3 reads PATH only when it starts, so it then finds
+// Claude Code as soon as its welcome screen has installed it), checks it's there afterwards,
+// and asks Claude Code whether it's signed in. If it isn't, Claude Code's own sign-in runs in
+// the person's window. The signed-in email is what Jumpstart reads.
 import { join } from 'node:path';
 import { loadManifest, toolEntry } from './manifest.js';
 import { exists } from './tools.js';
 import * as ui from './ui.js';
+
+/**
+ * Puts the folder Claude Code's own installer uses on the user PATH, whether or not it's there
+ * yet. Before T3 is installed and started.
+ * @param {import('./tools.js').Context} context
+ */
+export async function makeWayForClaude({ places, machine, downloads, log }) {
+  const entry = toolEntry(await loadManifest(downloads), 'claude');
+  if (!entry) return;
+  const folder = join(places.home, entry.install.folder);
+  const added = await machine.addToUserPath(folder);
+  log.write(`${entry.name}: ${added ? `added ${folder} to the user PATH, before T3 Code starts, so T3 Code finds it once installed` : `${folder} was already on the user PATH`}`);
+}
 
 /**
  * @typedef {object} ClaudeState

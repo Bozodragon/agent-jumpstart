@@ -156,7 +156,7 @@ test("a sign-in that doesn't finish leaves Claude reported as not signed in, wit
   assert.equal((await readSettings(where.home)).email, null);
 });
 
-test("if Claude Code wasn't installed from T3's welcome screen, the checklist says so and its folder stays off the PATH", async (t) => {
+test("if Claude Code wasn't installed from T3's welcome screen, the checklist says so, nothing runs it, and its folder is still on the PATH for when it is", async (t) => {
   const where = await makeHome(t, { channel: 'stable' });
   const installer = await supplyT3(where.downloads, 'latest.yml', '0.1.2');
   const machine = fakeMachine(where.home);
@@ -167,7 +167,8 @@ test("if Claude Code wasn't installed from T3's welcome screen, the checklist sa
   assert.equal(result.code, 0, result.stderr);
   checklistSays(result.stdout, 'T3 Code', '0.1.2 (stable, installed)');
   checklistSays(result.stdout, 'Claude Code', "Not installed: T3 Code's welcome screen installs it");
-  assert.equal((await machine.userPath()).includes(join(where.home, '.local', 'bin')), false);
+  // Put there before T3 started, so T3 finds Claude Code as soon as its welcome screen installs it.
+  assert.ok((await machine.userPath()).includes(join(where.home, '.local', 'bin')));
   assert.equal((await machine.runs()).some((run) => basename(run.file) === 'claude.exe'), false);
 });
 

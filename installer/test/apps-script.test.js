@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { basename, join } from 'node:path';
-import { checklistSays, fakeMachine, makeHome, markAsInstalledByUs, programsFolder, readManifest, readOnlyLog, readProfile, runWith } from './harness.js';
+import { checklistSays, claudeFolder, fakeMachine, makeHome, markAsInstalledByUs, programsFolder, readManifest, readOnlyLog, readProfile, runWith } from './harness.js';
 
 /**
  * A stand-in for clasp's package from the npm registry, and a copy of the pinned manifest
@@ -181,5 +181,5 @@ test('a clasp the person already has on the PATH is left as it is, gets no PATH 
   assert.deepEqual(runs.filter((run) => basename(run.file) === 'npm.cmd'), [], 'nothing was installed');
   const login = runs.find((run) => run.args[0] === 'login');
   assert.equal(login?.file, join(theirs, 'clasp.cmd'));
-  assert.deepEqual(await machine.userPath(), [theirs]);
+  assert.deepEqual(await machine.userPath(), [theirs, claudeFolder(where.home)]);
 });
