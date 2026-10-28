@@ -56,7 +56,16 @@ function Start-AgentJumpstart {
     }
   }
 
+  # Windows' own curl.exe shows a progress bar at full speed (Invoke-WebRequest's own bar makes
+  # it crawl, so that stays off). If curl.exe isn't there or fails (it doesn't use the proxy
+  # Windows is set to), Invoke-WebRequest tries, with no bar.
   function Save-Download([string]$Url, [string]$Path, [string]$What) {
+    $curl = Join-Path $env:SystemRoot 'System32\curl.exe'
+    if (Test-Path -LiteralPath $curl) {
+      & $curl --fail --location --progress-bar --output $Path $Url
+      if ($LASTEXITCODE -eq 0) { return }
+      if ($DebugOn) { Write-Host "Debug: curl.exe returned $LASTEXITCODE, so downloading without a progress bar instead" }
+    }
     try {
       Invoke-WebRequest -UseBasicParsing -Uri $Url -OutFile $Path
     } catch {
