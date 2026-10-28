@@ -143,6 +143,7 @@ test("an installer that fails, or a tool that won't run once installed, is repor
   const machine = fakeMachine(where.home);
   await machine.setReplies({
     [fileName(git.downloads[process.arch].url)]: { code: 5, output: 'Setup was blocked' },
+    [fileName(git.fallback.downloads[process.arch].url)]: { code: 1 },
     'gh.exe --version': { code: -1, output: 'This program is blocked by group policy.' },
   });
   const programs = programsFolder(where.home);
@@ -150,7 +151,7 @@ test("an installer that fails, or a tool that won't run once installed, is repor
   const result = await runWith(where, 'default');
 
   assert.equal(result.code, 0, result.stderr);
-  checklistSays(result.stdout, 'Git', 'Not installed: its installer stopped with code 5');
+  checklistSays(result.stdout, 'Git', 'Not installed: its installer stopped with code 5, and its portable copy with code 1');
   checklistSays(result.stdout, 'GitHub CLI', "Not installed: Windows wouldn't run it");
   assert.deepEqual(await machine.userPath(), [join(programs, 'nodejs'), claudeFolder(where.home)]);
   const log = await readOnlyLog(where.home);
@@ -184,14 +185,55 @@ test("an installer that keeps a log of its own is told where, and a failed one's
   const machine = fakeMachine(where.home);
   await machine.setReplies({
     [fileName(git.downloads[process.arch].url)]: { code: 2, writes: { [setupLog]: 'Skipping downgrade from 2.57.0 to 2.56.0.4' } },
+    [fileName(git.fallback.downloads[process.arch].url)]: { code: 1 },
   });
 
   const result = await runWith(where, 'default');
 
   assert.equal(result.code, 0, result.stderr);
-  checklistSays(result.stdout, 'Git', 'Not installed: its installer stopped with code 2');
+  checklistSays(result.stdout, 'Git', 'Not installed: its installer stopped with code 2, and its portable copy with code 1');
   const gitInstaller = (await machine.runs()).find((run) => basename(run.file).startsWith('Git-'));
   assert.ok(gitInstaller?.args.includes(`/LOG=${join(where.home, setupLog)}`), gitInstaller?.args.join(' '));
   const log = await readOnlyLog(where.home);
   assert.match(log.text, /Skipping downgrade from 2\.57\.0 to 2\.56\.0\.4/);
+});
+
+test("when Git's installer stops, its portable copy is unpacked into the same folder instead, and the checklist says so", async (t) => {
+  const where = await makeHome(t);
+  const manifest = await supplyDownloads(where);
+  const git = manifest.tools.find((/** @type {any} */ tool) => tool.id === 'git');
+  const portable = fileName(git.fallback.downloads[process.arch].url);
+  const machine = fakeMachine(where.home);
+  await machine.setReplies({ [fileName(git.downloads[process.arch].url)]: { code: 2 } });
+  const programs = programsFolder(where.home);
+
+  const result = await runWith(where, 'default');
+
+  assert.equal(result.code, 0, result.stderr);
+  checklistSays(result.stdout, 'Git', `${git.version} (installed as a portable copy, because its installer stopped with code 2)`);
+  const unpacked = (await machine.runs()).find((run) => basename(run.file) === portable);
+  assert.ok(unpacked, 'the portable copy was run');
+  assert.deepEqual(unpacked.args, [`-o${join(programs, 'Git')}`, '-y']);
+  assert.ok((await machine.userPath()).includes(join(programs, 'Git', 'cmd')));
+  assert.ok(await exists(join(programs, 'Git', installedMarker)), 'marked as the installer\'s, so a later run may update it');
+  const log = await readOnlyLog(where.home);
+  assert.match(log.text, /Git: its installer stopped with code 2, so its portable copy is unpacked instead/);
+});
+
+test("when Git's portable copy fails too, Git isn't installed and the checklist gives both reasons", async (t) => {
+  const where = await makeHome(t);
+  const manifest = await supplyDownloads(where);
+  const git = manifest.tools.find((/** @type {any} */ tool) => tool.id === 'git');
+  const machine = fakeMachine(where.home);
+  await machine.setReplies({
+    [fileName(git.downloads[process.arch].url)]: { code: 2 },
+    [fileName(git.fallback.downloads[process.arch].url)]: { code: 1 },
+  });
+  const programs = programsFolder(where.home);
+
+  const result = await runWith(where, 'default');
+
+  assert.equal(result.code, 0, result.stderr);
+  checklistSays(result.stdout, 'Git', 'Not installed: its installer stopped with code 2, and its portable copy with code 1');
+  assert.ok(!(await machine.userPath()).includes(join(programs, 'Git', 'cmd')));
 });

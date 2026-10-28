@@ -404,6 +404,13 @@ export async function supplyDownloads(where, ids) {
     const bytes = await readFile(built);
     await writeFile(join(where.downloads, basename(built)), bytes);
     tool.downloads[process.arch].sha256 = createHash('sha256').update(bytes).digest('hex');
+    // A self-extracting fallback (Git's portable copy) is a file the fake machine "runs" too.
+    const fallback = tool.fallback?.downloads[process.arch];
+    if (fallback) {
+      const stand = Buffer.from(`stand-in for ${fileName(fallback.url)}`);
+      await writeFile(join(where.downloads, fileName(fallback.url)), stand);
+      fallback.sha256 = createHash('sha256').update(stand).digest('hex');
+    }
   }
   await writeFile(join(where.downloads, 'manifest.json'), JSON.stringify(manifest));
   return manifest;
