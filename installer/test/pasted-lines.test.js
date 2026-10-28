@@ -98,3 +98,12 @@ test('Windows PowerShell parses all four with no errors and finds no method call
   });
   assert.equal(out.trim(), '');
 });
+
+test("the bootstrap downloads with Windows' own curl.exe and its progress bar, and falls back to Invoke-WebRequest", async () => {
+  const text = code((await read('york.ps1')).toString('ascii'));
+  // Invoke-WebRequest's own progress bar makes Windows PowerShell 5.1 download very slowly, so it stays off.
+  assert.match(text, /\$ProgressPreference = 'SilentlyContinue'/);
+  assert.match(text, /Join-Path \$env:SystemRoot 'System32\\curl\.exe'/);
+  assert.match(text, /& \$curl --fail --location --progress-bar --output \$Path \$Url/);
+  assert.match(text, /Invoke-WebRequest -UseBasicParsing -Uri \$Url -OutFile \$Path/);
+});
