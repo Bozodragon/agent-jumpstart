@@ -20,6 +20,16 @@ const pinned = fileURLToPath(new URL('../../manifest.json', import.meta.url));
  *   T3 Code, installed in that order after the other tools and their PATH entries by `claude.js`
  *   and `t3.js`, whose entries keep `id` and `name` but otherwise have their own shape).
  * @property {SignIn} [signIn] For a tool the person signs in to in the browser.
+ * @property {Fallback} [fallback] For an `installer` tool: what to unpack in its place when its
+ *   installer stops.
+ */
+
+/**
+ * A self-extracting copy of a tool (Git's portable one), run with `arguments` (`{folder}` is the
+ * tool's folder) to unpack it where the installer would have put it, with no setup of its own.
+ * @typedef {object} Fallback
+ * @property {Partial<Record<string, Download>>} downloads By processor (`x64`, `arm64`).
+ * @property {string[]} arguments
  */
 
 /** @typedef {{ url: string, sha256: string }} Download */

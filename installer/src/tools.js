@@ -158,6 +158,8 @@ async function putInPlace(tool, here, { places, machine, downloads, keepDownload
     const download = tool.downloads[process.arch];
     if (!download) throw new NotInstalled(`there's no pinned download for this kind of computer (${process.arch})`);
     const file = await obtain(download, { downloads, saveIn: join(places.state, 'downloads'), say });
+    /** Why the tool's installer stopped, when its portable copy was unpacked instead. */
+    let portable;
 
     try {
       await checkSum(file, download.sha256, say);
@@ -184,7 +186,12 @@ async function putInPlace(tool, here, { places, machine, downloads, keepDownload
             const lines = kept.trimEnd().split(/\r?\n/).slice(-60);
             say([`the end of its installer's own log (${setupLog}):`, ...lines.map((line) => `  | ${line}`)].join('\n'));
           }
-          throw new NotInstalled(`its installer stopped with code ${ran.code}`);
+          const stopped = `its installer stopped with code ${ran.code}`;
+          if (!tool.fallback) throw new NotInstalled(stopped);
+          say(`${stopped}, so its portable copy is unpacked instead`);
+          const code = await unpackFallback(tool.fallback, folder, { places, machine, downloads, keepDownloads, say });
+          if (code !== 0) throw new NotInstalled(`${stopped}, and its portable copy with code ${code}`);
+          portable = stopped;
         }
       }
     } finally {
@@ -201,9 +208,32 @@ async function putInPlace(tool, here, { places, machine, downloads, keepDownload
     await writeFile(marker, `Installed by agent-jumpstart (${tool.name} ${tool.version}). A later run updates what's in this folder.\n`);
     await addToPath(tool, folder, machine, say);
     say(`installed ${tool.version}`);
-    return { installed: true, row: `${tool.version} (${changeFrom(before)})`, program };
+    const how = portable ? ` as a portable copy, because ${portable}` : '';
+    return { installed: true, row: `${tool.version} (${changeFrom(before)}${how})`, program };
   } catch (error) {
     return notInstalled(error, say);
+  }
+}
+
+/**
+ * Downloads a tool's self-extracting fallback, checks it against its pinned checksum and runs it
+ * to unpack into the tool's folder.
+ * @param {import('./manifest.js').Fallback} fallback @param {string} folder
+ * @param {Pick<Context, 'places' | 'machine' | 'downloads' | 'keepDownloads'> & { say: (line: string) => void }} how
+ * @returns {Promise<number>} its exit code
+ */
+async function unpackFallback(fallback, folder, { places, machine, downloads, keepDownloads, say }) {
+  const download = fallback.downloads[process.arch];
+  if (!download) throw new NotInstalled(`there's no pinned portable copy for this kind of computer (${process.arch})`);
+  const file = await obtain(download, { downloads, saveIn: join(places.state, 'downloads'), say });
+  try {
+    await checkSum(file, download.sha256, say);
+    const ran = await machine.run(file, fallback.arguments.map((arg) => arg.replaceAll('{folder}', folder)));
+    if (ran.code === 0) say(`portable copy unpacked to ${folder}`);
+    return ran.code;
+  } finally {
+    if (keepDownloads) say(`kept ${file}`);
+    else await rm(file, { force: true });
   }
 }
 
