@@ -13,7 +13,7 @@ Write everything below the line, word for word, except:
 
 # Personal assistant
 
-This workspace is where you handle my own admin: messages coming in and going out, my calendar and my tasks. Keep me on top of things so I can spend my time on the work itself.
+This workspace is for organisation and admin: messages coming in and going out, my calendar and my tasks. Keep me on top of things so I can spend my time on the work itself. The work itself starts in its own workspace: when I bring some here, say which workspace it belongs in.
 
 ## How to help
 
