@@ -45,10 +45,12 @@ async function aLaptopSignedOut(t, { status, login, answers = {} }) {
     'claude.exe auth status': status,
     'claude.exe auth login': login,
     [`${installer} /S --force-run`]: { creates: [t3Leaves.program] },
+    [`${installer} /S`]: { creates: [t3Leaves.program] },
   });
   const logins = async () => (await machine.runs()).filter((run) => basename(run.file) === 'claude.exe' && run.args.join(' ') === 'auth login');
   const t3Starts = async () => (await machine.runs()).filter((run) => run.file === join(where.home, t3Leaves.program));
-  return { where, machine, logins, t3Starts };
+  const t3Install = async () => (await machine.runs()).find((run) => basename(run.file) === installer);
+  return { where, machine, logins, t3Starts, t3Install };
 }
 
 test('before the sign-in starts, the notice says what really happens, word for word', async (t) => {
@@ -93,7 +95,7 @@ test("a sign-in that fails shows Claude's reason and offers Try again, which sig
 });
 
 test("Skip for now finishes the install, with an ending that says how to fix it, shows Claude's reason, and doesn't open T3 Code", async (t) => {
-  const { where, logins, t3Starts } = await aLaptopSignedOut(t, { status: [signedOut], login: [failedLogin], answers: { claudeSignIn: ['skip'] } });
+  const { where, logins, t3Starts, t3Install } = await aLaptopSignedOut(t, { status: [signedOut], login: [failedLogin], answers: { claudeSignIn: ['skip'] } });
 
   const result = await runWith(where, 'york');
 
@@ -108,6 +110,7 @@ test("Skip for now finishes the install, with an ending that says how to fix it,
   assert.doesNotMatch(ending, /Type \/jumpstart/);
   assert.equal(ending.match(/Claude Code: 2\.1\.317, not signed in/g)?.length, 1, 'Claude Code is named once among what didn\'t work');
   assert.deepEqual(await t3Starts(), [], "T3 Code's program isn't started by the ending");
+  assert.deepEqual((await t3Install())?.args, ['/S'], "T3 Code's installer isn't told to start it");
   assert.equal((await readSettings(where.home)).email, null);
   assert.match((await readOnlyLog(where.home)).text, /Ending: T3 Code isn't opened/);
 });

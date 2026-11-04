@@ -77,10 +77,11 @@ export async function findT3({ places, machine, downloads, log }) {
  * @param {import('./profile.js').Profile} profile Its `t3` says how T3's settings are set up.
  * @param {'stable' | 'nightly'} channel
  * @param {FoundT3 | undefined} found A T3 already installed, which is left as it is apart from missing settings.
+ * @param {boolean} open Whether T3 may open. If not, it's installed without being started, and nobody is asked to open it.
  * @param {import('./tools.js').Context} context
  * @returns {Promise<T3Result>}
  */
-export async function installT3(profile, channel, found, context) {
+export async function installT3(profile, channel, found, open, context) {
   const { places, machine, downloads, keepDownloads, log, attended } = context;
   const entry = toolEntry(await loadManifest(downloads), 't3');
   if (!entry) return { row: 'Not installed: the list of versions has no entry for it', installed: false, opened: false };
@@ -92,7 +93,7 @@ export async function installT3(profile, channel, found, context) {
     say(`${found.version ?? 'a version Windows doesn\'t record'} (${found.channel}) is already installed, so it was left as it is`);
     await setUpT3(profile, places.t3UserData, say);
     // An install that was already there may never have been opened.
-    const opened = await waitForFirstLaunch(shim, 0, { machine, attended, say, name: entry.name });
+    const opened = await waitForFirstLaunch(shim, 0, { machine, attended: attended && open, say, name: entry.name });
     const state = [found.channel, 'already installed, left as it is', ...(opened ? [] : ['not opened yet'])].join(', ');
     return { row: `${found.version ?? 'Version unknown'} (${state})`, installed: true, opened, shim };
   }
@@ -111,7 +112,7 @@ export async function installT3(profile, channel, found, context) {
         await checkSha512(file, release.sha512, say);
         // The install starts T3, which reads its settings only as it starts.
         await setUpT3(profile, places.t3UserData, say);
-        const ran = await machine.run(file, entry.install.arguments);
+        const ran = await machine.run(file, open ? entry.install.arguments : entry.install.arguments.filter((argument) => argument !== '--force-run'));
         if (ran.code !== 0) throw new NotInstalled(`its installer stopped with code ${ran.code}`);
       } finally {
         if (keepDownloads) say(`kept ${file}`);
@@ -131,7 +132,7 @@ export async function installT3(profile, channel, found, context) {
     }
   };
   // The download and the silent install show nothing of their own for about half a minute.
-  const outcome = await ui.busy(`Installing ${entry.name}. This takes about a minute, and ${entry.name} opens by itself when it's done.`, install, (outcome) =>
+  const outcome = await ui.busy(`Installing ${entry.name}. This takes about a minute${open ? `, and ${entry.name} opens by itself when it's done` : ''}.`, install, (outcome) =>
     'release' in outcome
       ? { text: `${entry.name} ${outcome.release.version} installed`, ok: true }
       : { text: `${entry.name} not installed: ${outcome.reason}`, ok: false },
@@ -140,7 +141,7 @@ export async function installT3(profile, channel, found, context) {
   const { release } = outcome;
 
   // The silent install starts T3 (--force-run).
-  const opened = await waitForFirstLaunch(shim, machine.patience, { machine, attended, say, name: entry.name });
+  const opened = await waitForFirstLaunch(shim, open ? machine.patience : 0, { machine, attended: attended && open, say, name: entry.name });
   const state = [channel, change.installed, ...(opened ? [] : ['not opened yet'])].join(', ');
   return { row: `${release.version} (${state})`, installed: true, opened, shim };
 }

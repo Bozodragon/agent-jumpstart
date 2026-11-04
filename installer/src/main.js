@@ -246,7 +246,7 @@ async function main() {
     await writeSettings(places.settings, settings);
     log.write(`Signed-in email written to settings: ${claude.email ?? 'none'}`);
     // Last of the installs, after every other tool and its PATH entry: T3 reads PATH only when it starts.
-    const t3 = await installT3(profile, choices.channel, foundT3, context);
+    const t3 = await installT3(profile, choices.channel, foundT3, ending.openT3, context);
     record([[named.t3, t3.row]]);
     // After T3's first start, which leaves the command-line shim that adds a project.
     const workspacesLine = await addToT3(workspaces, t3, context);
