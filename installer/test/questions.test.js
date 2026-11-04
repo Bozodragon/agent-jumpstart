@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdir, readdir, writeFile } from 'node:fs/promises';
 import { basename, join } from 'node:path';
-import { fakeMachine, makeHome, readOnlyLog, readProfile, readSettings, runWith } from './harness.js';
+import { fakeMachine, makeHome, readOnlyLog, readSettings, runWith } from './harness.js';
 
 /**
  * Everything in a home except the installer's own folder, which always holds a log, and the fake
@@ -144,23 +144,20 @@ test('a york run answering "new" for the top workspace makes it in the Drive fol
 /** @param {string} text */
 const flowing = (text) => text.replace(/[│|]/g, ' ').replace(/\s+/g, ' ');
 
-for (const [state, message, answers] of /** @type {['missing' | 'signed-out', string, object][]} */ ([
-  ['missing', "Google Drive for desktop is needed first, and it isn't on this laptop", {}],
+for (const [state, message, answers] of /** @type {['installed, never opened' | 'signed-out', string, object][]} */ ([
+  ['installed, never opened', 'Google Drive for desktop is installed but has never been opened.', {}],
   ['signed-out', 'Google Drive for desktop is installed but not signed in.', {}],
-  ['missing', "Google Drive for desktop is needed first, and it isn't on this laptop", { topWorkspace: 'new' }],
+  ['installed, never opened', 'Google Drive for desktop is installed but has never been opened.', { topWorkspace: 'new' }],
   ['signed-out', 'Google Drive for desktop is installed but not signed in.', { topWorkspace: 'new' }],
 ])) {
   test(`a york run making a new top workspace${'topWorkspace' in answers ? ' (answered "new")' : ' (the default)'} with Google Drive for desktop ${state} says how to get it ready, and with nobody to wait for, stops before creating anything`, async (t) => {
     const where = await makeHome(t, answers, { googleDrive: state });
-    const profile = await readProfile('york');
     const before = await homeContents(where.home);
 
     const result = await runWith(where, 'york');
 
     assert.equal(result.code, 1);
-    // How to get it, in the profile's words where it's missing.
-    const how = state === 'missing' ? profile.googleDrive.install : 'Open Google Drive from the Start menu and sign in';
-    assert.ok(flowing(result.stdout).includes(flowing(how)), result.stdout);
+    assert.ok(flowing(result.stdout).includes('Open Google Drive from the Start menu and sign in'), result.stdout);
     assert.ok(result.stdout.includes(message), result.stdout);
     assert.ok(result.stdout.includes('Nothing has been changed.'), result.stdout);
     await assert.rejects(readSettings(where.home), { code: 'ENOENT' });
