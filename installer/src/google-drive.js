@@ -191,7 +191,7 @@ async function fromSoftwareCenter(profile, places, ask, context) {
   if (choice === 'documents') return 'documents';
 
   await showPage('Software Center', `softwarecenter:SoftwareID=${id}`, context);
-  ui.notice(['Click Install in Software Center, then come back to this window.', restartLine].filter(Boolean).join('\n'), 'Install Google Drive');
+  ui.notice(['Click Install in Software Center, then come back to this window.', restartLine].join('\n'), 'Install Google Drive');
   const waitFor = /** @template T @param {() => Promise<T>} look @param {(found: T) => boolean} done */ (look, done) =>
     keepTrying({ machine, every: softwareCenterEvery, patience: softwareCenterPatience }, look, done);
   const install = await ui.busy(

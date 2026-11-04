@@ -268,25 +268,23 @@ async function waitForFirstLaunch(shim, patience, { machine, attended, say, name
  * already open just comes to the front: it runs only once.
  * @param {'stable' | 'nightly'} channel The channel of the T3 that's installed.
  * @param {import('./tools.js').Context} context
- * @returns {Promise<boolean>} whether it was started
  */
 export async function openT3(channel, { places, machine, downloads, log }) {
   const entry = toolEntry(await loadManifest(downloads), 't3');
   const where = entry?.channels[channel];
-  if (!entry || !where) return false;
+  if (!entry || !where) return;
   const say = (/** @type {string} */ line) => log.write(`${entry.name}: ${line}`);
   const program = join(places.programs, entry.install.folder, where.program);
   if (!(await exists(program))) {
     say(`not opened at the end: ${program} isn't there`);
-    return false;
+    return;
   }
   ui.step(`Opening ${entry.name}`);
   try {
     await machine.launch(program, []);
   } catch (error) {
     say(`couldn't be opened at the end: ${messageOf(error)}`);
-    return false;
+    return;
   }
   say(`opened at the end (${program})`);
-  return true;
 }
