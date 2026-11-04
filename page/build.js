@@ -1,7 +1,9 @@
 #!/usr/bin/env node
 // Renders the setup page once per profile from page/template.html, filling in that
 // profile's pastedLine, shareLogLine (and the script address inside each, for the "See what this
-// runs" links) and top workspace's name, and the sentence saying where to send the log, and checks each page shows its own line to paste exactly once.
+// runs" links), top workspace's name, connectors, the sentence saying where to send the log and
+// the wording in its `setupPage` (where workspaces are, why T3 Code, privacy), plus the skills
+// in page/skills.json, and checks each page shows its own line to paste exactly once.
 //
 //   node page/build.js [<folder>]       write <folder>/<profile>/index.html (default: dist/page)
 //   node page/build.js --publish        render, then publish each page as a public Portall
@@ -10,14 +12,24 @@
 // Each profile's `page` is the address its item ends up at, so https://jumpstart-york.arcforge.uk/
 // is published as the item `jumpstart-york`.
 import { spawnSync } from 'node:child_process';
-import { mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 
 const repo = fileURLToPath(new URL('..', import.meta.url));
 /** Each placeholder, and where in a profile its text is (`workspaces.top` is the key `top` inside `workspaces`). */
-const fields = { pastedLine: 'pastedLine', shareLogLine: 'shareLogLine', logGoesTo: 'logGoesTo', topWorkspace: 'workspaces.top' };
+const fields = {
+  pastedLine: 'pastedLine',
+  shareLogLine: 'shareLogLine',
+  logGoesTo: 'logGoesTo',
+  topWorkspace: 'workspaces.top',
+  connectorsPage: 'connectorsPage',
+  workspacesHeading: 'setupPage.workspaces.heading',
+  workspacesText: 'setupPage.workspaces.text',
+};
+/** The `setupPage` keys that hold a list of paragraphs. */
+const paragraphs = { whyT3Code: 'setupPage.whyT3Code', privacy: 'setupPage.privacy' };
 
 /** The draft a profile's `logEmail` link opens: who it's to is filled in after "Hi". */
 const supportEmail = {
@@ -45,6 +57,63 @@ const escape = (text) =>
   text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 
 /**
+ * A profile's wording as HTML: escaped, with `**words**` in bold and `[words](address)` as a link
+ * that opens in a new tab.
+ * @param {string} text
+ */
+const inline = (text) =>
+  escape(text)
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\[([^\]]+)\]\((https:\/\/[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+
+/** @param {string} id @param {string} key @param {unknown} list @returns {string} each item as a paragraph */
+function paragraphsOf(id, key, list) {
+  if (!Array.isArray(list) || list.length === 0 || !list.every((item) => typeof item === 'string' && item !== '')) {
+    fail(`profiles/${id}.json needs "${key}", a list of paragraphs, for its setup page.`);
+  }
+  return list.map((item) => `          <p>${inline(item)}</p>`).join('\n');
+}
+
+/**
+ * The connectors' rows, as the installer offers them: each name and what it lets the agent do.
+ * @param {string} id @param {unknown} connectors
+ */
+function connectorRows(id, connectors) {
+  if (!Array.isArray(connectors) || !connectors.every((one) => typeof one?.name === 'string' && typeof one?.what === 'string')) {
+    fail(`profiles/${id}.json needs "connectors", each with a "name" and "what", for its setup page.`);
+  }
+  return connectors.map((one) => `            <b>${escape(one.name)}</b><span>${escape(one.what)}</span>`).join('\n');
+}
+
+/**
+ * The names of the skills a profile installs: a source's `names`, or for a source that is the
+ * path to one skill, its last part.
+ * @param {unknown} skills
+ */
+function installedSkills(skills) {
+  if (!Array.isArray(skills)) return new Set();
+  return new Set(skills.flatMap((source) => source?.names ?? [String(source?.source).split('/').pop()]));
+}
+
+/**
+ * The skills under their headings, each name linking to the skill's own text. Fails if the page
+ * lists a skill the profile doesn't install.
+ * @param {string} id @param {Record<string, { name: string, line: string, text: string }[]>} skills
+ * @param {Set<string>} installed
+ */
+function skillGroups(id, skills, installed) {
+  return Object.entries(skills)
+    .map(([heading, list]) => {
+      const rows = list.map((skill) => {
+        if (!installed.has(skill.name)) fail(`page/skills.json lists /${skill.name}, which profiles/${id}.json doesn't install.`);
+        return `            <a href="${escape(skill.text)}" target="_blank" rel="noopener">/${escape(skill.name)}</a><span>${escape(skill.line)}</span>`;
+      });
+      return `          <h3>${escape(heading)}</h3>\n          <div class="rows skills">\n${rows.join('\n')}\n          </div>`;
+    })
+    .join('\n');
+}
+
+/**
  * The sentence after the share-log box. With a `logEmail` it links to a Gmail draft to that
  * address with the support email filled in (the profiles' people use Gmail, which a mailto link
  * wouldn't open on a laptop with no mail app set up); without one, it names who to send it to.
@@ -69,6 +138,13 @@ function scriptAddress(line, id, key) {
   return address;
 }
 
+/**
+ * @param {Record<string, unknown>} profile
+ * @param {string} key a dotted path, such as `workspaces.top`
+ * @returns {unknown}
+ */
+const lookUp = (profile, key) => key.split('.').reduce((/** @type {any} */ inside, part) => inside?.[part], profile);
+
 /** @param {string} haystack @param {string} needle */
 const count = (haystack, needle) => haystack.split(needle).length - 1;
 
@@ -83,13 +159,13 @@ function fail(message) {
  * @param {string} id
  * @param {Record<string, unknown>} profile
  * @param {string[]} otherLines every other profile's pasted line, none of which may appear
+ * @param {Record<string, { name: string, line: string, text: string }[]>} skills page/skills.json
  */
-function render(template, id, profile, otherLines) {
+function render(template, id, profile, otherLines, skills) {
   /** @type {Record<string, string>} */
   const filled = {};
   for (const [field, key] of Object.entries(fields)) {
-    /** @type {unknown} */
-    const value = key.split('.').reduce((/** @type {any} */ inside, part) => inside?.[part], profile);
+    const value = lookUp(profile, key);
     if (typeof value !== 'string' || value === '') fail(`profiles/${id}.json needs "${key}" for its setup page.`);
     filled[field] = value;
   }
@@ -98,7 +174,11 @@ function render(template, id, profile, otherLines) {
     sendTheLog: sendTheLog(filled.logGoesTo, profile.logEmail),
     pastedUrl: escape(scriptAddress(filled.pastedLine, id, 'pastedLine')),
     shareLogUrl: escape(scriptAddress(filled.shareLogLine, id, 'shareLogLine')),
+    whereWorkspacesAre: `          <p><strong>${escape(filled.workspacesHeading)}</strong> ${inline(filled.workspacesText)}</p>`,
+    connectorRows: connectorRows(id, profile.connectors),
+    skills: skillGroups(id, skills, installedSkills(profile.skills)),
   };
+  for (const [field, key] of Object.entries(paragraphs)) html[field] = paragraphsOf(id, key, lookUp(profile, key));
   for (const [field, value] of Object.entries(filled)) html[field] = escape(value);
   const page = template.replace(/\{\{(\w+)\}\}/g, (whole, name) => html[name] ?? whole);
   const left = page.match(/\{\{\w+\}\}/);
@@ -112,6 +192,7 @@ function render(template, id, profile, otherLines) {
 }
 
 const template = await readFile(join(repo, 'page', 'template.html'), 'utf8');
+const skills = JSON.parse(await readFile(join(repo, 'page', 'skills.json'), 'utf8'));
 const ids = (await readdir(join(repo, 'profiles'))).filter((file) => file.endsWith('.json')).map((file) => file.slice(0, -5)).sort();
 /** @type {Record<string, Record<string, unknown>>} */
 const profiles = {};
@@ -122,9 +203,17 @@ await rm(out, { recursive: true, force: true });
 for (const id of ids) {
   const folder = join(out, id);
   await mkdir(folder, { recursive: true });
-  await writeFile(join(folder, 'index.html'), render(template, id, profiles[id], allLines));
+  await writeFile(join(folder, 'index.html'), render(template, id, profiles[id], allLines, skills));
 }
 console.log(`Rendered the setup page for ${ids.join(', ')} into ${out}`);
+
+// Jumpstart's page templates are published with every profile's site, at <page>jumpstart/<name>,
+// so the skill's small pages can load them (docs/adr/0001). Their source is beside the skill.
+const jumpstartTemplates = ['writing-picker.js'];
+for (const id of ids) {
+  await mkdir(join(out, id, 'jumpstart'), { recursive: true });
+  for (const name of jumpstartTemplates) await copyFile(join(repo, 'skills', 'jumpstart', name), join(out, id, 'jumpstart', name));
+}
 
 if (values.publish) {
   for (const id of ids) {

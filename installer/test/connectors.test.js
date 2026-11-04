@@ -54,3 +54,43 @@ test('with no connectors chosen the walkthrough is skipped and the checklist say
   assert.ok(!log.text.includes(profile.connectorsPage), log.text);
   assert.ok(log.text.includes('Checklist: Connectors: None chosen'), log.text);
 });
+
+/** @param {string} stdout The screen, with the notice's box and line breaks flattened into single spaces. */
+const flatten = (stdout) => stdout.replace(/[│|]/g, ' ').replace(/\s+/g, ' ');
+
+test('with Asana chosen, York is told under the list to choose the team\'s workspace and not york.ac.uk', async (t) => {
+  const where = await makeHome(t, { connectors: ['Gmail', 'Asana'] });
+
+  const result = await runWith(where, 'york');
+
+  assert.equal(result.code, 0, result.stdout + result.stderr);
+  const flowing = flatten(result.stdout);
+  const warning = "For Asana: at the top of Asana's page, choose your team's workspace. Unless your team works there, don't choose york.ac.uk. Asana makes that one for everyone with a York email address.";
+  assert.ok(flowing.includes(warning), result.stdout);
+  // Under the list: after the last connector named, before the closing lines.
+  assert.ok(flowing.indexOf(warning) > flowing.indexOf('Asana: see your tasks'), result.stdout);
+  assert.ok(flowing.indexOf(warning) < flowing.indexOf('The agent uses them as you'), result.stdout);
+});
+
+test('with Asana chosen, the default profile gives the same warning without naming a domain', async (t) => {
+  const where = await makeHome(t, { connectors: ['Asana'] });
+
+  const result = await runWith(where, 'default');
+
+  assert.equal(result.code, 0, result.stdout + result.stderr);
+  const flowing = flatten(result.stdout);
+  assert.ok(flowing.includes("For Asana: at the top of Asana's page, choose your team's workspace."), result.stdout);
+  assert.ok(flowing.includes('Asana makes that one for everyone with'), result.stdout);
+  assert.doesNotMatch(result.stdout, /york/i);
+});
+
+test('without Asana chosen, there is no Asana warning', async (t) => {
+  for (const profile of ['york', 'default']) {
+    const where = await makeHome(t, { connectors: ['Gmail'] });
+
+    const result = await runWith(where, profile);
+
+    assert.equal(result.code, 0, result.stdout + result.stderr);
+    assert.ok(!flatten(result.stdout).includes('For Asana:'), result.stdout);
+  }
+});

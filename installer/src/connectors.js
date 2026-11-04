@@ -32,6 +32,8 @@ export async function walkThroughConnectors(profile, connectors, { attended, con
   await showPage('Connectors page', page, { machine, log });
   /** @param {string} name */
   const whatItDoes = (name) => profile.connectors.find((connector) => connector.name === name)?.what;
+  // A ticked connector's note, such as which Asana workspace to choose, goes under the list.
+  const notes = connectors.flatMap((name) => profile.connectors.find((connector) => connector.name === name)?.note ?? []);
   ui.notice(
     [
       // The page's own heading reads Customize, which can look like the wrong page.
@@ -39,6 +41,7 @@ export async function walkThroughConnectors(profile, connectors, { attended, con
       '',
       ...connectors.map((name) => `  ${ui.bullet} ${name}${whatItDoes(name) ? `: ${whatItDoes(name)}` : ''}`),
       '',
+      ...notes.flatMap((note) => [note, '']),
       'The agent uses them as you, and only for what you ask it to do. You can disconnect any of them on the same page.',
       '',
       "If one isn't there or won't connect, carry on. Jumpstart checks each one later.",
