@@ -37,7 +37,7 @@
 
   a { color: var(--accent); text-decoration: none; border-bottom: 1px solid rgba(91, 149, 255, .35); }
   a:hover { border-bottom-color: var(--accent); }
-  a:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+  a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
 
   /* Page header */
   .page-head { text-align: center; margin-bottom: 48px; }
@@ -100,24 +100,10 @@
   .copybox-label b { font-size: 13.5px; font-weight: 500; }
   .copybox-label span { font-size: 12px; color: var(--muted); }
   .copybox-body { position: relative; padding: 14px 16px; font-size: 14px; line-height: 1.65; }
-  .copybox-body.cmd { font-family: var(--mono); font-size: 13px; overflow-x: auto; white-space: nowrap; }
+  .copybox-body.cmd { cursor: pointer; font-family: var(--mono); font-size: 13px; overflow-x: auto; white-space: nowrap; }
   .copybox-body.cmd .prompt-sign { color: var(--muted); user-select: none; margin-right: 10px; }
 
-  /* Pills */
-  button {
-    font: inherit; font-size: 13px; font-weight: 500; color: var(--text);
-    background: var(--hover); border: 1px solid var(--outline); border-radius: 999px;
-    padding: 6px 14px; cursor: pointer;
-    display: inline-flex; align-items: center; gap: 7px;
-    transition: background .15s ease, border-color .15s ease, color .15s ease;
-  }
-  button:hover { background: var(--selected); border-color: #3a3e47; }
-  button svg { width: 14px; height: 14px; flex: none; }
-  button.copy { min-width: 88px; justify-content: center; }
-  button.copy .icon-done { display: none; }
-  button.copy.copied { color: var(--accent); border-color: rgba(91, 149, 255, .5); }
-  button.copy.copied .icon-copy { display: none; }
-  button.copy.copied .icon-done { display: block; }
+  .copybox-head .see { flex: none; font-size: 13px; margin-right: 6px; }
 
   /* Troubleshooting: closed until someone needs it */
   details.help > summary { list-style: none; cursor: pointer; color: var(--secondary); }
@@ -130,7 +116,7 @@
 
   .foot { margin-top: 40px; padding: 0 4px; text-align: center; color: var(--muted); font-size: 13.5px; }
 
-  @media (prefers-reduced-motion: reduce) { button, details.help .chevron svg { transition: none; } }
+  @media (prefers-reduced-motion: reduce) { details.help .chevron svg { transition: none; } }
   @media (max-width: 600px) {
     main { padding: 48px 16px 72px; }
     h1 { font-size: 26px; }
@@ -146,7 +132,7 @@
       <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 17l6-6-6-6"/><path d="M12 19h8"/></svg>
     </div>
     <h1>Set up your agent</h1>
-    <p>Work through the steps in order. Where there's a box, copy it and paste it where the box says.</p>
+    <p>Work through the steps in order. Where there's a box, click the line, press Ctrl+C and paste it where the box says.</p>
   </header>
 
   <section>
@@ -158,10 +144,12 @@
           <p class="step-body">Open <strong>Windows PowerShell</strong> from the Start menu, paste this and press Enter. You don't need admin rights, and running it again is safe.</p>
           <div class="copybox">
             <div class="copybox-head">
-              <div class="copybox-label"><b>Install line</b><span>Paste into PowerShell</span></div>
+              <div class="copybox-label"><b>Install line</b><span>Click the line, then press Ctrl+C</span></div>
+              <a class="see" href="{{pastedUrl}}" target="_blank" rel="noopener">See what this runs</a>
             </div>
             <div class="copybox-body cmd"><span class="prompt-sign" aria-hidden="true">&gt;</span><span class="line">{{pastedLine}}</span></div>
           </div>
+          <p class="after"><strong>After you press Enter, nothing may appear for up to half a minute.</strong> That wait is Windows PowerShell fetching the script, before our installer starts. Leave the window open.</p>
           <p class="after">It asks a few questions, and pressing Enter picks the usual answer. When you need to sign in to something, it opens the page, says what to click and waits for you. It ends with a checklist of what it set up.</p>
         </div></li>
 
@@ -187,7 +175,8 @@
           <p class="step-body">Paste this into <strong>Windows PowerShell</strong>. It copies the installer's log for you.</p>
           <div class="copybox">
             <div class="copybox-head">
-              <div class="copybox-label"><b>Share the log</b><span>Paste into PowerShell</span></div>
+              <div class="copybox-label"><b>Share the log</b><span>Click the line, then press Ctrl+C</span></div>
+              <a class="see" href="{{shareLogUrl}}" target="_blank" rel="noopener">See what this runs</a>
             </div>
             <div class="copybox-body cmd"><span class="prompt-sign" aria-hidden="true">&gt;</span><span class="line">{{shareLogLine}}</span></div>
           </div>
@@ -201,41 +190,16 @@
 </main>
 
 <script>
-  var COPY_ICON = '<svg class="icon-copy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="12" height="12" rx="2.5"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>';
-  var DONE_ICON = '<svg class="icon-done" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
-
-  // Every copy box gets the same Copy button in its header. It copies the line shown in the box;
-  // if the browser won't copy, the line is left selected so Ctrl+C still works.
-  document.querySelectorAll(".copybox").forEach(function (box) {
-    var line = box.querySelector(".line");
-    var btn = document.createElement("button");
-    btn.className = "copy";
-    btn.type = "button";
-    btn.innerHTML = COPY_ICON + DONE_ICON + '<span class="copy-label">Copy</span>';
-    box.querySelector(".copybox-head").appendChild(btn);
-    var label = btn.querySelector(".copy-label");
-    var shown = function (text, copied) {
-      label.textContent = text;
-      btn.classList.toggle("copied", copied);
-      clearTimeout(btn._t);
-      btn._t = setTimeout(function () { label.textContent = "Copy"; btn.classList.remove("copied"); }, 2000);
-    };
-    var fallback = function () {
+  // One click on a line selects all of it, so Ctrl+C copies it. The page only selects text: it
+  // reads or writes nothing, so a blocker such as uBlock Origin has nothing to stop.
+  document.querySelectorAll(".copybox-body").forEach(function (body) {
+    var line = body.querySelector(".line");
+    body.addEventListener("click", function () {
       var range = document.createRange();
       range.selectNodeContents(line);
       var selection = window.getSelection();
       selection.removeAllRanges();
       selection.addRange(range);
-      var copied = false;
-      try { copied = document.execCommand("copy"); } catch (error) { copied = false; }
-      shown(copied ? "Copied" : "Press Ctrl+C", copied);
-    };
-    btn.addEventListener("click", function () {
-      if (navigator.clipboard && window.isSecureContext) {
-        navigator.clipboard.writeText(line.textContent).then(function () { shown("Copied", true); }, fallback);
-      } else {
-        fallback();
-      }
     });
   });
 </script>
