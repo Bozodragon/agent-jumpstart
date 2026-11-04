@@ -92,7 +92,8 @@ const anotherFolder = 'another';
 /**
  * Under a profile that keeps workspaces in Google Drive, needs Drive for desktop signed in, but
  * only once the person has chosen to make a new top workspace: if it isn't, they're told how to
- * get it ready and, when they're at the screen, waited for (see readyGoogleDrive).
+ * get it ready and, when they're at the screen, waited for, or offered Documents instead (see
+ * readyGoogleDrive).
  * @param {import('./profile.js').Profile} profile
  * @param {import('./places.js').Places} places
  * @param {Asker} ask
@@ -195,8 +196,8 @@ function whereNewGoes(profile, places, drive) {
 
 /**
  * The questions for a new top workspace: the Google Drive folder, or the folder workspaces live
- * in. Under a Google Drive profile, Drive for desktop has to be signed in first (see
- * readyGoogleDrive, which stops the run if it can't be).
+ * in. Under a Google Drive profile, Drive for desktop has to be signed in first, or Documents is
+ * used instead (see readyGoogleDrive).
  * @param {import('./profile.js').Profile} profile @param {import('./places.js').Places} places
  * @param {Asker} ask
  * @param {import('./google-drive.js').GoogleDrive | undefined} found what was found, under a Google Drive profile
@@ -207,7 +208,11 @@ async function newLocation(profile, places, ask, found, context) {
   let googleDriveFolder = null;
   let workspacesLocation;
   if (found) {
-    const drive = await readyGoogleDrive(profile, places, found, context);
+    const drive = await readyGoogleDrive(places, ask, found, context);
+    if (drive.status === 'documents') {
+      const documents = join(places.home, 'Documents');
+      return { googleDriveFolder: null, workspacesLocation: documents, topWorkspace: topWorkspaceIn(profile, documents) };
+    }
     googleDriveFolder = await ask.folder({
       key: 'googleDriveFolder',
       message: drive.folder
@@ -299,9 +304,10 @@ async function theRest(profile, ask, log, found, { googleDriveFolder, workspaces
  * @param {Record<string, unknown>} settings
  * @param {Asker} ask
  * @param {{ write(line: string): void }} log
+ * @param {Set<string>} [reused] Filled with the key of each answer the settings gave.
  * @returns {Asker}
  */
-export function knownFrom(settings, ask, log) {
+export function knownFrom(settings, ask, log, reused = new Set()) {
   const { topWorkspace, ...answerable } = settings;
   const known = answersFrom(answerable);
   /**
@@ -314,6 +320,7 @@ export function knownFrom(settings, ask, log) {
       try {
         const value = await fromSettings();
         log.write(`Known from settings: ${key}: ${JSON.stringify(value)}`);
+        reused.add(key);
         return value;
       } catch (error) {
         if (!(error instanceof Stop)) throw error;

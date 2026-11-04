@@ -44,13 +44,14 @@ export async function setUpClaude({ places, machine, downloads, log }) {
   // Before T3 starts, even if the install below doesn't finish: T3 then finds it once it's there.
   say((await machine.addToUserPath(folder)) ? `added ${folder} to the user PATH` : `${folder} was already on the user PATH`);
 
-  const look = async () => {
-    const state = await lookAt(program, machine);
-    say(describe(state, program));
-    return state;
-  };
+  // Claude Code takes a few seconds to answer each time, with nothing on screen of its own.
+  const look = () =>
+    ui.busy(`Checking ${entry.name}`, async () => {
+      const state = await lookAt(program, machine);
+      say(describe(state, program));
+      return state;
+    });
 
-  ui.step(`Checking ${entry.name}`);
   let state = await look();
   if (!state.present) {
     // Its own installer shows its progress in this window, so there's no spinner over it.

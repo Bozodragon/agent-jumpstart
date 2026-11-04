@@ -22,9 +22,6 @@ const profilesFolder = fileURLToPath(new URL('../../profiles/', import.meta.url)
  *   `top` is the top workspace's folder name, created in the confirmed location with the chosen
  *   workspaces inside it. `defaultLocation` is the folder, within the user's profile folder,
  *   offered for workspaces when they aren't in Google Drive.
- * @property {{ install?: string }} [googleDrive] For a profile whose workspaces are in Google Drive:
- *   `install` says, in the person's words, how to get Google Drive for desktop and sign in, for
- *   a laptop that hasn't got it. Without it, they're sent to Google's download page.
  * @property {{ defaultModel?: string, effort?: string, codex?: boolean }} [t3] How T3 Code is set up
  *   when the installer installs it (never for a T3 already there): new threads use Claude with
  *   `defaultModel`, which must be a model id T3 knows exactly (`claude-opus-5-5`; T3 quietly

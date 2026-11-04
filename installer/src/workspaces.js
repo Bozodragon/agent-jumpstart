@@ -114,7 +114,7 @@ export async function addToT3(workspaces, t3, { machine, log }) {
   const add = () =>
     keepTrying(
       { machine, every: 2000 },
-      () => machine.run(shim, ['project', 'add', top, '--title', name]),
+      () => machine.run(shim, ['project', 'add', top, '--title', name], { expected: stillStarting }),
       (ran) => !stillStarting(ran),
       () => say(`T3 Code is still starting, so adding ${top} is tried again in 2 seconds`),
     );
