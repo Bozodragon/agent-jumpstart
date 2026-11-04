@@ -3,7 +3,8 @@
 // profile's pastedLine, shareLogLine (and the script address inside each, for the "See what this
 // runs" links), top workspace's name, connectors, the sentence saying where to send the log and
 // the wording in its `setupPage` (where workspaces are, why T3 Code, privacy), plus the skills
-// in page/skills.json, and checks each page shows its own line to paste exactly once.
+// in page/skills.json and the screenshots in page/screenshots (as data addresses, so each page is
+// one file), and checks each page shows its own line to paste exactly once.
 //
 //   node page/build.js [<folder>]       write <folder>/<profile>/index.html (default: dist/page)
 //   node page/build.js --publish        render, then publish each page as a public Portall
@@ -28,6 +29,8 @@ const fields = {
   workspacesHeading: 'setupPage.workspaces.heading',
   workspacesText: 'setupPage.workspaces.text',
 };
+/** The screenshots, by placeholder: the files in page/screenshots that the page shows. */
+const screenshots = { t3Layout: 't3-layout.png', t3NewWorkspace: 't3-new-workspace.png' };
 /** The `setupPage` keys that hold a list of paragraphs. */
 const paragraphs = { whyT3Code: 'setupPage.whyT3Code', privacy: 'setupPage.privacy' };
 
@@ -160,8 +163,9 @@ function fail(message) {
  * @param {Record<string, unknown>} profile
  * @param {string[]} otherLines every other profile's pasted line, none of which may appear
  * @param {Record<string, { name: string, line: string, text: string }[]>} skills page/skills.json
+ * @param {Record<string, string>} shots each screenshot's placeholder and its data address
  */
-function render(template, id, profile, otherLines, skills) {
+function render(template, id, profile, otherLines, skills, shots) {
   /** @type {Record<string, string>} */
   const filled = {};
   for (const [field, key] of Object.entries(fields)) {
@@ -177,6 +181,7 @@ function render(template, id, profile, otherLines, skills) {
     whereWorkspacesAre: `          <p><strong>${escape(filled.workspacesHeading)}</strong> ${inline(filled.workspacesText)}</p>`,
     connectorRows: connectorRows(id, profile.connectors),
     skills: skillGroups(id, skills, installedSkills(profile.skills)),
+    ...shots,
   };
   for (const [field, key] of Object.entries(paragraphs)) html[field] = paragraphsOf(id, key, lookUp(profile, key));
   for (const [field, value] of Object.entries(filled)) html[field] = escape(value);
@@ -193,6 +198,11 @@ function render(template, id, profile, otherLines, skills) {
 
 const template = await readFile(join(repo, 'page', 'template.html'), 'utf8');
 const skills = JSON.parse(await readFile(join(repo, 'page', 'skills.json'), 'utf8'));
+/** @type {Record<string, string>} */
+const shots = {};
+for (const [field, file] of Object.entries(screenshots)) {
+  shots[field] = `data:image/png;base64,${(await readFile(join(repo, 'page', 'screenshots', file))).toString('base64')}`;
+}
 const ids = (await readdir(join(repo, 'profiles'))).filter((file) => file.endsWith('.json')).map((file) => file.slice(0, -5)).sort();
 /** @type {Record<string, Record<string, unknown>>} */
 const profiles = {};
@@ -203,7 +213,7 @@ await rm(out, { recursive: true, force: true });
 for (const id of ids) {
   const folder = join(out, id);
   await mkdir(folder, { recursive: true });
-  await writeFile(join(folder, 'index.html'), render(template, id, profiles[id], allLines, skills));
+  await writeFile(join(folder, 'index.html'), render(template, id, profiles[id], allLines, skills, shots));
 }
 console.log(`Rendered the setup page for ${ids.join(', ')} into ${out}`);
 
