@@ -12,7 +12,7 @@ Treat it as two new **colleagues** getting to know each other, not a form: one q
 
 **Name the thread first.** Before anything else, rename this thread "Jumpstart" with T3 Code's own thread tool, `t3_thread_update` (`action: "rename"`, `title: "Jumpstart"`, no `threadId`, so it's this thread; load it first if it's listed as a deferred tool). It asks no permission and changes no file. Say nothing about it, and if the tool isn't there, carry on without it.
 
-**Read-only until approval.** Until the person approves their profile in step 6 you only read: create or change no file, in this folder or anywhere else, and send nothing.
+**Read-only until approval.** Until the person approves their profile in step 6 you only read: create or change no file, in this folder or anywhere else, and send nothing. On a re-run, the same holds until they agree to the part their option changes.
 
 ## 1. Read what the installer knows
 
@@ -27,7 +27,9 @@ Take their name from their Claude account. Claude Code keeps it in its own confi
 
 You should be running in their top workspace: the folder `topWorkspace` names (the installer created it, or found the one they already had, and added it to T3). In a settings file from before the installer wrote that key, it is a folder directly inside `workspacesLocation`, holding a folder for each of their `workspaces`. If it isn't, tell them to open their top workspace in T3 and type `/jumpstart` there, and stop.
 
-Done when you have their email, workspaces, connectors and profile, and either their name from the account or the knowledge that you'll ask for it.
+**Look for an earlier run.** Jumpstart has run here before if the top workspace has a `CLAUDE.md` whose first heading is "How to work with me", or any of `me.md`, `work.md` and `people.md` with a "Checked with" line under its title. Then this is a re-run: say nothing else and go straight to "Running Jumpstart again" below, instead of step 2. A re-run never starts again.
+
+Done when you have their email, workspaces, connectors and profile, and either their name from the account or the knowledge that you'll ask for it, and you know whether Jumpstart has run here before.
 
 ## 2. Say hello and ask their role
 
@@ -140,7 +142,7 @@ Now you write, in the top workspace (the folder you're running in): rules in its
    - **Keep mine as they are** (first): "I'll leave them exactly as they are and won't write my own in their place."
    - **Use new ones**: "I'll rename yours with '(before Jumpstart)' added, so nothing is lost, and write new ones."
 
-   Anything short of a clear choice of new ones is keep. For a folder they keep, leave each file that's there untouched and unrenamed, and write only the files that aren't there. For a folder they want new ones in, rename each file that's there with " (before Jumpstart)" added to its name, such as `CLAUDE (before Jumpstart).md`, then write as below; old instructions stop loading once renamed.
+   Anything short of a clear choice of new ones is keep. For a folder they keep, leave each file that's there untouched and unrenamed, and write only the files that aren't there. For a folder they want new ones in, rename each file that's there with " (before Jumpstart)" added to its name, such as `CLAUDE (before Jumpstart).md`, then write as below; old instructions stop loading once renamed. If a `CLAUDE.md` you rename has an "Agent skills" section, copy that section word for word to the end of the `CLAUDE.md` you write in its place: it records where that folder keeps its issues.
 2. **The three files.** Write each in the person's voice, as they will open and read it: turn "you" and "your" into "I", "me" and "my", in headings and lines alike. Each starts with a title, then "Checked with [first name] on [date]." (such as 25 October 2026), then the profile's sections, each section's title as a heading over its lines as a bulleted list. Labelled items read "Label: text". A section with no lines keeps its heading.
    - `me.md`, titled "About me": every section except "Your work" and "People you work with", in page order.
    - `work.md`, titled "My work": the "Your work" section.
@@ -209,6 +211,40 @@ Then read their reply to the offer. Make it once: whatever they say, don't ask a
 
 Done when that message is sent and, if they said yes, the workspace is made. Jumpstart ends there; carry on with whatever they ask next.
 
+## Running Jumpstart again
+
+When step 1 finds an earlier run, you update what's there; you never start again. What the person approved before is kept: each option below changes only its own part, and writes only once the person has agreed to that part. No option rewrites or renames any `CLAUDE.md`, here or in a workspace, so anything added to one since, such as a workspace's "Agent skills" section, stays as it is.
+
+Before anything else, send this, word for word, with nothing before or after it:
+
+> You've run Jumpstart before. What do you want to do?
+> 1. Update what I know about you. I'll look again and show you only what's new or different.
+> 2. Change how I write, or what you want help with.
+> 3. Add a workspace.
+> 4. Check your connectors.
+>
+> Or tell me something else.
+
+A number, or words that match an option, picks that option. Do only that option, then say in one line that it's done and that they can run `/jumpstart` again any time. Jumpstart ends there; carry on with whatever they ask next.
+
+**1. Update what I know about you.**
+
+1. Check the connectors as step 2 does, saying nothing about them unless one isn't **Working**.
+2. Ask about their email as step 3 does.
+3. Start the research as step 4 does, with the person's details taken from the "About you" section of `me.md`, and tell them in a line that you're having a look now. Ask nothing else while it reads.
+4. Once it has reported, build the Findings as "The profile" describes, then compare each item with what's kept: "About you" with `me.md`, "Your work" with `work.md`, "People you work with" with `people.md`. Keep only items that are new, with `status` `"new"`, or that say something different from a line that's kept, with `status` `"changed"` and the new wording. Leave everything that's unchanged off the page. A kept line the research didn't find again stays as it is.
+5. If nothing is new or different, say so in one line, show no page, and change nothing.
+6. Otherwise show the review page and read their reply as step 6 does, with only those items on it. A new line they remove isn't kept; a changed line they remove leaves the kept line as it was.
+7. Once they've approved, write only what they approved, in the person's voice as step 7.2 does: add each new line to its section, and put each changed line in place of the line it changes. Hold every line of `people.md` to the **Colleagues** rule in [`research-brief.md`](research-brief.md). In each file you changed, update the date in its "Checked with" line. Change nothing else in the three files, including anything the person added there themselves.
+
+**2. Change how I write, or what you want help with.** If they haven't said which, ask in one line whether it's how you write, what they want help with, or both. Then ask only that, as step 5 does: the help card, the writing picker, or both, one after the other. Their answer takes the place of that section of `me.md`, in the person's voice as step 7.2 does, and of nothing else; update the date in its "Checked with" line. Then show them the section as it now reads.
+
+**3. Add a workspace.** Make it with the steps under "A new workspace" in [`agent-instructions.md`](agent-instructions.md)'s "Setting things up" section, with `[top workspace]` as this folder.
+
+**4. Check your connectors.** For each of their `connectors`, make the check step 10 describes, including, for Asana, asking which workspace their team's tasks are in. Then report in a few lines: the ones that are working, together in one line, and each one that isn't, by name, with its fix.
+
+**Something else.** Treat it as a request like any other in this workspace, and do it under its agent instructions. If what they ask is one of the four options in other words, do that option. If they ask to start again from scratch, do options 1 and 2 instead, one after the other: nothing they approved before is thrown away.
+
 ## The profile
 
 What gets kept, once approved. It has five sections, in this order and with these titles:
@@ -244,4 +280,4 @@ The Findings' JSON:
 - `about` is labelled fields; `work` and `people` are lines the person can change or remove, and add to. Send no more than 6 `work` lines and 8 `people`: the page shows no more than that, and a line they haven't seen can't be kept.
 - Set `unsure` on findings the report marked `(not sure)`, and give those a `source`, read after the word "from", such as "your calendar: weekly 'Open day planning'". Lines that aren't marked show no source, so leave theirs out.
 - `notFound` lists the report's "Couldn't reach" and "Couldn't find", each in a few plain words starting lower case; the page shows them in one line after "Couldn't find:".
-- An item can also take `status`, `"new"` or `"changed"`, which the page shows as a small tag. Leave it out on a first run.
+- An item can also take `status`, `"new"` or `"changed"`, which the page shows as a small tag. Leave it out on a first run; a re-run sets it, as "Running Jumpstart again" describes.
