@@ -23,7 +23,9 @@ The `setupPage` texts are plain text with two marks: `**words**` for bold and `[
 
 Our own text never says "project": a workspace is a "workspace", and what's in one is "work" or "a piece of work". The one exception is the sentence in "Finding your way round T3 Code" saying T3 Code calls workspaces "projects". That includes the profiles' wording, and the tests count it.
 
-"Finding your way round T3 Code" (`id="t3-code"`) and "Your workspaces" (`id="workspaces"`, with an empty `.demo-slot` for the workspaces demo) are where the labelled screenshots and the demo go.
+"Your workspaces" has an empty `.demo-slot` for the workspaces demo. "Finding your way round T3 Code" has its five points and two labelled screenshots (see below).
+
+The Jumpstart skill's closing links to five sections by their ids, so keep them: `#your-workspaces`, `#your-connectors`, `#your-skills`, `#finding-your-way-round-t3-code` and `#if-something-went-wrong`. A section that's linked to opens and scrolls into view, whether the page is opened at its anchor or a link to it is clicked on the page, as "If something went wrong" links to "Your connectors".
 
 ```
 npm run build:page      # renders dist/page/<profile>/index.html
@@ -32,7 +34,7 @@ npm run publish:page    # renders, then publishes each page as a public Portall 
 
 Each page is published as the item named by the first part of its profile's `page` address, so `https://jumpstart-york.arcforge.uk/` is the item `jumpstart-york` and `https://jumpstart.arcforge.uk/` is `jumpstart`. The publish stops if Portall prints a different address.
 
-The build refuses a page that doesn't show its own line exactly once, shows another profile's line, leaves a `{{placeholder}}` unfilled, or lacks one of the keys above. `installer/test/page.test.js` renders both pages and checks the lines, the order of the steps and sections, each section's text in that profile's wording, every skill under its heading with its link, the one "projects", where to send the log, and that none of the old setup page's steps are back.
+The build refuses a page that doesn't show its own line exactly once, shows another profile's line, leaves a `{{placeholder}}` unfilled, or lacks one of the keys above. `installer/test/page.test.js` renders both pages and checks the lines, the order of the steps and sections, each section's text in that profile's wording, every skill under its heading with its link, the one "projects", the T3 Code section's points and labelled screenshots, the five anchors, where to send the log, and that none of the old setup page's steps are back.
 
 ## The two lines
 
@@ -41,3 +43,16 @@ The install line and the share-log line are shown the same way, and neither has 
 Each box also has a "See what this runs" link. The build takes the address out of the line (`irm <address> | iex`) and links to it, so the link is that profile's script for the install line and `share-log.ps1` for the share-log line. The build fails if a line isn't in that form.
 
 Under the install line the page warns that nothing may appear for up to half a minute after pasting: that wait is Windows PowerShell fetching the script, before the installer's own code runs.
+
+## The screenshots
+
+"Finding your way round T3 Code" shows two screenshots from `page/screenshots/`: `t3-layout.png` (the whole window) and `t3-new-workspace.png` (the box the folder button at the top of the list opens, at the step listing where a workspace can come from). `build.js` puts them in the page as data addresses, so each profile's page stays one file. The numbered labels aren't in the pictures: the page draws them, as boxes placed in percentages of the picture (`left top width height` of what each points at) with the number beside each, and a list under the picture saying what each number is. Move or reword a label in `template.html` without retaking anything.
+
+They were taken on 4 November 2026 from T3 Code 0.1.7-nightly.20261103.4138, the T3 Code on Jacob's laptop. The Installer installs the stable channel, whose release that day was 0.1.7; the nightly was built the day before it. Stable shares Nightly's install on Windows, so installing it would have replaced the T3 Code in use. Everything of that laptop's own (thread titles, workspace names, branches, messages, the environment, the model's name, the usage figures, the Nightly badge) is filled in T3 Code's own colours, with plain bars where the text was. The page is public, so nothing readable of anyone's may stay in a picture.
+
+To retake them, for instance from a fresh York install:
+
+1. Open T3 Code on a thread with the Thread details card showing, and leave its window open (not minimised).
+2. `powershell -ExecutionPolicy Bypass -File page\screenshots\take.ps1 -Out <a folder outside the repo>`. It saves `layout.png`, then opens the folder button's box through Windows' accessibility interface (picking This device if it asks), saves `new-workspace.png` and closes the box with Esc, so nothing is added.
+3. `powershell -ExecutionPolicy Bypass -File page\screenshots\redact.ps1 -Raw <that folder>` writes the two pictures beside it. Its regions fit the window the current pictures came from (1721 by 1399, sidebar 280 wide): for a new shot, move or drop each region to fit, and look at both pictures before committing them. A fresh install has little of anyone's to cover, but a workspace's name or an account is still someone's.
+4. Move the labels in `template.html` to where things are in the new pictures, run `npm run build:page` and look at the section.
