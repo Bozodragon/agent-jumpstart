@@ -16,6 +16,8 @@ const pages = {
   york: 'irm https://jumpstart-install.arcforge.uk/york.ps1 | iex',
   default: 'irm https://jumpstart-install.arcforge.uk/install.ps1 | iex',
 };
+/** @param {string} line @returns {string} the address inside an `irm <address> | iex` line */
+const addressIn = (line) => line.split(' ')[1];
 
 /** @param {import('node:test').TestContext} t @returns {Promise<string>} the folder the pages were rendered into */
 async function render(t) {
@@ -53,6 +55,35 @@ for (const [id, ownLine] of Object.entries(pages)) {
     assert.ok(places.every((place) => place >= 0), `missing from the page: ${steps.filter((_, i) => places[i] < 0)}`);
     assert.deepEqual([...places].sort((a, b) => a - b), places, 'out of order');
     assert.ok(text.indexOf(ownLine) < places[1], 'the line to paste belongs to the first step');
+  });
+
+  test(`the ${id} page has no Copy button and no script that writes to the clipboard`, async (t) => {
+    const html = await readFile(join(await render(t), id, 'index.html'), 'utf8');
+    assert.doesNotMatch(html, /<button/i, 'a button is still on the page');
+    assert.ok(!textOf(html).includes('Copy'), 'the page still says "Copy"');
+    assert.doesNotMatch(html, /clipboard|execCommand/i, 'a script still writes to the clipboard');
+  });
+
+  test(`the ${id} page tells you to click each line and press Ctrl+C, and a click selects the whole line`, async (t) => {
+    const html = await readFile(join(await render(t), id, 'index.html'), 'utf8');
+    const hint = textOf(html).split('Click the line, then press Ctrl+C').length - 1;
+    assert.equal(hint, 2, 'the hint belongs in the box of the install line and the box of the share-log line');
+    assert.match(html, /addEventListener\("click"/, 'nothing happens on a click');
+    assert.match(html, /selectNodeContents/, 'a click does not select the line');
+  });
+
+  test(`the ${id} page links "See what this runs" to the script of each of its two lines`, async (t) => {
+    const html = await readFile(join(await render(t), id, 'index.html'), 'utf8');
+    const links = [...html.matchAll(/<a [^>]*href="([^"]+)"[^>]*>\s*See what this runs\s*<\/a>/g)].map((match) => match[1]);
+    assert.deepEqual(links, [addressIn(ownLine), addressIn(shareLogLine)]);
+  });
+
+  test(`the ${id} page warns that nothing may appear for up to half a minute after pasting`, async (t) => {
+    const text = textOf(await readFile(join(await render(t), id, 'index.html'), 'utf8'));
+    const warning = text.indexOf('nothing may appear for up to half a minute');
+    assert.ok(warning >= 0, 'the half-minute warning is missing');
+    assert.ok(text.indexOf(ownLine) < warning && warning < text.indexOf(steps[1]), 'the warning belongs after the install line, in step 1');
+    assert.ok(text.includes('Windows PowerShell fetching the script'), 'it should say what the wait is');
   });
 
   test(`the ${id} page has none of the old setup page's steps`, async (t) => {

@@ -74,7 +74,8 @@ async function signIn(tool, program, extra, { machine, log }) {
   const say = (/** @type {string} */ line) => log.write(`${tool.name}: ${line}`);
   const how = /** @type {import('./manifest.js').SignIn} */ (tool.signIn);
   const whoIsSignedIn = async () => {
-    const ran = await machine.run(program.file, [...program.args, ...how.check]);
+    // clasp takes a few seconds to answer, with nothing on screen of its own.
+    const ran = await ui.busy(`Checking ${tool.name}'s sign-in`, () => machine.run(program.file, [...program.args, ...how.check]));
     const match = ran.code === 0 ? new RegExp(how.signedInAs, 'm').exec(ran.output) : null;
     if (!match) say('not signed in');
     return match?.[1];
