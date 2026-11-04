@@ -4,7 +4,10 @@
 // claude.exe in the profile folder's .local\bin and never adds that folder to PATH, so the
 // installer does, first, whether or not Claude Code is there yet: T3 reads PATH only as it
 // starts. Then it asks Claude Code whether it's signed in. If it isn't, Claude Code's own
-// sign-in runs in the person's window. The signed-in email is what Jumpstart reads.
+// sign-in runs in the person's window, reading its pasted code from the window, while what it
+// prints is kept for the log. A sign-in that fails can be tried again, as often as it fails, or
+// skipped for now, and the ending then says how to finish. The signed-in email is what
+// Jumpstart reads.
 //
 // Claude Code isn't pinned: the script installs Anthropic's current release.
 import { join } from 'node:path';
@@ -32,10 +35,12 @@ const anthropicsInstaller = {
  * Installs Claude Code if it isn't there, puts its folder on the user PATH, and signs the person
  * in if they aren't. Before T3 is installed and started.
  * @param {import('./tools.js').Context} context
- * @returns {Promise<{ row: string, email: string | null }>} The checklist's Claude Code line and
- *   the signed-in email, if any.
+ * @param {import('./questions.js').Asker} ask What answers whether to try a failed sign-in again.
+ * @returns {Promise<{ row: string, email: string | null, skipped?: string }>} The checklist's
+ *   Claude Code line, the signed-in email, if any, and, when the person skipped the sign-in for
+ *   now, Claude's own reason it failed.
  */
-export async function setUpClaude({ places, machine, downloads, log }) {
+export async function setUpClaude({ places, machine, downloads, log, attended }, ask) {
   const entry = toolEntry(await loadManifest(downloads), 'claude');
   if (!entry) return { row: 'Not checked: the list of versions has no entry for it', email: null };
   const say = (/** @type {string} */ line) => log.write(`${entry.name}: ${line}`);
@@ -61,25 +66,108 @@ export async function setUpClaude({ places, machine, downloads, log }) {
     say(state.present ? `installed by its installer (code ${code})` : `its installer finished with code ${code}, and ${program} isn't there`);
   }
 
-  if (state.present && state.runs) {
-    if (!state.signedIn) {
-      ui.notice(
-        [
-          `${entry.name} signs you in next, in your browser:`,
-          '',
-          `  ${ui.bullet} Press Enter to choose your Claude account.`,
-          `  ${ui.bullet} Sign in in the browser window that opens.`,
-          `  ${ui.bullet} Come back here and press Enter when it says Login successful.`,
-        ].join('\n'),
-        `Sign in to ${entry.name}`,
-      );
-      const code = await machine.runOnScreen(program, ['auth', 'login']);
+  /** @type {string | undefined} */
+  let skipped;
+  if (state.present && state.runs && !state.signedIn) {
+    ui.notice(
+      [
+        `${entry.name} signs you in next, in your browser:`,
+        '',
+        `  ${ui.bullet} A browser window opens at Claude's sign-in page. Sign in there.`,
+        `  ${ui.bullet} Then come back here. This window carries on by itself.`,
+        `  ${ui.bullet} If no window opens, copy the link below into your browser.`,
+        `  ${ui.bullet} Only if the page shows a code: copy it, paste it here and press Enter.`,
+      ].join('\n'),
+      `Sign in to ${entry.name}`,
+    );
+    // One rejected code ends Claude's sign-in, so a failed one is offered again, as often as it
+    // fails. Each try is a fresh `claude auth login`, with a new link and code.
+    for (;;) {
+      const { code, output } = await machine.runOnScreenAndKeep(program, ['auth', 'login']);
+      for (const line of withoutWhatWasTyped(output)) say(`sign-in said: ${line}`);
       say(`sign-in finished with code ${code}`);
       state = await look();
+      if (state.signedIn) break;
+      const reason = reasonFrom(output) ?? `${entry.name}'s sign-in ended with code ${code}`;
+      ui.problem(reason);
+      const choice = await ask.choose({
+        key: 'claudeSignIn',
+        message: `${entry.name} isn't signed in yet.`,
+        options: [
+          { value: 'again', label: 'Try again', hint: 'a new link and code' },
+          { value: 'skip', label: 'Skip for now', hint: 'the rest of the install carries on' },
+        ],
+        // With nobody at the screen, an answers file that says no more doesn't try for ever.
+        initial: attended ? 'again' : 'skip',
+        inTurn: true,
+      });
+      log.write(`Answer: claudeSignIn: ${JSON.stringify(choice)}`);
+      if (choice === 'skip') {
+        say('sign-in skipped for now');
+        skipped = reason;
+        break;
+      }
     }
   }
 
-  return { row: rowFor(state), email: state.signedIn ? (state.email ?? null) : null };
+  return { row: rowFor(state), email: state.signedIn ? (state.email ?? null) : null, ...(skipped !== undefined && { skipped }) };
+}
+
+/**
+ * The ending after a sign-in skipped for now: no "All done", and T3 Code isn't opened, since it
+ * can't use Claude Code yet. A T3 Code that was open during the install reads PATH only when it
+ * starts, so it has to be closed first. Pasting the line again signs in, as a run that finds
+ * Claude Code signed out always does. Claude Code's row (", not signed in") is already among
+ * what didn't work; Claude's own reason is repeated with it.
+ * @param {import('./ending.js').Ending} ending
+ * @param {string} reason Claude's own reason the sign-in failed.
+ */
+export function endAfterSkippedSignIn(ending, reason) {
+  ending.lines.push(reason);
+  ending.closing =
+    "One step didn't work: Claude Code isn't signed in, so T3 Code can't use it yet. If T3 Code is open, close it. Then paste the line again: it signs you in and skips everything that's already done.";
+  ending.sayDone = false;
+  ending.openT3 = false;
+}
+
+/**
+ * Claude's own reason for a failed sign-in: its "Login failed: ..." line.
+ * @param {string} output
+ */
+function reasonFrom(output) {
+  return plainLines(output).find((line) => line.startsWith('Login failed:'));
+}
+
+/**
+ * Claude's sign-in lines, for the log, cut short after its paste prompt ("Paste code here if
+ * prompted >"): the code the person pastes there could be used to sign in as them. Claude doesn't
+ * print the code (the window shows it as it's typed, without it passing through the installer),
+ * but if it ever did, it would be there, so nothing after the prompt on its line is kept but
+ * Claude's own "Login successful." or "Login failed: ...", which follows it there when the
+ * browser hands the sign-in back by itself.
+ * @param {string} output
+ */
+function withoutWhatWasTyped(output) {
+  return plainLines(output).flatMap((line) => {
+    const prompt = /^.*?Paste code here[^>]*>/.exec(line)?.[0];
+    if (prompt === undefined) return [line];
+    const after = line.slice(prompt.length).trim();
+    return /^Login (successful\.|failed:)/.test(after) ? [prompt, after] : [prompt];
+  });
+}
+
+/**
+ * What a program printed, as lines of plain text: without the colours and links a terminal
+ * would draw, and without the blank lines.
+ * @param {string} output
+ */
+function plainLines(output) {
+  return output
+    .replace(/\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g, '')
+    .replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '')
+    .split(/\r?\n/)
+    .map((line) => line.trimEnd())
+    .filter((line) => line.trim() !== '');
 }
 
 /** @param {string} program @param {import('./machine.js').Machine} machine @returns {Promise<ClaudeState>} */
