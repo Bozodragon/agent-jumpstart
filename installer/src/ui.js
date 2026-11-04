@@ -1,10 +1,76 @@
 // What the person sees. The shape (a guide line, short steps, a closing
 // summary) follows the skills CLI's; the colours and symbols are our own.
-import { confirm, intro, isCancel, log, multiselect, note, outro, select, spinner, text, unicodeOr } from '@clack/prompts';
+//
+// York's PowerShell window is the old Windows console (conhost), so everything here is made for
+// it first, and looks the same in Windows Terminal:
+// - Only characters its fonts draw: printable ASCII, single-line box drawing and the two dots
+//   (• ·). The prompt library picks its symbols once, as it loads, by guessing whether the window
+//   draws Unicode; the guess is made yes everywhere, so its guide lines are always box drawing,
+//   and the symbols the old console can't draw are swapped for ones it can as they're printed.
+// - Colour only on symbols and guide lines, never on the words, and never magenta or blue:
+//   PowerShell's window draws dark magenta in its own background blue, so the library's colours
+//   are swapped for ones that read on that blue and on Windows Terminal's black alike.
+// - A spinner that doesn't flicker: one line updated in place once a second, never cleared.
+import { emitKeypressEvents } from 'node:readline';
 import { styleText } from 'node:util';
 import { Stop } from './stop.js';
 
-const accent = 'magenta';
+const guess = 'WT_SESSION';
+const guessed = process.env[guess];
+process.env[guess] ??= 'agent-jumpstart';
+const { confirm, intro, isCancel, log, multiselect, note, outro, select, text } = await import('@clack/prompts');
+// Put back, so the programs the installer runs see the window as it is.
+if (guessed === undefined) delete process.env[guess];
+
+/** The prompt library's symbols the old console can't draw, and what's printed in their place. */
+const swaps = new Map(
+  Object.entries({
+    '◆': '*', // a question waiting for an answer
+    '◇': 'o', // an answered question, a notice
+    '■': 'x', // a cancelled question
+    '▲': '!', // a question's answer that isn't valid yet
+    '●': '>', // the chosen option
+    '○': ' ', // the other options
+    '◻': '-', // an option not ticked
+    '◼': '+', // an option ticked
+    '▪': '*',
+    '╭': '┌',
+    '╮': '┐',
+    '╰': '└',
+    '╯': '┘',
+    '—': '-',
+    '↑': '^',
+    '↓': 'v',
+    '━': '=',
+    '█': '#',
+    '◒': '•',
+    '◐': '•',
+    '◓': '•',
+    '◑': '•',
+  }),
+);
+const swappable = new RegExp(`[${[...swaps.keys()].join('')}]`, 'g');
+
+// Dark red is unreadable on the blue, dark yellow draws as white there, dark magenta draws as the
+// blue itself, and dark blue barely shows: each is printed as its bright form, blue and magenta as
+// cyan. Gray, for the guide lines, reads on both backgrounds as it is.
+/** @type {Record<string, string>} */
+const colours = { 31: '91', 32: '92', 33: '93', 34: '96', 35: '96', 36: '96' };
+
+/** @param {string} printed */
+function drawable(printed) {
+  return printed
+    .replace(swappable, (symbol) => swaps.get(symbol) ?? symbol)
+    .replace(/\x1b\[(3[1-6])m/g, (_, code) => `\x1b[${colours[code]}m`);
+}
+
+// Everything printed passes through here, the prompt library's output and any stray line alike.
+for (const stream of [process.stdout, process.stderr]) {
+  const write = stream.write.bind(stream);
+  stream.write = /** @type {typeof stream.write} */ (
+    (/** @type {unknown} */ chunk, /** @type {any[]} */ ...rest) => write(typeof chunk === 'string' ? drawable(chunk) : /** @type {any} */ (chunk), ...rest)
+  );
+}
 
 /**
  * @template T
@@ -43,12 +109,71 @@ export const ask = {
 
 /** @param {string} title */
 export function start(title) {
-  intro(styleText(['bold', accent], `${unicodeOr('◈', '*')} ${title}`));
+  intro(styleText('bold', title));
 }
 
 /** @param {string} text */
 export function step(text) {
-  log.message(text, { symbol: styleText(accent, unicodeOr('▸', '>')) });
+  log.message(text, { symbol: styleText('cyan', '>') });
+}
+
+/** @param {number} since @returns {string} */
+function timeSince(since) {
+  const seconds = Math.floor((performance.now() - since) / 1000);
+  return seconds >= 60 ? `[${Math.floor(seconds / 60)}m ${seconds % 60}s]` : `[${seconds}s]`;
+}
+
+/**
+ * The spinner: the message with the time so far, on one line that's rewritten in place each
+ * second and never cleared, so nothing flickers. A message too long for the window is cut short
+ * while it spins (a line that wraps can't be rewritten in place) and shown whole once it's done.
+ * Keys pressed meanwhile are swallowed, so none reaches the next question, and Ctrl+C stops the run.
+ * @param {string} message
+ */
+function spin(message) {
+  const out = process.stdout;
+  const since = performance.now();
+  let longest = 0;
+  const draw = () => {
+    const time = timeSince(since);
+    const room = (out.columns || 80) - 1 - '•  '.length - ' '.length - time.length;
+    const shown = message.length <= room ? message : `${message.slice(0, Math.max(room - 3, 0))}...`;
+    const width = '•  '.length + shown.length + 1 + time.length;
+    out.write(`\r${styleText('cyan', '•')}  ${shown} ${styleText('gray', time)}${' '.repeat(Math.max(longest - width, 0))}`);
+    longest = Math.max(longest, width);
+  };
+  const showCursor = () => out.write('\x1b[?25h');
+  const input = process.stdin;
+  /** @param {string} _ @param {{ ctrl?: boolean, name?: string } | undefined} key */
+  const pressed = (_, key) => {
+    if (key?.ctrl && key.name === 'c') {
+      out.write('\n');
+      process.exit(130);
+    }
+  };
+  if (input.isTTY) {
+    emitKeypressEvents(input);
+    input.setRawMode(true);
+    input.on('keypress', pressed);
+    input.resume();
+  }
+  process.once('exit', showCursor);
+  out.write(`${styleText('gray', '│')}\n\x1b[?25l`);
+  draw();
+  const ticking = setInterval(draw, 1000);
+  /** @param {string} text @param {boolean} ok */
+  return (text, ok) => {
+    clearInterval(ticking);
+    if (input.isTTY) {
+      input.off('keypress', pressed);
+      input.setRawMode(false);
+      input.pause();
+    }
+    const symbol = ok ? styleText('green', 'o') : styleText('red', 'x');
+    out.write(`\r\x1b[2K${symbol}  ${text} ${styleText('gray', timeSince(since))}\n`);
+    showCursor();
+    process.off('exit', showCursor);
+  };
 }
 
 /**
@@ -67,25 +192,22 @@ export async function busy(message, task, ended) {
     step(message);
     return task();
   }
-  // Ctrl+C stops the run, as it does without a spinner, which otherwise catches it.
-  const spin = spinner({ indicator: 'timer', onCancel: () => process.exit(130) });
-  spin.start(message);
+  const stop = spin(message);
   let result;
   try {
     result = await task();
   } catch (error) {
-    spin.error(message);
+    stop(message, false);
     throw error;
   }
   const { text, ok } = ended?.(result) ?? { text: message, ok: true };
-  if (ok) spin.stop(text);
-  else spin.error(text);
+  stop(text, ok);
   return result;
 }
 
 /** @param {string} text */
 export function problem(text) {
-  log.message(text, { symbol: styleText('red', unicodeOr('✖', 'x')) });
+  log.message(text, { symbol: styleText('red', 'x') });
 }
 
 /** @param {[string, string][]} rows @param {string} title */
@@ -94,7 +216,7 @@ export function summary(rows, title) {
   note(rows.map(([label, value]) => `${styleText('bold', label.padEnd(width))}  ${value}`).join('\n'), title);
 }
 
-export const bullet = unicodeOr('•', '-');
+export const bullet = '•';
 
 /**
  * Said beside every page the installer opens: the browser takes the focus, and the person has to
@@ -118,5 +240,5 @@ export async function pressEnter(message) {
 
 /** @param {string} text */
 export function finish(text) {
-  outro(styleText(accent, text));
+  outro(styleText('bold', text));
 }
