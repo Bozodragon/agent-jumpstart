@@ -118,8 +118,20 @@ test('the york page links to a Gmail draft to Jacob, with the subject and a plac
   assert.ok(textOf(html).includes('email it to Jacob'));
 });
 
-test('the default page, with no email to send the log to, says who to send it to and links nowhere', async (t) => {
+test('the default page links to a Gmail draft to Jacob at his live.co.uk address, and names him and that address', async (t) => {
   const html = await readFile(join(await render(t), 'default', 'index.html'), 'utf8');
-  assert.doesNotMatch(html, /mail\.google\.com|mailto:/);
-  assert.ok(textOf(html).includes('send it to the person who sent you this page'));
+  const href = html.match(/href="(https:\/\/mail\.google\.com\/[^"]+)"/)?.[1];
+  assert.ok(href, 'no Gmail link on the page');
+  const draft = new URL(href.replace(/&amp;/g, '&')).searchParams;
+  assert.equal(draft.get('to'), 'jacob.hamood@live.co.uk');
+  assert.match(draft.get('body') ?? '', /^Hi Jacob,\n/);
+  const text = textOf(html);
+  assert.ok(text.includes('email it to Jacob'));
+  assert.ok(text.includes('jacob.hamood@live.co.uk'), 'the address is not shown');
+  assert.ok(!text.includes('the person who sent you this page'));
+});
+
+test('the york page also shows the address it sends the log to', async (t) => {
+  const text = textOf(await readFile(join(await render(t), 'york', 'index.html'), 'utf8'));
+  assert.ok(text.includes('jacob.hamood@york.ac.uk'), 'the address is not shown');
 });

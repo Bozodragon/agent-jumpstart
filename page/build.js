@@ -56,7 +56,7 @@ function sendTheLog(logGoesTo, logEmail) {
   }
   const draft = new URLSearchParams({ view: 'cm', fs: '1', to: logEmail, su: supportEmail.subject, body: supportEmail.body(logGoesTo) });
   const href = `https://mail.google.com/mail/?${draft.toString().replace(/\+/g, '%20')}`;
-  return `Then <a href="${escape(href)}" target="_blank" rel="noopener">email it to ${escape(logGoesTo)}</a>. The email opens ready to send: paste the log (Ctrl+V) where it says, then send it.`;
+  return `Then <a href="${escape(href)}" target="_blank" rel="noopener">email it to ${escape(logGoesTo)}</a> at ${escape(logEmail)}. The email opens ready to send: paste the log (Ctrl+V) where it says, then send it.`;
 }
 
 /**

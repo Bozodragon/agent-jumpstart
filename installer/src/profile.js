@@ -14,7 +14,8 @@ const profilesFolder = fileURLToPath(new URL('../../profiles/', import.meta.url)
  * @property {string} [shareLogLine] The line the setup page gives for copying the newest installer log.
  * @property {string} [logGoesTo] Who the setup page says to send the log to, as it reads after "send it to".
  * @property {string} [logEmail] Their email address. With it, the setup page links to a Gmail
- *   draft to them, ready for the log; the draft's greeting uses `logGoesTo`.
+ *   draft to them, ready for the log; the draft's greeting uses `logGoesTo`. The log-sharing
+ *   script (bootstrap/share-log.ps1) reads both from the unpacked profile to say who to send it to.
  * @property {{ top: string, inGoogleDrive: boolean, defaultLocation?: string, choices: Choice[] }} workspaces
  *   `top` is the top workspace's folder name, created in the confirmed location with the chosen
  *   workspaces inside it. `defaultLocation` is the folder, within the user's profile folder,

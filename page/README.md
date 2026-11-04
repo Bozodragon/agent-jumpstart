@@ -9,6 +9,7 @@ The page a team member follows along with: paste the line, type `/jumpstart` in 
 | `pastedLine` | The one line to paste, in step 1. |
 | `shareLogLine` | The line under "If something went wrong". |
 | `logGoesTo` | Who to send the log to, as it reads after "send it to". |
+| `logEmail` | Their email address. The page links to a Gmail draft to it and shows it. The log-sharing line names the same person and address, from the same profile. |
 | `workspaces.top` | The top workspace's folder name (`{{topWorkspace}}`), which step 2 says T3 Code already lists. The installer creates that folder. |
 
 ```
