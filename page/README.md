@@ -23,12 +23,14 @@ The `setupPage` texts are plain text with two marks: `**words**` for bold and `[
 
 Our own text never says "project": a workspace is a "workspace", and what's in one is "work" or "a piece of work". The one exception is the sentence in "Finding your way round T3 Code" saying T3 Code calls workspaces "projects". That includes the profiles' wording, and the tests count it.
 
-"Your workspaces" has an empty `.demo-slot` for the workspaces demo. "Finding your way round T3 Code" has its five points and two labelled screenshots (see below).
+"Your workspaces" has the workspaces demo in its `.demo-slot`. "Finding your way round T3 Code" has its five points and two labelled screenshots (see "The screenshots" below).
 
 The Jumpstart skill's closing links to five sections by their ids, so keep them: `#your-workspaces`, `#your-connectors`, `#your-skills`, `#finding-your-way-round-t3-code` and `#if-something-went-wrong`. A section that's linked to opens and scrolls into view, whether the page is opened at its anchor or a link to it is clicked on the page, as "If something went wrong" links to "Your connectors".
 
+The workspaces demo is ported from its prototype ("What it sees"): drag the agent onto a workspace and it lights the agent instructions it follows from the start (that workspace's and every one above it), what it looks through first (everything inside it), and, dashed, the files those instructions point to. Its styles are in the page's `<style>` and its script sits in the slot, so each page stays one file. The example tree is the nested list in the slot, which is also what shows if the script doesn't run: each `li[data-node]` is a workspace, with `data-instr` for its agent instructions, `data-points` for the files they point to and `data-files` for the rest (`|` between names); `data-work` marks a piece of work, and `data-top` the top workspace, named from the profile. The script reads the list and draws the tree you drag onto, so changing the example is an edit to the list, plus the notes in the script that name its workspaces. The tests check the demo's text is on both pages; the dragging is checked by hand in a browser, with a mouse and at phone width.
+
 ```
-npm run build:page      # renders dist/page/<profile>/index.html
+npm run build:page      # renders dist/page/<profile>/index.html, with Jumpstart's templates beside it
 npm run publish:page    # renders, then publishes each page as a public Portall item
 ```
 
@@ -56,3 +58,7 @@ To retake them, for instance from a fresh York install:
 2. `powershell -ExecutionPolicy Bypass -File page\screenshots\take.ps1 -Out <a folder outside the repo>`. It saves `layout.png`, then opens the folder button's box through Windows' accessibility interface (picking This device if it asks), saves `new-workspace.png` and closes the box with Esc, so nothing is added.
 3. `powershell -ExecutionPolicy Bypass -File page\screenshots\redact.ps1 -Raw <that folder>` writes the two pictures beside it. Its regions fit the window the current pictures came from (1721 by 1399, sidebar 280 wide): for a new shot, move or drop each region to fit, and look at both pictures before committing them. A fresh install has little of anyone's to cover, but a workspace's name or an account is still someone's.
 4. Move the labels in `template.html` to where things are in the new pictures, run `npm run build:page` and look at the section.
+
+## Jumpstart's templates
+
+The build also copies Jumpstart's page templates into every profile's site, under `jumpstart/`, so `https://jumpstart-york.arcforge.uk/jumpstart/writing-picker.js` is the writing picker for York and `jumpstart/review-page.js` beside it is the review page, where the person checks what Jumpstart found. Jumpstart writes only a small page that loads its template from there, with any data it needs (the review page's Findings, as JSON), instead of writing the whole page out ([ADR 0001](../docs/adr/0001-jumpstart-pages-load-from-the-setup-site.md)). A template's source is beside the skill, in `skills/jumpstart/`, so it changes in the same commit as the instructions that use it. The skill reaches people from `main` and the templates from this site, so run `npm run publish:page` whenever a merge to `main` changes a template. `installer/test/page.test.js` checks that each profile's build holds them.

@@ -35,6 +35,9 @@
       }
     ]
   },
+  "googleDrive": {
+    "softwareCenter": "Google Drive"
+  },
   "t3": {
     "defaultModel": "claude-opus-5-5",
     "effort": "medium",

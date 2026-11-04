@@ -43,9 +43,11 @@ import { existingTopWorkspaces, topWorkspaceIn } from './workspaces.js';
  * file. `key` names the answer in an answers file.
  * @typedef {object} Asker
  * @property {(q: { key: string, message: string, initial: string | undefined, placeholder: string, validate: (value: string) => Promise<string | undefined> }) => Promise<string>} folder
- * @property {<T extends string>(q: { key: string, message: string, options: Option<T>[], initial: T, other?: T }) => Promise<T>} choose
+ * @property {<T extends string>(q: { key: string, message: string, options: Option<T>[], initial: T, other?: T, inTurn?: boolean }) => Promise<T>} choose
  *   `other`, if given, is the option whose answer a follow-up `folder` question with the same key
- *   asks for; an answers file gives that folder's whole path in place of the option.
+ *   asks for; an answers file gives that folder's whole path in place of the option. `inTurn`
+ *   marks a question that may be asked several times in a run: an answers file may give a list,
+ *   which answers it one item at a time, and then the default.
  * @property {(q: { key: string, message: string, initial: boolean }) => Promise<boolean>} confirm
  * @property {<T extends string>(q: { key: string, message: string, options: Option<T>[], initial: T[] }) => Promise<T[]>} pick
  */
@@ -208,7 +210,7 @@ async function newLocation(profile, places, ask, found, context) {
   let googleDriveFolder = null;
   let workspacesLocation;
   if (found) {
-    const drive = await readyGoogleDrive(places, ask, found, context);
+    const drive = await readyGoogleDrive(profile, places, ask, found, context);
     if (drive.status === 'documents') {
       const documents = join(places.home, 'Documents');
       return { googleDriveFolder: null, workspacesLocation: documents, topWorkspace: topWorkspaceIn(profile, documents) };
@@ -349,6 +351,9 @@ export function answersFrom(file) {
   /** @param {Option<string>[]} options */
   const listOf = (options) => options.map(({ value }) => `"${value}"`).join(', ');
 
+  /** How many times each key has been asked, for a list that answers it in turn. @type {Record<string, number>} */
+  const turns = {};
+
   return {
     async folder({ key, initial, validate }) {
       const value = file[key] ?? initial;
@@ -358,14 +363,21 @@ export function answersFrom(file) {
       if (problem) throw wrong(key, problem);
       return value;
     },
-    async choose({ key, options, initial, other }) {
-      const value = file[key] ?? initial;
+    async choose({ key, options, initial, other, inTurn }) {
+      // A question asked again and again (after each failed sign-in) takes a list, one answer
+      // each time, and the default once the list runs out.
+      let value = file[key] ?? initial;
+      if (inTurn && Array.isArray(value)) {
+        const turn = turns[key] ?? 0;
+        turns[key] = turn + 1;
+        value = turn < value.length ? value[turn] : initial;
+      }
       // The option for a folder of the person's own is answered with the folder's path.
       const named = options.filter((candidate) => candidate.value !== other);
       const option = named.find((candidate) => candidate.value === value);
       if (option) return option.value;
       if (other !== undefined && typeof value === 'string' && isAbsolute(value)) return other;
-      throw wrong(key, `it should be one of ${listOf(named)}${other === undefined ? '' : ", or a folder's whole path"}.`);
+      throw wrong(key, `it should be one of ${listOf(named)}${other === undefined ? '' : ", or a folder's whole path"}${inTurn ? ', or a list of them' : ''}.`);
     },
     async confirm({ key, initial }) {
       const value = file[key] ?? initial;
