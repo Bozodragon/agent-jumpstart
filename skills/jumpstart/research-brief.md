@@ -34,7 +34,15 @@ If their name isn't known yet, find it first: from the account behind any source
 
 **Colleagues**
 
-For each person they work with, keep only: name, role, team, work email, and how they relate to this person's work. Take a colleague's role and team from what that colleague wrote themselves (their own message or signature), a directory, or their organisation's pages, never from what someone else said about them. Leave out opinions of them and anything personal. Keep the fifteen they work with most.
+For each person they work with, keep only: name, role, team, work email, and how they relate to this person's work. Take a colleague's role and team from what that colleague wrote themselves (their own message or signature), a directory, or their organisation's pages, never from what someone else said about them. Leave out opinions of them and anything personal. Keep the eight they work with most.
+
+**What they do, not their authority**
+
+Say what the person and their colleagues do, never how much say they have.
+
+- Don't write "manages", "leads", "runs", "owns", "admin", "organiser" or "responsible for" about anyone, unless that person's own job title or their own words say so. Write what they do instead: "works on the open day campaign", "goes to the weekly planning meeting".
+- Owning a calendar event isn't organising the meeting: the person who sent the invitation may only have booked it.
+- A claim about anyone's role or authority with only one source is `(not sure)`, even when that source seems clear.
 
 **Report**
 
@@ -45,7 +53,7 @@ Reply with this, and nothing else, in under 50 lines. Give every finding its sou
 Name, if you found it. Anything that confirms or adds to their job title and team.
 
 ## Their work
-What they work on: projects, regular pieces of work, rhythms such as weekly meetings, the tools and services they use.
+What they work on, one line per strand of their work (a campaign, a regular piece of work, a service they look after), up to six lines, each with the meetings, files, tasks and tools that belong to it.
 
 ## People they work with
 One line each: name, role, team, email, how they relate to this person's work.
