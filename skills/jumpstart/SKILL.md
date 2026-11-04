@@ -155,7 +155,7 @@ Done when every file they kept is exactly as it was, every other one of `CLAUDE.
 
 ## 8. Write the workspaces
 
-Tell them in a line that you're setting up their workspaces and checking their services, then work through steps 8 to 10 without stopping.
+Tell them in a line that you're setting up their workspaces, then work through steps 8 to 10 without stopping.
 
 For each of their `workspaces`, in the folder of that name inside this one:
 
@@ -175,15 +175,17 @@ If the T3 tools aren't available or a call fails, note the workspace and the rea
 
 Done when every workspace is in `t3_project_list`, or noted as not added.
 
-## 10. Check the connectors
+## 10. The connectors' results
 
-You made these checks in step 2, before the other questions; this is what they are and how each comes out, and those results are what you report. For each of their `connectors`, make the one harmless read [`connector-checks.md`](connector-checks.md) names for it (for Asana, its whole check). For a connector it doesn't name, use the read that touches the least, such as listing names or titles. Each comes out as one of:
+You made these checks in step 2, before the other questions. Don't make them again here, and don't ask the Asana question again: take each connector's result from step 2, with the fix for any that isn't **Working**, for step 11 to report.
+
+This is how each check is made (step 2, and a re-run's option 4, point here) and how it comes out. For each of their `connectors`, the check is the one harmless read [`connector-checks.md`](connector-checks.md) names for it (for Asana, its whole check). For a connector it doesn't name, it's the read that touches the least, such as listing names or titles. Each comes out as one of:
 
 - **Working**: the read came back, even with nothing in it.
 - **Not connected**: no tools for it in this session. The fix: on claude.ai's Connectors page, click Connect next to it and sign in, then start a new conversation.
 - **Not working**: the tools are there but the read failed. Keep what went wrong, in plain words ("Google said you need to sign in again").
 
-Done when every connector has a result.
+Done when every connector has its result from step 2, and the fix for each that isn't **Working**.
 
 ## 11. Finish
 
