@@ -2,8 +2,9 @@
 // data for this user, so that a home override redirects every one of them. When a new top
 // workspace is to go in Google Drive and Drive for desktop isn't ready, says how to get it ready
 // and, with someone at the screen, waits for them to do it, or offers Documents instead. Drive is
-// optional, and it's never installed here: under a profile that names Drive's entry in York's
-// Software Center, the person can be sent there to install it, which needs no admin rights.
+// optional, and it's never installed here: under a profile that names Drive's entry in its
+// organisation's Software Center, the person can be sent there to install it, which needs no
+// admin rights.
 import { readdir, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { keepTrying, registryMiss, system32 } from './machine.js';
@@ -140,6 +141,10 @@ export async function readyGoogleDrive(profile, places, ask, drive, context) {
 
 /** @typedef {{ machine: import('./machine.js').Machine, log: { write(line: string): void }, attended: boolean }} Context */
 
+/** What's said when Software Center offers Drive, unless the profile words it its own way. */
+const softwareCenterOffer =
+  "Google Drive isn't on this laptop. With it, your workspaces are backed up and you can reach them from any device. Software Center can install it for you, with no admin rights needed.";
+
 /** How long Software Center is given to install Drive, and then Drive to be signed in, in milliseconds. */
 const softwareCenterPatience = 15 * 60 * 1000;
 
@@ -172,10 +177,7 @@ async function fromSoftwareCenter(profile, places, ask, context) {
   const id = await driveInSoftwareCenter(name, context);
   if (!id) return undefined;
 
-  ui.notice(
-    "Google Drive isn't on this laptop. With it, your workspaces are backed up and you can reach them from any device. York's Software Center can install it for you, with no admin rights needed.",
-    'Google Drive',
-  );
+  ui.notice(profile.googleDrive?.softwareCenterOffer ?? softwareCenterOffer, 'Google Drive');
   const choice = await ask.choose({
     key: 'softwareCenter',
     message: 'Install Google Drive, or use Documents?',

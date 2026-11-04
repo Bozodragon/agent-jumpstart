@@ -23,11 +23,12 @@ const profilesFolder = fileURLToPath(new URL('../../profiles/', import.meta.url)
  *   `top` is the top workspace's folder name, created in the confirmed location with the chosen
  *   workspaces inside it. `defaultLocation` is the folder, within the user's profile folder,
  *   offered for workspaces when they aren't in Google Drive.
- * @property {{ softwareCenter?: string }} [googleDrive] Under a profile whose workspaces live in
- *   Google Drive: `softwareCenter` is the name (or part of it) that the laptop's Software Center
- *   lists Google Drive under. With it, a laptop without Drive is checked for a Software Center
- *   that offers Drive, and the person is offered to install it from there; without it, that
- *   check never runs.
+ * @property {{ softwareCenter?: string, softwareCenterOffer?: string }} [googleDrive] Under a
+ *   profile whose workspaces live in Google Drive: `softwareCenter` is the name (or part of it)
+ *   that the laptop's Software Center lists Google Drive under. With it, a laptop without Drive
+ *   is checked for a Software Center that offers Drive, and the person is offered to install it
+ *   from there; without it, that check never runs. `softwareCenterOffer` is what's said then,
+ *   in the organisation's words ("York's Software Center can install it for you...").
  * @property {{ defaultModel?: string, effort?: string, codex?: boolean }} [t3] How T3 Code is set up
  *   when the installer installs it (never for a T3 already there): new threads use Claude with
  *   `defaultModel`, which must be a model id T3 knows exactly (`claude-opus-5-5`; T3 quietly
