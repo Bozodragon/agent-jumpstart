@@ -301,6 +301,17 @@ for (const id of Object.keys(pages)) {
     assert.ok(section.includes(said), `missing: ${said}`);
     assert.ok(section.indexOf(shareLogLine) < section.indexOf(said), `"${said}" belongs after the share-log line`);
   });
+
+  test(`the ${id} page's "Claude sign-in didn't work" says what the Installer's ending says: close T3 Code, then paste the install line again`, async (t) => {
+    const { text } = await pageOf(t, id);
+    const section = sectionOf(text, 'If something went wrong');
+    const fix = section.slice(section.indexOf("Claude sign-in didn't work"), section.indexOf('Asana shows the wrong workspace'));
+    assert.ok(
+      fix.includes("If T3 Code is open, close it. Then paste the install line from step 1 into Windows PowerShell again: it signs you in and skips everything that's already done."),
+      fix,
+    );
+    assert.doesNotMatch(fix, /Refresh|claude auth login/);
+  });
 }
 
 for (const id of Object.keys(pages)) {
