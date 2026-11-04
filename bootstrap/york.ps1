@@ -144,7 +144,7 @@ function Start-AgentJumpstart {
   }
 
   Write-Host ''
-  Write-Host 'Agent Jumpstart' -ForegroundColor Magenta
+  Write-Host 'Agent Jumpstart' -ForegroundColor Cyan
   if ($DebugOn) {
     Write-Host "Debug: profile $ProfileId, PowerShell $($PSVersionTable.PSVersion), $($ExecutionContext.SessionState.LanguageMode), $arch"
     Write-Host "Debug: Node.js from $nodeUrl into $nodeDir"

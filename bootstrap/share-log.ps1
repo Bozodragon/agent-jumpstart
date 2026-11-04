@@ -48,7 +48,7 @@ function Copy-AgentJumpstartLog {
   if (-not $recipient) { $recipient = 'the person helping you' }
 
   Write-Host ''
-  Write-Host 'Your newest installer log is on the clipboard.' -ForegroundColor Magenta
+  Write-Host 'Your newest installer log is on the clipboard.' -ForegroundColor Cyan
   Write-Host "Paste it into a message to $recipient. Its folder is open too, in case they want the file."
   Write-Host "  $($newest.FullName)"
 }
