@@ -43,7 +43,7 @@ test("a york run whose person chooses to install Google Drive first ends cleanly
   assert.equal(result.code, 0, result.stdout + result.stderr);
   assert.ok(flowing(result.stdout).includes(documentsText), result.stdout);
   assert.match(flowing(result.stdout), /paste the same line again/);
-  assert.doesNotMatch(result.stdout, /Nothing has been changed|Done before it stopped|Done\./);
+  assert.doesNotMatch(result.stdout, /Nothing has been changed|Done before it stopped|What to do next|All done|didn't work/);
   await assert.rejects(readSettings(where.home), { code: 'ENOENT' });
   assert.equal(await exists(join(where.home, 'Documents')), false);
   assert.equal(await exists(join(where.home, 'My Drive')), false);
