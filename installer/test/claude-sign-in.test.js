@@ -112,6 +112,22 @@ test("Skip for now finishes the install, with an ending that says how to fix it,
   assert.match((await readOnlyLog(where.home)).text, /Ending: T3 Code isn't opened/);
 });
 
+test("Skip for now, when other steps didn't work too, ends with the sign-in's own line, then one line naming the others", async (t) => {
+  // This laptop's downloads folder has none of the other tools, so their installs don't work, and
+  // T3 Code, never opened, can't list the workspaces yet.
+  const { where } = await aLaptopSignedOut(t, { status: [signedOut], login: [failedLogin], answers: { claudeSignIn: ['skip'] } });
+
+  const result = await runWith(where, 'york');
+
+  assert.equal(result.code, 0, result.stdout + result.stderr);
+  checklistSays(result.stdout, 'Git', "Not installed: it wasn't in the downloads folder");
+  const lines = result.stdout
+    .split(/\r?\n/)
+    .map((line) => line.replace(/^[^\w/]+/, '').trim())
+    .filter((line) => line !== '');
+  assert.deepEqual(lines.slice(-2), [skippedEnding, "These steps didn't work either: Node.js, Git, GitHub CLI, Skills CLI, Skills and Workspaces."], result.stdout);
+});
+
 for (const mode of ['an ordinary', 'a debug']) {
   test(`${mode} run's log keeps Claude's own sign-in lines, and never the code pasted at its prompt`, async (t) => {
     // Were the code ever printed back after the prompt, as the window shows it while it's typed.

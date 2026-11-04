@@ -247,7 +247,10 @@ export async function pressEnter(message) {
   unlessCancelled(await select({ message, options: [{ value: 'done', label: 'Done' }] }));
 }
 
-/** @param {string} text */
+/**
+ * The run's last words. A second line, if there is one, lines up under the first.
+ * @param {string} text
+ */
 export function finish(text) {
-  outro(styleText('bold', text));
+  outro(styleText('bold', text.replaceAll('\n', '\n   ')));
 }

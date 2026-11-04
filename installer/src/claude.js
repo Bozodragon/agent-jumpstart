@@ -118,14 +118,18 @@ export async function setUpClaude({ places, machine, downloads, log, attended },
  * can't use Claude Code yet. A T3 Code that was open during the install reads PATH only when it
  * starts, so it has to be closed first. Pasting the line again signs in, as a run that finds
  * Claude Code signed out always does. Claude Code's row (", not signed in") is already among
- * what didn't work; Claude's own reason is repeated with it.
+ * what didn't work; Claude's own reason is repeated with it. Any other step that didn't work is
+ * named on a line after this closing line.
  * @param {import('./ending.js').Ending} ending
  * @param {string} reason Claude's own reason the sign-in failed.
  * @param {import('./ending.js').ToolNames} tools
  */
 export function endAfterSkippedSignIn(ending, reason, { claude, t3 }) {
   ending.lines.push(reason);
-  ending.closing = `One step didn't work: ${claude} isn't signed in, so ${t3} can't use it yet. If ${t3} is open, close it. Then paste the line again: it signs you in and skips everything that's already done.`;
+  ending.closing = {
+    step: claude,
+    line: `One step didn't work: ${claude} isn't signed in, so ${t3} can't use it yet. If ${t3} is open, close it. Then paste the line again: it signs you in and skips everything that's already done.`,
+  };
   ending.openT3 = false;
 }
 

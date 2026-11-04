@@ -1,10 +1,11 @@
 // The Installer's ending, after the checklist: what to do next, every step that didn't work
-// repeated with why (so it can't have scrolled out of sight during the run), and one closing
+// repeated with why (so it can't have scrolled out of sight during the run), and the closing
 // line, either "All done." or the steps that didn't work.
 //
 // The ending is a plain structure the run fills in as it goes. A step whose row says it didn't
 // work is noted by `note`; a step that knows better (Claude's sign-in, skipped) can add its own
-// failure and lines, give its own closing line, and say T3 Code isn't to be opened.
+// failure and lines, give its own closing line (with any other step that didn't work named on a
+// line after it), and say T3 Code isn't to be opened.
 import * as ui from './ui.js';
 
 /** @typedef {{ step: string, message: string }} Failure A step that didn't work, and why, as its row says. */
@@ -14,8 +15,9 @@ import * as ui from './ui.js';
  * @property {Failure[]} failed Each step that didn't work, in the order the run met them.
  * @property {string[]} lines More lines repeated with them, such as a program's own reason in its
  *   own words.
- * @property {string} [closing] The closing line, in place of the one made from `failed`. When
- *   it's given, it says what to do about them, so the ending doesn't add its own.
+ * @property {{ step: string, line: string }} [closing] A step's own closing line, in place of the
+ *   one made from `failed`. It says what to do, so the ending doesn't add its own; any other step
+ *   that didn't work is named on one line after it.
  * @property {boolean} openT3 Whether T3 Code may be opened at the end.
  */
 
@@ -48,12 +50,24 @@ export function note(ending, rows, step) {
 }
 
 /**
- * The ending's last line.
+ * The ending's closing line, or a step's own closing line and then the other steps that didn't work.
  * @param {Ending} ending
+ * @returns {string[]}
  */
-export function closingLine(ending) {
-  if (ending.closing !== undefined) return ending.closing;
+export function closingLines(ending) {
   const steps = [...new Set(ending.failed.map(({ step }) => step))];
+  const { closing } = ending;
+  if (closing !== undefined) {
+    const others = steps.filter((step) => step !== closing.step);
+    if (others.length === 1) return [closing.line, `One more step didn't work: ${others[0]}.`];
+    if (others.length > 1) return [closing.line, `These steps didn't work either: ${ui.inWords(others)}.`];
+    return [closing.line];
+  }
+  return [closingLine(steps)];
+}
+
+/** @param {string[]} steps */
+function closingLine(steps) {
   if (steps.length === 1) return `One step didn't work: ${steps[0]}.`;
   if (steps.length > 1) return `These steps didn't work: ${ui.inWords(steps)}.`;
   return 'All done.';
@@ -92,7 +106,7 @@ export function showEnding(ending, { top, t3Installed, tools, log }) {
     ui.problem(line);
     log.write(`Ending: ${line}`);
   }
-  const closing = closingLine(ending);
-  log.write(`Ending: ${closing}`);
-  ui.finish(closing);
+  const closing = closingLines(ending);
+  for (const line of closing) log.write(`Ending: ${line}`);
+  ui.finish(closing.join('\n'));
 }
