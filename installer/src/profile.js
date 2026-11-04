@@ -64,6 +64,15 @@ const profilesFolder = fileURLToPath(new URL('../../profiles/', import.meta.url)
  * @typedef {Choice & { what?: string, note?: string }} Connector
  */
 
+/**
+ * The skills one of a profile's skill sources brings: its `names`, or, for a source that is the
+ * path to one skill, its last part.
+ * @param {{ source: string, names?: string[] }} source
+ */
+export function skillNames({ source, names }) {
+  return names ?? [source.split('/').at(-1) ?? source];
+}
+
 /** @returns {Promise<string[]>} */
 async function profileIds() {
   const files = await readdir(profilesFolder);
