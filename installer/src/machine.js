@@ -158,7 +158,7 @@ export function openMachine(places, log) {
   // still shows. In any run, a program that fails is logged once it has, with its output.
   /** @param {Runner} run @returns {Runner} */
   const logged = (run) => async (file, args, how = {}) => {
-    const running = `Running: ${[file, ...args].map(quoted).join(' ')}`;
+    const running = `Running: ${commandLine(file, args)}`;
     log.detail(running);
     const ran = await run(file, args);
     const output = ran.output.trimEnd();
@@ -174,7 +174,7 @@ export function openMachine(places, log) {
   // real terminal away from it (gh auth login needs one), so only the command and code are logged.
   /** @param {Machine['runOnScreen']} run @returns {Machine['runOnScreen']} */
   const loggedOnScreen = (run) => async (file, args) => {
-    log.detail(`Running in the person's window: ${[file, ...args].map(quoted).join(' ')}`);
+    log.detail(`Running in the person's window: ${commandLine(file, args)}`);
     const code = await run(file, args);
     log.detail(`Ran: ${basename(file)} (code ${code})`);
     log.detail("  (its output went to the person's window, not the log)");
@@ -184,7 +184,7 @@ export function openMachine(places, log) {
   // (anything the person typed that the program might have shown).
   /** @param {Machine['runOnScreenAndKeep']} run @returns {Machine['runOnScreenAndKeep']} */
   const loggedOnScreenAndKept = (run) => async (file, args) => {
-    log.detail(`Running in the person's window, keeping what it prints: ${[file, ...args].map(quoted).join(' ')}`);
+    log.detail(`Running in the person's window, keeping what it prints: ${commandLine(file, args)}`);
     const ran = await run(file, args);
     log.detail(`Ran: ${basename(file)} (code ${ran.code})`);
     log.detail("  (what it printed went to the person's window, and is logged by the step that ran it)");
@@ -213,7 +213,7 @@ export function openMachine(places, log) {
     runOnScreen: loggedOnScreen(async (file, args) => startOnScreen(file, args, await environment())),
     runOnScreenAndKeep: loggedOnScreenAndKept(async (file, args) => startOnScreenAndKeep(file, args, await environment())),
     async launch(file, args) {
-      log.detail(`Starting, without waiting for it: ${[file, ...args].map(quoted).join(' ')}`);
+      log.detail(`Starting, without waiting for it: ${commandLine(file, args)}`);
       await startAndLeave(file, args, await environment());
     },
     openPage,
@@ -222,6 +222,9 @@ export function openMachine(places, log) {
 
 /** @param {string} arg */
 const quoted = (arg) => (/[\s"]/.test(arg) ? `"${arg}"` : arg);
+
+/** A program and its arguments as one line, for the log. @param {string} file @param {string[]} args */
+const commandLine = (file, args) => [file, ...args].map(quoted).join(' ');
 
 /** @param {string} entry */
 const sameFolder = (entry) => expand(entry).replace(/[\\/]+$/, '').toLowerCase();
