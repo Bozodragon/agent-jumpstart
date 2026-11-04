@@ -56,6 +56,38 @@ test('a second run with a settings file present asks none of the four questions 
   assert.ok(log.text.includes('Known from settings: channel: "nightly"'), log.text);
 });
 
+test('a re-run says what it reuses from last time: the top workspace and each earlier answer', async (t) => {
+  const where = await makeHome(t);
+  const profile = await readProfile('york');
+  const top = join(where.home, 'My Drive', profile.workspaces.top);
+  await mkdir(top, { recursive: true });
+  await seedSettings(where.home, {
+    profile: 'york',
+    googleDriveFolder: join(where.home, 'My Drive'),
+    workspacesLocation: join(where.home, 'My Drive'),
+    topWorkspace: top,
+    channel: 'nightly',
+    github: true,
+    workspaces: ['Thinking space', 'Personal assistant'],
+    connectors: ['Gmail', 'Asana'],
+    extraTools: ['apps-script'],
+    switchOffMemory: true,
+  });
+  await refuseEveryQuestion(where.answersFile);
+
+  const result = await runWith(where, 'york');
+
+  assert.equal(result.code, 0, result.stdout + result.stderr);
+  assert.match(result.stdout, /Using your answers from last time/);
+  checklistSays(result.stdout, 'Top workspace', top);
+  checklistSays(result.stdout, 'T3 Code', 'Nightly');
+  checklistSays(result.stdout, 'GitHub', 'Set up');
+  checklistSays(result.stdout, 'Workspaces', 'Thinking space and Personal assistant');
+  checklistSays(result.stdout, 'Connectors', 'Gmail and Asana');
+  checklistSays(result.stdout, 'Extra tools', 'clasp');
+  checklistSays(result.stdout, "Claude's memory", 'Switch it off');
+});
+
 test('a settings file missing an answer, or holding one the profile no longer offers, asks only that question', async (t) => {
   const where = await makeHome(t);
   const myDrive = join(where.home, 'My Drive');
