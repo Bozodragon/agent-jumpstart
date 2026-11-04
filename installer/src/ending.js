@@ -49,9 +49,6 @@ export function note(ending, rows, step) {
   }
 }
 
-/** @param {string[]} items */
-const inWords = (items) => (items.length === 1 ? items[0] : `${items.slice(0, -1).join(', ')} and ${items.at(-1)}`);
-
 /**
  * The ending's last line.
  * @param {Ending} ending
@@ -60,7 +57,7 @@ export function closingLine(ending) {
   if (ending.closing !== undefined) return ending.closing;
   const steps = [...new Set(ending.failed.map(({ step }) => step))];
   if (steps.length === 1) return `One step didn't work: ${steps[0]}.`;
-  if (steps.length > 1) return `These steps didn't work: ${inWords(steps)}.`;
+  if (steps.length > 1) return `These steps didn't work: ${ui.inWords(steps)}.`;
   return ending.sayDone ? 'All done.' : 'Finished.';
 }
 
