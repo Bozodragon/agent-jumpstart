@@ -29,9 +29,10 @@ const profilesFolder = fileURLToPath(new URL('../../profiles/', import.meta.url)
  *   is checked for a Software Center that offers Drive, and the person is offered to install it
  *   from there; without it, that check never runs. `softwareCenterOffer` is what's said then,
  *   in the organisation's words ("York's Software Center can install it for you...").
- * @property {{ defaultModel?: string, effort?: string, codex?: boolean }} [t3] How T3 Code is set up
- *   when the installer installs it (never for a T3 already there): new threads use Claude with
- *   `defaultModel`, which must be a model id T3 knows exactly (`claude-opus-5-5`; T3 quietly
+ * @property {{ defaultModel?: string, effort?: string, codex?: boolean }} [t3] What T3 Code's
+ *   settings get, just before the installer installs it and on every run for a T3 already there
+ *   (only what's missing: a key the person already has keeps its value): new threads use Claude
+ *   with `defaultModel`, which must be a model id T3 knows exactly (`claude-opus-5-5`; T3 quietly
  *   falls back to its own default for one it doesn't), at `effort` (such as `medium`); and
  *   `codex: false` turns T3's Codex off.
  * @property {Connector[]} connectors
