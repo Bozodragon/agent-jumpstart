@@ -24,6 +24,7 @@
 // skills folder afterwards: the CLI's exit code alone isn't trusted.
 import { join } from 'node:path';
 import { loadManifest, toolEntry } from './manifest.js';
+import { skillNames } from './profile.js';
 import { exists, installTool } from './tools.js';
 import * as ui from './ui.js';
 
@@ -57,8 +58,7 @@ export async function installSkills(profile, ours, installedFrom, context) {
   const git = program ? await machine.findOnPath('git.exe') : [];
   if (program && git.length === 0) log.write("Skills: no git.exe on the machine or user PATH, so the skills CLI isn't run");
 
-  // A source with no names is the path to a single skill, which is named by its last part.
-  const named = sources.map(({ source, names }) => ({ source, names, skills: names ?? [source.split('/').at(-1) ?? source] }));
+  const named = sources.map(({ source, names }) => ({ source, names, skills: skillNames({ source, names }) }));
   // Looked at before any source is added, so a skill one source brings isn't taken for theirs.
   /** @type {string[]} */
   const theirs = [];

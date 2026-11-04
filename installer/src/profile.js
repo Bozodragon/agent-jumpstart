@@ -23,14 +23,16 @@ const profilesFolder = fileURLToPath(new URL('../../profiles/', import.meta.url)
  *   `top` is the top workspace's folder name, created in the confirmed location with the chosen
  *   workspaces inside it. `defaultLocation` is the folder, within the user's profile folder,
  *   offered for workspaces when they aren't in Google Drive.
- * @property {{ softwareCenter?: string }} [googleDrive] Under a profile whose workspaces live in
- *   Google Drive: `softwareCenter` is the name (or part of it) that the laptop's Software Center
- *   lists Google Drive under. With it, a laptop without Drive is checked for a Software Center
- *   that offers Drive, and the person is offered to install it from there; without it, that
- *   check never runs.
- * @property {{ defaultModel?: string, effort?: string, codex?: boolean }} [t3] How T3 Code is set up
- *   when the installer installs it (never for a T3 already there): new threads use Claude with
- *   `defaultModel`, which must be a model id T3 knows exactly (`claude-opus-5-5`; T3 quietly
+ * @property {{ softwareCenter?: string, softwareCenterOffer?: string }} [googleDrive] Under a
+ *   profile whose workspaces live in Google Drive: `softwareCenter` is the name (or part of it)
+ *   that the laptop's Software Center lists Google Drive under. With it, a laptop without Drive
+ *   is checked for a Software Center that offers Drive, and the person is offered to install it
+ *   from there; without it, that check never runs. `softwareCenterOffer` is what's said then,
+ *   in the organisation's words ("York's Software Center can install it for you...").
+ * @property {{ defaultModel?: string, effort?: string, codex?: boolean }} [t3] What T3 Code's
+ *   settings get, just before the installer installs it and on every run for a T3 already there
+ *   (only what's missing: a key the person already has keeps its value): new threads use Claude
+ *   with `defaultModel`, which must be a model id T3 knows exactly (`claude-opus-5-5`; T3 quietly
  *   falls back to its own default for one it doesn't), at `effort` (such as `medium`); and
  *   `codex: false` turns T3's Codex off.
  * @property {Connector[]} connectors
@@ -62,6 +64,15 @@ const profilesFolder = fileURLToPath(new URL('../../profiles/', import.meta.url)
  * it's ticked, is said under the list, such as which of the service's workspaces to choose.
  * @typedef {Choice & { what?: string, note?: string }} Connector
  */
+
+/**
+ * The skills one of a profile's skill sources brings: its `names`, or, for a source that is the
+ * path to one skill, its last part.
+ * @param {{ source: string, names?: string[] }} source
+ */
+export function skillNames({ source, names }) {
+  return names ?? [source.split('/').at(-1) ?? source];
+}
 
 /** @returns {Promise<string[]>} */
 async function profileIds() {

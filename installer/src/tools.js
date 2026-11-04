@@ -291,6 +291,13 @@ const holdsAnything = async (folder) => (await readdir(folder).catch(() => [])).
 export const exists = (path) => access(path).then(() => true, () => false);
 
 /**
+ * Whether a value read from JSON is an object with keys, rather than null, an array or a plain value.
+ * @param {unknown} value
+ * @returns {value is Record<string, unknown>}
+ */
+export const isRecord = (value) => typeof value === 'object' && value !== null && !Array.isArray(value);
+
+/**
  * What a tool's checklist row says this run did to it, worded the same for every tool (T3 and
  * the extra tools too), so a re-run's checklist shows what changed and what was already right.
  */

@@ -1,10 +1,11 @@
 // The Installer's ending, after the checklist: what to do next, every step that didn't work
-// repeated with why (so it can't have scrolled out of sight during the run), and one closing
+// repeated with why (so it can't have scrolled out of sight during the run), and the closing
 // line, either "All done." or the steps that didn't work.
 //
 // The ending is a plain structure the run fills in as it goes. A step whose row says it didn't
 // work is noted by `note`; a step that knows better (Claude's sign-in, skipped) can add its own
-// failure and lines, give its own closing line, and say T3 Code isn't to be opened.
+// failure and lines, give its own closing line (with any other step that didn't work named on a
+// line after it), and say T3 Code isn't to be opened.
 import * as ui from './ui.js';
 
 /** @typedef {{ step: string, message: string }} Failure A step that didn't work, and why, as its row says. */
@@ -14,16 +15,15 @@ import * as ui from './ui.js';
  * @property {Failure[]} failed Each step that didn't work, in the order the run met them.
  * @property {string[]} lines More lines repeated with them, such as a program's own reason in its
  *   own words.
- * @property {string} [closing] The closing line, in place of the one made from `failed`. When
- *   it's given, it says what to do about them, so the ending doesn't add its own.
- * @property {boolean} sayDone Whether the closing line may say all done, which it does only when
- *   nothing failed.
+ * @property {{ step: string, line: string }} [closing] A step's own closing line, in place of the
+ *   one made from `failed`. It says what to do, so the ending doesn't add its own; any other step
+ *   that didn't work is named on one line after it.
  * @property {boolean} openT3 Whether T3 Code may be opened at the end.
  */
 
 /** @returns {Ending} */
 export function newEnding() {
-  return { failed: [], lines: [], sayDone: true, openT3: true };
+  return { failed: [], lines: [], openT3: true };
 }
 
 /**
@@ -49,34 +49,49 @@ export function note(ending, rows, step) {
   }
 }
 
-/** @param {string[]} items */
-const inWords = (items) => (items.length === 1 ? items[0] : `${items.slice(0, -1).join(', ')} and ${items.at(-1)}`);
-
 /**
- * The ending's last line.
+ * The ending's closing line, or a step's own closing line and then the other steps that didn't work.
  * @param {Ending} ending
+ * @returns {string[]}
  */
-export function closingLine(ending) {
-  if (ending.closing !== undefined) return ending.closing;
+export function closingLines(ending) {
   const steps = [...new Set(ending.failed.map(({ step }) => step))];
-  if (steps.length === 1) return `One step didn't work: ${steps[0]}.`;
-  if (steps.length > 1) return `These steps didn't work: ${inWords(steps)}.`;
-  return ending.sayDone ? 'All done.' : 'Finished.';
+  const { closing } = ending;
+  if (closing !== undefined) {
+    const others = steps.filter((step) => step !== closing.step);
+    if (others.length === 1) return [closing.line, `One more step didn't work: ${others[0]}.`];
+    if (others.length > 1) return [closing.line, `These steps didn't work either: ${ui.inWords(others)}.`];
+    return [closing.line];
+  }
+  return [closingLine(steps)];
 }
 
-/** The steps Jumpstart needs, in T3 Code, in the top workspace. */
-const neededForJumpstart = ['Claude Code', 'T3 Code', 'Workspaces'];
+/** @param {string[]} steps */
+function closingLine(steps) {
+  if (steps.length === 1) return `One step didn't work: ${steps[0]}.`;
+  if (steps.length > 1) return `These steps didn't work: ${ui.inWords(steps)}.`;
+  return 'All done.';
+}
+
+/**
+ * The steps Jumpstart needs, in T3 Code, in the top workspace.
+ * @param {ToolNames} tools
+ */
+const neededForJumpstart = (tools) => [tools.claude, tools.t3, 'Workspaces'];
+
+/** @typedef {{ claude: string, t3: string }} ToolNames Claude Code's and T3 Code's names, as their manifest entries give them. */
 
 /**
  * Shows the ending: what to do next, the failures repeated, and the closing line.
  * @param {Ending} ending
- * @param {{ top: string, t3Installed: boolean, log: import('./log.js').Log }} how `top` is the
- *   top workspace's name, as T3 Code lists it.
+ * @param {{ top: string, t3Installed: boolean, tools: ToolNames, log: import('./log.js').Log }} how
+ *   `top` is the top workspace's name, as T3 Code lists it; `tools` names the steps for Claude
+ *   Code and T3 Code, as the checklist does.
  */
-export function showEnding(ending, { top, t3Installed, log }) {
+export function showEnding(ending, { top, t3Installed, tools, log }) {
   /** @type {string[]} */
   const next = [];
-  if (t3Installed && !ending.failed.some(({ step }) => neededForJumpstart.includes(step))) {
+  if (t3Installed && !ending.failed.some(({ step }) => neededForJumpstart(tools).includes(step))) {
     next.push(`In T3 Code, open ${top}, your top workspace, and start a new conversation there. Type /jumpstart and press Enter.`);
   }
   if (ending.failed.length > 0 && ending.closing === undefined) {
@@ -91,7 +106,7 @@ export function showEnding(ending, { top, t3Installed, log }) {
     ui.problem(line);
     log.write(`Ending: ${line}`);
   }
-  const closing = closingLine(ending);
-  log.write(`Ending: ${closing}`);
-  ui.finish(closing);
+  const closing = closingLines(ending);
+  for (const line of closing) log.write(`Ending: ${line}`);
+  ui.finish(closing.join('\n'));
 }

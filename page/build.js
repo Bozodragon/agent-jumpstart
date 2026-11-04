@@ -17,6 +17,7 @@ import { copyFile, mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promi
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
+import { skillNames } from '../installer/src/profile.js';
 
 const repo = fileURLToPath(new URL('..', import.meta.url));
 /** Each placeholder, and where in a profile its text is (`workspaces.top` is the key `top` inside `workspaces`). */
@@ -89,13 +90,12 @@ function connectorRows(id, connectors) {
 }
 
 /**
- * The names of the skills a profile installs: a source's `names`, or for a source that is the
- * path to one skill, its last part.
+ * The names of the skills a profile installs, named as the Installer names them.
  * @param {unknown} skills
  */
 function installedSkills(skills) {
   if (!Array.isArray(skills)) return new Set();
-  return new Set(skills.flatMap((source) => source?.names ?? [String(source?.source).split('/').pop()]));
+  return new Set(skills.flatMap((source) => skillNames({ source: String(source?.source), names: source?.names })));
 }
 
 /**

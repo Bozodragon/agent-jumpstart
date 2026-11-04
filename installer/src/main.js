@@ -21,7 +21,7 @@ import { walkThroughConnectors } from './connectors.js';
 import { newEnding, note, showEnding } from './ending.js';
 import { setUpExtraTools } from './extra-tools.js';
 import { setUpGitHub } from './github.js';
-import { loadManifest } from './manifest.js';
+import { loadManifest, toolEntry } from './manifest.js';
 import { findPlaces } from './places.js';
 import { openMachine } from './machine.js';
 import { autoMemoryInUse, switchOffAutoMemory } from './memory.js';
@@ -30,7 +30,7 @@ import { answersFrom, askQuestions, knownFrom } from './questions.js';
 import { installSkills } from './skills.js';
 import { findT3, installT3, openT3 } from './t3.js';
 import { End, messageOf, Stop } from './stop.js';
-import { installTools } from './tools.js';
+import { installTools, isRecord } from './tools.js';
 import * as ui from './ui.js';
 import { addToT3, createWorkspaces } from './workspaces.js';
 
@@ -76,7 +76,7 @@ async function readEarlierSettings(path, profile, log) {
     }
     return undefined;
   }
-  if (settings === null || typeof settings !== 'object' || Array.isArray(settings)) {
+  if (!isRecord(settings)) {
     log.write(`Settings: ${path} isn't a JSON object, so every question is asked`);
     return undefined;
   }
@@ -122,14 +122,6 @@ async function reusedRows(earlier, choices, reused, downloads) {
   return rows;
 }
 
-/**
- * @param {unknown} value
- * @returns {value is Record<string, unknown>}
- */
-function isRecord(value) {
-  return value !== null && typeof value === 'object' && !Array.isArray(value);
-}
-
 /** @param {string} path @param {Record<string, unknown>} settings */
 async function writeSettings(path, settings) {
   await mkdir(dirname(path), { recursive: true });
@@ -162,6 +154,14 @@ async function main() {
   const done = [];
   /** What the ending says: the steps that didn't work, noted as the run meets them. */
   const ending = newEnding();
+  /**
+   * A step's rows, added to what's done and, for each that didn't work, noted for the ending.
+   * @param {[string, string][]} rows @param {string} [step] as for `note`
+   */
+  const record = (rows, step) => {
+    done.push(...rows);
+    note(ending, rows, step);
+  };
 
   try {
     const profile = await loadProfile(options.profile);
@@ -201,15 +201,12 @@ async function main() {
     done.push(['Settings', 'Your answers, saved for next time']);
 
     const workspaces = await createWorkspaces(choices.topWorkspace, choices.workspaces, log);
-    done.push(...workspaces.rows);
-    note(ending, workspaces.rows, 'Workspaces');
+    record(workspaces.rows, 'Workspaces');
 
     const { rows: tools, programs } = await installTools(context);
-    done.push(...tools);
-    note(ending, tools);
+    record(tools);
     const github = await setUpGitHub(profile, choices.github, programs, context);
-    done.push(['GitHub', github]);
-    note(ending, [['GitHub', github]]);
+    record([['GitHub', github]]);
     const ours = Array.isArray(earlier?.skillsInstalled) ? earlier.skillsInstalled.filter((name) => typeof name === 'string') : [];
     const installedFrom = /** @type {Record<string, string>} */ (
       Object.fromEntries(Object.entries(isRecord(earlier?.skillSources) ? earlier.skillSources : {}).filter(([, commit]) => typeof commit === 'string'))
@@ -218,14 +215,12 @@ async function main() {
     /** @type {[string, string][]} */
     const skillsRows = skills.cli === undefined ? [] : [['Skills CLI', skills.cli]];
     skillsRows.push(['Skills', skills.line]);
-    done.push(...skillsRows);
-    if (skills.cli !== undefined) note(ending, [['Skills CLI', skills.cli]]);
+    record(skillsRows);
     note(ending, skills.rows, 'Skills');
     const skillsInstalled = [...new Set([...ours, ...skills.installed])];
     const memoryResult = await switchOffAutoMemory(choices.switchOffMemory, context);
     const memory = memoryResult.row;
-    done.push(['Memory', memory]);
-    note(ending, [['Memory', memory]]);
+    record([['Memory', memory]]);
     // Written now, so a run that stops later still knows which skills are the installer's to
     // update, and Jumpstart knows whether memory is off.
     Object.assign(settings, { skillsInstalled, autoMemory: memoryResult.autoMemory });
@@ -238,32 +233,32 @@ async function main() {
     const connectors = await walkThroughConnectors(profile, choices.connectors, { ...context, connectedBefore });
     done.push(['Connectors', connectors]);
     const extraTools = await setUpExtraTools(profile, choices.extraTools, context);
-    done.push(...extraTools);
-    note(ending, extraTools);
+    record(extraTools);
+    // Their steps are named as their manifest entries name them (installTools has read it).
+    const manifest = await loadManifest(options.downloads);
+    /** @type {import('./ending.js').ToolNames} */
+    const named = { claude: toolEntry(manifest, 'claude')?.name ?? 'claude', t3: toolEntry(manifest, 't3')?.name ?? 't3' };
     // Before T3, which finds Claude Code only if it's on PATH when T3 starts.
     const claude = await setUpClaude(context, asker);
-    done.push(['Claude Code', claude.row]);
-    note(ending, [['Claude Code', claude.row]]);
-    if (claude.skipped !== undefined) endAfterSkippedSignIn(ending, claude.skipped);
+    record([[named.claude, claude.row]]);
+    if (claude.skipped !== undefined) endAfterSkippedSignIn(ending, claude.skipped, named);
     settings.email = claude.email;
     await writeSettings(places.settings, settings);
     log.write(`Signed-in email written to settings: ${claude.email ?? 'none'}`);
     // Last of the installs, after every other tool and its PATH entry: T3 reads PATH only when it starts.
     const t3 = await installT3(profile, choices.channel, foundT3, context);
-    done.push(['T3 Code', t3.row]);
-    note(ending, [['T3 Code', t3.row]]);
+    record([[named.t3, t3.row]]);
     // After T3's first start, which leaves the command-line shim that adds a project.
     const workspacesLine = await addToT3(workspaces, t3, context);
-    done.push(['Workspaces', workspacesLine]);
-    note(ending, [['Workspaces', workspacesLine]]);
+    record([['Workspaces', workspacesLine]]);
 
     /** @type {[string, string][]} */
     const checklist = [
       ['Profile', profile.name],
       ...tools,
       ...extraTools,
-      ['Claude Code', claude.row],
-      ['T3 Code', t3.row],
+      [named.claude, claude.row],
+      [named.t3, t3.row],
       ...skillsRows,
       ['Memory', memory],
       ['Workspaces', workspacesLine],
@@ -282,7 +277,7 @@ async function main() {
     else if (!t3.installed) log.write("Ending: T3 Code isn't opened: it isn't installed");
     else if (!foundT3 && t3.opened) log.write("Ending: T3 Code isn't opened again: its install just started it");
     else await openT3(foundT3?.channel ?? choices.channel, context);
-    showEnding(ending, { top: basename(choices.topWorkspace), t3Installed: t3.installed, log });
+    showEnding(ending, { top: basename(choices.topWorkspace), t3Installed: t3.installed, tools: named, log });
     log.write('Installer finished');
     return 0;
   } catch (error) {

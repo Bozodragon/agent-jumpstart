@@ -15,12 +15,13 @@ import { emitKeypressEvents } from 'node:readline';
 import { styleText } from 'node:util';
 import { Stop } from './stop.js';
 
-const guess = 'WT_SESSION';
-const guessed = process.env[guess];
-process.env[guess] ??= 'agent-jumpstart';
+// The library guesses the window draws Unicode when it's inside Windows Terminal, which sets this.
+const windowsTerminal = 'WT_SESSION';
+const windowsTerminalSession = process.env[windowsTerminal];
+process.env[windowsTerminal] ??= 'agent-jumpstart';
 const { confirm, intro, isCancel, log, multiselect, note, outro, select, text } = await import('@clack/prompts');
 // Put back, so the programs the installer runs see the window as it is.
-if (guessed === undefined) delete process.env[guess];
+if (windowsTerminalSession === undefined) delete process.env[windowsTerminal];
 
 /** The prompt library's symbols the old console can't draw, and what's printed in their place. */
 const swaps = new Map(
@@ -246,7 +247,10 @@ export async function pressEnter(message) {
   unlessCancelled(await select({ message, options: [{ value: 'done', label: 'Done' }] }));
 }
 
-/** @param {string} text */
+/**
+ * The run's last words. A second line, if there is one, lines up under the first.
+ * @param {string} text
+ */
 export function finish(text) {
-  outro(styleText('bold', text));
+  outro(styleText('bold', text.replaceAll('\n', '\n   ')));
 }

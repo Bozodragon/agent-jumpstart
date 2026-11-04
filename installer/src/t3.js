@@ -21,7 +21,7 @@ import { keepTrying, registryMiss, system32 } from './machine.js';
 import { loadManifest, toolEntry } from './manifest.js';
 import { messageOf } from './stop.js';
 import { checkSha512, findRelease } from './t3-release.js';
-import { change, exists, NotInstalled, obtain } from './tools.js';
+import { change, exists, isRecord, NotInstalled, obtain } from './tools.js';
 import * as ui from './ui.js';
 
 /**
@@ -200,7 +200,7 @@ async function readJson(file) {
   if (!(await exists(file))) return undefined;
   try {
     const parsed = JSON.parse(await readFile(file, 'utf8'));
-    return typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed) ? parsed : 'unreadable';
+    return isRecord(parsed) ? parsed : 'unreadable';
   } catch {
     return 'unreadable';
   }
@@ -219,17 +219,12 @@ function missingFrom(earlier, wanted) {
   for (const [key, value] of Object.entries(wanted)) {
     const there = earlier[key];
     if (there === undefined) added[key] = value;
-    else if (key === 'providerInstances' && isObject(there) && isObject(value)) {
+    else if (key === 'providerInstances' && isRecord(there) && isRecord(value)) {
       const instances = Object.fromEntries(Object.entries(value).filter(([id]) => there[id] === undefined));
       if (Object.keys(instances).length > 0) added[key] = { ...there, ...instances };
     }
   }
   return added;
-}
-
-/** @param {unknown} value @returns {value is Record<string, unknown>} */
-function isObject(value) {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 /**
@@ -268,25 +263,23 @@ async function waitForFirstLaunch(shim, patience, { machine, attended, say, name
  * already open just comes to the front: it runs only once.
  * @param {'stable' | 'nightly'} channel The channel of the T3 that's installed.
  * @param {import('./tools.js').Context} context
- * @returns {Promise<boolean>} whether it was started
  */
 export async function openT3(channel, { places, machine, downloads, log }) {
   const entry = toolEntry(await loadManifest(downloads), 't3');
   const where = entry?.channels[channel];
-  if (!entry || !where) return false;
+  if (!entry || !where) return;
   const say = (/** @type {string} */ line) => log.write(`${entry.name}: ${line}`);
   const program = join(places.programs, entry.install.folder, where.program);
   if (!(await exists(program))) {
     say(`not opened at the end: ${program} isn't there`);
-    return false;
+    return;
   }
   ui.step(`Opening ${entry.name}`);
   try {
     await machine.launch(program, []);
   } catch (error) {
     say(`couldn't be opened at the end: ${messageOf(error)}`);
-    return false;
+    return;
   }
   say(`opened at the end (${program})`);
-  return true;
 }
