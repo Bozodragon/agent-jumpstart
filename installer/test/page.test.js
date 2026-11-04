@@ -25,6 +25,22 @@ const sections = [
   'If something went wrong',
   'Why T3 Code rather than the Claude app?',
 ];
+/** The five points under "Finding your way round T3 Code", as a reader sees them. */
+const tour = [
+  'Threads are down the left, grouped by workspace. T3 Code calls workspaces "projects". New thread starts a conversation: pick the workspace it belongs in. Ctrl+B hides or shows the list.',
+  'Files is a tab in the panel on the right. Open the panel with the button at the top right, or Ctrl+Alt+B.',
+  "Terminal is a drawer at the bottom, Ctrl+J. You'll rarely need it.",
+  'Settings is the gear at the bottom left.',
+  "Usage and context are on the Thread details card at the top right of a thread. If it doesn't show them, right-click it and turn them on. When the context is nearly full, start a new thread.",
+];
+/** The sections the Jumpstart skill's closing links to, by their anchors. */
+const anchors = {
+  'your-workspaces': 'Your workspaces',
+  'your-connectors': 'Your connectors',
+  'your-skills': 'Your skills',
+  'finding-your-way-round-t3-code': 'Finding your way round T3 Code',
+  'if-something-went-wrong': 'If something went wrong',
+};
 const pages = {
   york: 'irm https://jumpstart-install.arcforge.uk/york.ps1 | iex',
   default: 'irm https://jumpstart-install.arcforge.uk/install.ps1 | iex',
@@ -210,7 +226,38 @@ for (const id of Object.keys(pages)) {
   test(`the ${id} page says "project" once, to say T3 Code calls workspaces that`, async (t) => {
     const { text } = await pageOf(t, id);
     assert.equal(text.match(/project/gi)?.length, 1, 'our own things are workspaces, never projects');
-    assert.ok(sectionOf(text, 'Finding your way round T3 Code').includes('it calls workspaces "projects"'));
+    assert.ok(sectionOf(text, 'Finding your way round T3 Code').includes('T3 Code calls workspaces "projects".'));
+  });
+
+  test(`the ${id} page's "Finding your way round T3 Code" gives its five points`, async (t) => {
+    const section = sectionOf((await pageOf(t, id)).text, 'Finding your way round T3 Code');
+    for (const point of tour) assert.ok(section.includes(point), `missing: ${point}\n\n${section}`);
+  });
+
+  test(`the ${id} page shows T3 Code's layout and making a new workspace as screenshots the page labels`, async (t) => {
+    const figures = sectionHtml((await pageOf(t, id)).html, 'Finding your way round T3 Code').split('<figure').slice(1);
+    assert.deepEqual(
+      figures.map((figure) => textOf(figure.slice(figure.indexOf('<figcaption'), figure.indexOf('</figcaption>'))).trim().split(':')[0]),
+      ["T3 Code's layout", 'Making a new workspace'],
+    );
+    for (const figure of figures) {
+      assert.match(figure, /<img src="data:image\/png;base64,[A-Za-z0-9+/=]{1000,}" alt="[^"]+"/, 'the screenshot is in the page, with a description');
+      const callouts = [...figure.matchAll(/class="callout[^"]*"[^>]*>(\d+)</g)].map((match) => Number(match[1]));
+      assert.ok(callouts.length > 0, 'the screenshot has no numbered labels');
+      assert.deepEqual(callouts, callouts.map((_, i) => i + 1), 'the labels count up from 1');
+      for (const n of callouts) assert.match(figure, new RegExp(`<figcaption[\\s\\S]*>${n}</span>`), `label ${n} isn't explained under the screenshot`);
+    }
+  });
+
+  test(`the ${id} page has the anchors the Jumpstart skill links to, and opens a section that's linked to`, async (t) => {
+    const { html } = await pageOf(t, id);
+    for (const [anchor, heading] of Object.entries(anchors)) {
+      assert.equal(html.split(`id="${anchor}"`).length - 1, 1, `#${anchor} should be on the page once`);
+      assert.match(html, new RegExp(`<details [^>]*id="${anchor}"[^>]*>\\s*<summary[^>]*><h2>${heading.replace('?', '\\?')}</h2>`), `#${anchor} isn't "${heading}"`);
+    }
+    assert.match(html, /addEventListener\("hashchange"/, 'nothing opens a section when the address changes to its anchor');
+    assert.match(html, /\.open = true/, 'nothing opens the linked section');
+    assert.match(html, /scrollIntoView/, 'nothing scrolls to the linked section');
   });
 
   test(`the ${id} page says how to reconnect a connector, and lists the profile's connectors`, async (t) => {

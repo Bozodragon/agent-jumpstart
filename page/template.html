@@ -124,6 +124,7 @@
 
   .ref p { margin: 0; color: var(--secondary); }
   .plain.ref > * + * { margin-top: 12px; }
+  .plain.ref > :first-child { margin-top: 0; }
   .ref strong, .rows b { color: var(--text); font-weight: 500; }
   .ref ul { margin-bottom: 0; padding: 0; list-style: none; }
   .ref ul > li { position: relative; padding-left: 18px; color: var(--secondary); }
@@ -152,6 +153,31 @@
   .ref h3 { font-size: 13.5px; font-weight: 600; margin: 18px 0 8px; color: var(--text); }
   .demo-slot:empty { display: none; }
 
+  /* Screenshots, labelled by the page: each .ring is a box round what it points at, placed as
+     percentages of the picture, and its .callout is the number, outside the box on one side. */
+  figure.shot { margin: 18px 0 0; }
+  figure.shot.narrow .shot-frame { max-width: 460px; }
+  .shot-frame { position: relative; border: 1px solid var(--outline); border-radius: 12px; background: var(--bg); line-height: 0; }
+  .shot-frame img { display: block; width: 100%; height: auto; border-radius: 11px; }
+  .shot-frame .ring { position: absolute; border: 2px solid var(--accent); border-radius: 7px; box-shadow: 0 0 0 1px rgba(0, 0, 0, .6), 0 0 10px rgba(91, 149, 255, .45); }
+  .shot-frame .callout {
+    position: absolute; width: 20px; height: 20px; border-radius: 999px;
+    background: var(--accent); color: #000; box-shadow: 0 0 0 2px rgba(0, 0, 0, .7);
+    font-size: 11.5px; font-weight: 600; line-height: 20px; text-align: center; font-variant-numeric: tabular-nums;
+  }
+  .callout.at-r { left: 100%; top: 50%; transform: translate(6px, -50%); }
+  .callout.at-l { right: 100%; top: 50%; transform: translate(-6px, -50%); }
+  .callout.at-t { bottom: 100%; left: 50%; transform: translate(-50%, -6px); }
+  .callout.at-b { top: 100%; left: 50%; transform: translate(-50%, 6px); }
+  figure.shot figcaption { margin-top: 10px; font-size: 13.5px; color: var(--secondary); }
+  figure.shot figcaption p { font-size: 13.5px; }
+  .ref ol.legend { margin: 8px 0 0; padding: 0; list-style: none; display: flex; flex-wrap: wrap; gap: 6px 16px; }
+  .ref ol.legend > li { display: flex; align-items: center; gap: 7px; margin: 0; }
+  .ref ol.legend > li > span {
+    flex: none; width: 18px; height: 18px; border-radius: 999px; background: var(--accent); color: #000;
+    font-size: 11px; font-weight: 600; line-height: 18px; text-align: center; font-variant-numeric: tabular-nums;
+  }
+
   .foot { margin-top: 40px; padding: 0 4px; text-align: center; color: var(--muted); font-size: 13.5px; }
 
   @media (prefers-reduced-motion: reduce) { details.help .chevron svg { transition: none; } }
@@ -162,6 +188,9 @@
     h1 { font-size: 26px; }
     ol.steps > li { gap: 12px; padding: 12px 8px; }
     .copybox-body { padding: 12px; }
+    .shot-frame .callout { width: 16px; height: 16px; font-size: 10px; line-height: 16px; }
+    .callout.at-r { transform: translate(3px, -50%); }
+    .callout.at-l { transform: translate(-3px, -50%); }
   }
 </style>
 </head>
@@ -235,7 +264,7 @@
       </div>
     </details>
 
-    <details class="help row" id="workspaces">
+    <details class="help row" id="your-workspaces">
       <summary class="section-head"><h2>Your workspaces</h2><span class="chevron" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></span></summary>
       <div class="panel">
         <div class="plain ref">
@@ -258,7 +287,7 @@
       </div>
     </details>
 
-    <details class="help row">
+    <details class="help row" id="your-skills">
       <summary class="section-head"><h2>Your skills</h2><span class="chevron" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></span></summary>
       <div class="panel">
         <div class="plain ref">
@@ -268,7 +297,7 @@
       </div>
     </details>
 
-    <details class="help row">
+    <details class="help row" id="your-connectors">
       <summary class="section-head"><h2>Your connectors</h2><span class="chevron" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></span></summary>
       <div class="panel">
         <div class="plain ref">
@@ -286,22 +315,61 @@
       </div>
     </details>
 
-    <details class="help row" id="t3-code">
+    <details class="help row" id="finding-your-way-round-t3-code">
       <summary class="section-head"><h2>Finding your way round T3 Code</h2><span class="chevron" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></span></summary>
       <div class="panel">
         <div class="plain ref">
-          <div class="rows tour">
-            <b>Conversations</b><span>Listed down the left, under each workspace. T3 Code calls them threads, and it calls workspaces "projects". Start a new one in the workspace the work belongs to.</span>
-            <b>Files</b><span>The files sidebar shows what's in the workspace you're in, such as its agent instructions.</span>
-            <b>Terminal</b><span>Where you type a command, such as <code>claude auth login</code>.</span>
-            <b>Settings</b><span>Where you refresh your Claude sign-in and switch things on.</span>
-            <b>Usage and context</b><span>How much of your Claude allowance you've used, and how full this conversation is. When it's nearly full, start a new conversation. The context display starts switched off: turn it on in Settings, under Labs or Legacy depending on your version.</span>
-          </div>
+          <ul>
+            <li><strong>Threads</strong> are down the left, grouped by workspace. T3 Code calls workspaces "projects". <strong>New thread</strong> starts a conversation: pick the workspace it belongs in. Ctrl+B hides or shows the list.</li>
+            <li><strong>Files</strong> is a tab in the panel on the right. Open the panel with the button at the top right, or Ctrl+Alt+B.</li>
+            <li><strong>Terminal</strong> is a drawer at the bottom, Ctrl+J. You'll rarely need it.</li>
+            <li><strong>Settings</strong> is the gear at the bottom left.</li>
+            <li><strong>Usage and context</strong> are on the Thread details card at the top right of a thread. If it doesn't show them, right-click it and turn them on. When the context is nearly full, start a new thread.</li>
+          </ul>
+          <!-- The labels are the page's own, placed over the screenshot as percentages of it (left top
+               width height of the box round what they point at), so they can be moved or reworded
+               without retaking it. page/README.md says how the screenshots were taken. -->
+          <figure class="shot">
+            <div class="shot-frame">
+              <img src="{{t3Layout}}" alt="T3 Code's window: the list of threads down the left, a conversation in the middle with the message box under it, and the Thread details card at the top right." width="1000" height="816">
+              <span class="ring" style="left: 0.29%; top: 6.76%; width: 15.95%; height: 85.41%"><span class="callout at-r">1</span></span>
+              <span class="ring" style="left: 13.96%; top: 3.74%; width: 2.05%; height: 2.59%"><span class="callout at-r">2</span></span>
+              <span class="ring" style="left: 89.21%; top: 0.29%; width: 2.11%; height: 2.59%"><span class="callout at-r">3</span></span>
+              <span class="ring" style="left: 87.16%; top: 0.29%; width: 2.11%; height: 2.59%"><span class="callout at-l">4</span></span>
+              <span class="ring" style="left: 0.35%; top: 96.69%; width: 2.35%; height: 2.88%"><span class="callout at-t">5</span></span>
+              <span class="ring" style="left: 80.82%; top: 4.03%; width: 18.06%; height: 24.37%"><span class="callout at-l">6</span></span>
+              <span class="ring" style="left: 12.02%; top: 3.74%; width: 1.99%; height: 2.59%"><span class="callout at-b">7</span></span>
+            </div>
+            <figcaption>
+              <p>T3 Code's layout: the conversation is in the middle. The threads and messages of the laptop it was taken on are blanked out.</p>
+              <ol class="legend">
+                <li><span>1</span>Threads, grouped by workspace</li>
+                <li><span>2</span>New thread</li>
+                <li><span>3</span>The panel on the right, with Files</li>
+                <li><span>4</span>Terminal</li>
+                <li><span>5</span>Settings</li>
+                <li><span>6</span>Thread details: usage and context</li>
+                <li><span>7</span>Adding a workspace to the list</li>
+              </ol>
+            </figcaption>
+          </figure>
+          <figure class="shot narrow">
+            <div class="shot-frame">
+              <img src="{{t3NewWorkspace}}" alt="The box T3 Code opens to add a workspace, listing where it can come from, with Local folder second." width="651" height="480">
+              <span class="ring" style="left: 2.92%; top: 33.13%; width: 42.40%; height: 10.21%"><span class="callout at-r">1</span></span>
+            </div>
+            <figcaption>
+              <p>Making a new workspace: your agent makes its folder and adds it to T3 Code's list. To add one yourself, click the folder button (7 above). If it asks which device, choose This device. Then choose Local folder and pick the workspace's folder. Esc closes it without adding anything.</p>
+              <ol class="legend">
+                <li><span>1</span>Local folder</li>
+              </ol>
+            </figcaption>
+          </figure>
         </div>
       </div>
     </details>
 
-    <details class="help row">
+    <details class="help row" id="if-something-went-wrong">
       <summary class="section-head"><h2>If something went wrong</h2><span class="chevron" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></span></summary>
       <div class="panel">
         <div class="plain">
@@ -320,7 +388,7 @@
           </div>
           <div class="sub">
             <p class="step-title">Asana shows the wrong workspace</p>
-            <p class="step-body">When Asana asks, pick your team's workspace at the top of its page. To fix it, reconnect Asana as <strong>Your connectors</strong> says: disconnect it on claude.ai's Connectors page, connect it again and pick your team's workspace. Then start a new thread.</p>
+            <p class="step-body">When Asana asks, pick your team's workspace at the top of its page. To fix it, reconnect Asana as <a href="#your-connectors">Your connectors</a> says: disconnect it on claude.ai's Connectors page, connect it again and pick your team's workspace. Then start a new thread.</p>
           </div>
         </div>
       </div>
@@ -351,6 +419,24 @@
       selection.removeAllRanges();
       selection.addRange(range);
     });
+  });
+
+  // A section is closed until it's opened, so one that's linked to (the Jumpstart skill's
+  // closing links to #your-workspaces and others, and the page links to its own sections) is
+  // opened and brought into view: when the page opens at its anchor, and when a link to it is
+  // clicked, even a second time.
+  function openSection(id) {
+    var section = id && document.getElementById(id);
+    if (!section || section.tagName !== "DETAILS") return;
+    section.open = true;
+    section.scrollIntoView({ block: "start" });
+  }
+  var hashId = function () { try { return decodeURIComponent(location.hash.slice(1)); } catch (e) { return ""; } };
+  openSection(hashId());
+  window.addEventListener("hashchange", function () { openSection(hashId()); });
+  document.addEventListener("click", function (event) {
+    var link = event.target.closest && event.target.closest('a[href^="#"]');
+    if (link) openSection(link.getAttribute("href").slice(1));
   });
 </script>
 </body>
