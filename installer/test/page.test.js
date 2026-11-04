@@ -45,6 +45,11 @@ const pages = {
   york: 'irm https://jumpstart-install.arcforge.uk/york.ps1 | iex',
   default: 'irm https://jumpstart-install.arcforge.uk/install.ps1 | iex',
 };
+/** What each page says after the share-log line: who to email the log to, and where. @type {Record<string, string>} */
+const sendTheLogSays = {
+  york: 'Then email it to Jacob at jacob.hamood@york.ac.uk. The email opens ready to send',
+  default: 'Then email it to Jacob at jacob.hamood@live.co.uk. The email opens ready to send',
+};
 /** @param {string} line @returns {string} the address inside an `irm <address> | iex` line */
 const addressIn = (line) => line.split(' ')[1];
 
@@ -291,9 +296,9 @@ for (const id of Object.keys(pages)) {
 
   test(`the ${id} page says where to send the log, under "If something went wrong"`, async (t) => {
     const { text } = await pageOf(t, id);
-    const profile = JSON.parse(await readFile(join(repo, 'profiles', `${id}.json`), 'utf8'));
-    const said = profile.logEmail ? `email it to ${profile.logGoesTo}` : `send it to ${profile.logGoesTo}`;
+    const said = sendTheLogSays[id];
     const section = sectionOf(text, 'If something went wrong');
+    assert.ok(section.includes(said), `missing: ${said}`);
     assert.ok(section.indexOf(shareLogLine) < section.indexOf(said), `"${said}" belongs after the share-log line`);
   });
 }
