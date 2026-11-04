@@ -12,7 +12,7 @@ The page a team member follows along with: paste the line, type `/jumpstart` in 
 | `workspaces.top` | The top workspace's folder name (`{{topWorkspace}}`), which step 2 says T3 Code already lists. The installer creates that folder. |
 
 ```
-npm run build:page      # renders dist/page/<profile>/index.html
+npm run build:page      # renders dist/page/<profile>/index.html, with Jumpstart's templates beside it
 npm run publish:page    # renders, then publishes each page as a public Portall item
 ```
 
@@ -27,3 +27,7 @@ The install line and the share-log line are shown the same way, and neither has 
 Each box also has a "See what this runs" link. The build takes the address out of the line (`irm <address> | iex`) and links to it, so the link is that profile's script for the install line and `share-log.ps1` for the share-log line. The build fails if a line isn't in that form.
 
 Under the install line the page warns that nothing may appear for up to half a minute after pasting: that wait is Windows PowerShell fetching the script, before the installer's own code runs.
+
+## Jumpstart's templates
+
+The build also copies Jumpstart's page templates into every profile's site, under `jumpstart/`, so `https://jumpstart-york.arcforge.uk/jumpstart/writing-picker.js` is the writing picker for York. Jumpstart writes only a small page that loads its template from there, instead of writing the whole page out ([ADR 0001](../docs/adr/0001-jumpstart-pages-load-from-the-setup-site.md)). A template's source is beside the skill, in `skills/jumpstart/`, so it changes in the same commit as the instructions that use it. The skill reaches people from `main` and the templates from this site, so run `npm run publish:page` whenever a merge to `main` changes a template. `installer/test/page.test.js` checks that each profile's build holds them.
