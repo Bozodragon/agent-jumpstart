@@ -216,6 +216,14 @@ export function summary(rows, title) {
   note(rows.map(([label, value]) => `${styleText('bold', label.padEnd(width))}  ${value}`).join('\n'), title);
 }
 
+/**
+ * Names in plain English: "A", "A and B", "A, B and C".
+ * @param {string[]} names
+ */
+export function inWords(names) {
+  return names.length === 1 ? names[0] : `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`;
+}
+
 export const bullet = '•';
 
 /**

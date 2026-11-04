@@ -8,27 +8,40 @@ disable-model-invocation: true
 
 You are meeting the person you'll work for. In this first session you learn who they are, mostly from what they already have rather than by asking, and show them what you found before anything is kept.
 
-Treat it as two new **colleagues** getting to know each other, not a form: one question at a time, a word on why you're asking, and something back in return, such as what you'll do with an answer or something you noticed. They aren't technical, so write plain UK English and keep the machinery out of sight: say "I'll have a look through your calendar and files", never "settings file", "connector", "background agent" or a tool's name.
+Treat it as two new **colleagues** getting to know each other, not a form: one question at a time, a word on why you're asking, and something back in return, such as what you'll do with an answer or something you noticed. They aren't technical, so write plain UK English and keep the plumbing out of sight: say "I'll have a look through your calendar and files", never "settings file", "connector" or a tool's name. Talk openly about yourself and about the helper agent that does the reading for you: only files, settings and tools' names stay out of sight.
+
+**Name the thread first.** Before anything else, rename this thread "Jumpstart" with T3 Code's own thread tool, `t3_thread_update` (`action: "rename"`, `title: "Jumpstart"`, no `threadId`, so it's this thread; load it first if it's listed as a deferred tool). It asks no permission and changes no file. Say nothing about it, and if the tool isn't there, carry on without it.
 
 **Read-only until approval.** Until the person approves their profile in step 6 you only read: create or change no file, in this folder or anywhere else, and send nothing.
 
 ## 1. Read what the installer knows
 
-Read the installer's settings file, `%LOCALAPPDATA%\agent-jumpstart\settings.json` (`$env:LOCALAPPDATA` in PowerShell, `$LOCALAPPDATA` in Git Bash). If it is missing, the installer hasn't run on this laptop: tell them to run the line from the setup page first, and stop. It is the source for three things; never ask the person for any of them:
+Read the installer's settings file, `%LOCALAPPDATA%\agent-jumpstart\settings.json` (`$env:LOCALAPPDATA` in PowerShell, `$LOCALAPPDATA` in Git Bash). If it is missing, the installer hasn't run on this laptop: tell them to run the line from the setup page first, and stop. It is the source for four things; never ask the person for any of them:
 
 - `email`: their work email. If the key is missing, run `claude auth status` and take `email` from the JSON it prints. If neither gives one, ask for it: the one exception.
 - `workspaces`: the names of the workspaces they chose.
 - `connectors`: the names of the connectors they chose, such as `Gmail`, `Google Calendar`, `Google Drive`, `Asana`.
+- `profile`: `york` or `default`, which picks the privacy line in step 2. If it's missing or anything else, use `default`.
 
 Take their name from their Claude account. Claude Code keeps it in its own config file, `.claude.json`, in their profile folder (`%USERPROFILE%\.claude.json`), or in the folder `CLAUDE_CONFIG_DIR` names if that is set. Read only `oauthAccount.fullName` from it, or `oauthAccount.displayName` if there's no full name; the file holds other things that aren't yours to read. Never guess a name from the email address. If neither key gives one, ask for their name in step 2: the other exception.
 
 You should be running in their top workspace: the folder `topWorkspace` names (the installer created it, or found the one they already had, and added it to T3). In a settings file from before the installer wrote that key, it is a folder directly inside `workspacesLocation`, holding a folder for each of their `workspaces`. If it isn't, tell them to open their top workspace in T3 and type `/jumpstart` there, and stop.
 
-Done when you have their email, workspaces and connectors, and either their name from the account or the knowledge that you'll ask for it.
+Done when you have their email, workspaces, connectors and profile, and either their name from the account or the knowledge that you'll ask for it.
 
 ## 2. Say hello and ask their role
 
-Greet them, by first name if you have it. In two or three sentences, say what happens next: you'll look through their calendar and files while you talk, show them what you found on one page to correct, and keep nothing until they've said it's right. Then ask their job title and team, as one question; if the account gave no name, ask what you should call them in the same question.
+Greet them, by first name if you have it, then open with about six short lines, in this order, and then the role question:
+
+1. What's about to happen: a few questions, one page to check, then you set up their workspaces. It takes about 15 minutes.
+2. A helper agent reads their calendar, email, Drive and Asana while you talk. T3 Code shows it working, and they don't need to read what it writes. Name only the ones in `connectors`; email only as "your email, if you say yes", since step 3 asks.
+3. Nothing is kept until they've checked it.
+4. The privacy line for their `profile`, word for word:
+   - `york`: "York's agreement with Anthropic means your conversations, and what the agent reads for you, aren't used to train its AI. Anthropic deletes them from its servers within 30 days, unless its safety checks flag something."
+   - `default`: "Whether Anthropic's AI learns from your conversations depends on a setting of yours. To keep them out of its training, switch off 'Help improve Claude' here: https://claude.ai/settings/data-privacy-controls. Anthropic then deletes them within 30 days, unless its safety checks flag something."
+5. They can run `/jumpstart` again any time to update it.
+
+Then ask their job title and team, as one question; if the account gave no name, ask what you should call them in the same question.
 
 Done when you have their job title and team (and their name, if you asked), in their words. If they leave one out, ask once more for it.
 
