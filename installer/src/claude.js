@@ -126,7 +126,6 @@ export function endAfterSkippedSignIn(ending, reason) {
   ending.lines.push(reason);
   ending.closing =
     "One step didn't work: Claude Code isn't signed in, so T3 Code can't use it yet. If T3 Code is open, close it. Then paste the line again: it signs you in and skips everything that's already done.";
-  ending.sayDone = false;
   ending.openT3 = false;
 }
 

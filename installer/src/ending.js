@@ -16,14 +16,12 @@ import * as ui from './ui.js';
  *   own words.
  * @property {string} [closing] The closing line, in place of the one made from `failed`. When
  *   it's given, it says what to do about them, so the ending doesn't add its own.
- * @property {boolean} sayDone Whether the closing line may say all done, which it does only when
- *   nothing failed.
  * @property {boolean} openT3 Whether T3 Code may be opened at the end.
  */
 
 /** @returns {Ending} */
 export function newEnding() {
-  return { failed: [], lines: [], sayDone: true, openT3: true };
+  return { failed: [], lines: [], openT3: true };
 }
 
 /**
@@ -58,7 +56,7 @@ export function closingLine(ending) {
   const steps = [...new Set(ending.failed.map(({ step }) => step))];
   if (steps.length === 1) return `One step didn't work: ${steps[0]}.`;
   if (steps.length > 1) return `These steps didn't work: ${ui.inWords(steps)}.`;
-  return ending.sayDone ? 'All done.' : 'Finished.';
+  return 'All done.';
 }
 
 /** The steps Jumpstart needs, in T3 Code, in the top workspace. */
