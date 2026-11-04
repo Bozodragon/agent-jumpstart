@@ -74,12 +74,23 @@ Two questions while the research runs, one after the other.
 
 **What they want help with.** In the same turn as step 4, ask with one question card built from [`help-categories.md`](help-categories.md), one multi-select question per group, with the labels and descriptions exactly as written there. The first question is headed "Help" and reads "What sort of things do you want help with?"; the rest are headed "More help" and read "And any of these?". Each category they pick, and anything they type instead, becomes one line of the profile's "What you want help with" section, and nothing more.
 
-**How they like things written.** Once they've answered, show the writing picker: fixed examples, the same for everyone, that change as they flip switches for length, tone, bullets and headings.
+**How they like things written.** Once they've answered, show the writing picker: fixed examples, the same for everyone, that change as they flip switches for length, tone, bullets and headings, and a line on what each length means. The picker itself is published on their setup site, so you write only the small page below, which loads it.
 
-1. Read [`writing-picker.html`](writing-picker.html) and pass it as it is, unchanged: preview it with `html_preview` for its `contentHeight`, then show it with `html_render` at that height, titled "How you like things written".
-2. Below it, in one line: they can flip the switches until the examples read the way they like and paste what the page copies, or just tell you in their own words.
+1. Show this page with `html_render`, titled "How you like things written", with `height` 900. Don't preview it first with `html_preview`: the frame fits itself to the page. Write it exactly as it is here, with `[setup site]` replaced by their profile's setup site: `https://jumpstart-york.arcforge.uk/` for `york`, `https://jumpstart.arcforge.uk/` for `default`.
 
-If the page tools aren't available, ask in one line how they like things written: long or short, friendly or formal, bullet points or paragraphs, headings or none.
+   ```html
+   <!doctype html>
+   <html lang="en-GB">
+   <head><meta charset="utf-8"><title>How you like things written</title></head>
+   <body>
+   <div id="writing-picker"></div>
+   <script src="[setup site]jumpstart/writing-picker.js" onerror="document.getElementById('writing-picker').textContent = 'The examples could not load here, so tell me in the chat how you like things written.'; console.error('The writing picker did not load from the setup site.')"></script>
+   </body>
+   </html>
+   ```
+2. Make the page the last thing in your turn, with one line after it and nothing else: they can flip the switches until the examples read the way they like and paste what the page copies, or just tell you in their own words.
+
+If it didn't load, ask in the chat instead and carry on; don't write the picker out yourself or try again. You can tell it didn't load when `html_render` isn't available, fails, or reports back `heights` that are all under 100: the picker is several hundred pixels tall, and the page that couldn't load it is one line. Then your one line after it asks how they like things written: long or short, friendly or formal, bullet points or paragraphs, headings or none.
 
 Their reply becomes the profile's "How you like things written" section, and nothing more:
 

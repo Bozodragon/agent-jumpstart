@@ -133,6 +133,11 @@ for (const [id, ownLine] of Object.entries(pages)) {
     );
   });
 
+  test(`the ${id} site publishes Jumpstart's writing picker template beside its page, as it is in the skill`, async (t) => {
+    const built = await readFile(join(await render(t), id, 'jumpstart', 'writing-picker.js'), 'utf8');
+    assert.equal(built, await readFile(join(repo, 'skills', 'jumpstart', 'writing-picker.js'), 'utf8'));
+  });
+
   test(`the ${id} page has none of the old setup page's steps`, async (t) => {
     const text = textOf(await readFile(join(await render(t), id, 'index.html'), 'utf8'));
     for (const old of ['Before the call', 'Install Claude Code', 'Setup prompt', 'Plan your day', 'Software Centre', 'Open Personal assistant and start a conversation']) {
