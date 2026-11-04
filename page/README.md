@@ -23,7 +23,9 @@ The `setupPage` texts are plain text with two marks: `**words**` for bold and `[
 
 Our own text never says "project": a workspace is a "workspace", and what's in one is "work" or "a piece of work". The one exception is the sentence in "Finding your way round T3 Code" saying T3 Code calls workspaces "projects". That includes the profiles' wording, and the tests count it.
 
-"Finding your way round T3 Code" (`id="t3-code"`) and "Your workspaces" (`id="workspaces"`, with an empty `.demo-slot` for the workspaces demo) are where the labelled screenshots and the demo go.
+"Finding your way round T3 Code" (`id="t3-code"`) and "Your workspaces" (`id="workspaces"`, with the workspaces demo in its `.demo-slot`) are where the labelled screenshots and the demo go.
+
+The workspaces demo is ported from its prototype ("What it sees"): drag the agent onto a workspace and it lights the agent instructions it follows from the start (that workspace's and every one above it), what it looks through first (everything inside it), and, dashed, the files those instructions point to. Its styles are in the page's `<style>` and its script sits in the slot, so each page stays one file. The example tree is the nested list in the slot, which is also what shows if the script doesn't run: each `li[data-node]` is a workspace, with `data-instr` for its agent instructions, `data-points` for the files they point to and `data-files` for the rest (`|` between names); `data-work` marks a piece of work, and `data-top` the top workspace, named from the profile. The script reads the list and draws the tree you drag onto, so changing the example is an edit to the list, plus the notes in the script that name its workspaces. The tests check the demo's text is on both pages; the dragging is checked by hand in a browser, with a mouse and at phone width.
 
 ```
 npm run build:page      # renders dist/page/<profile>/index.html
