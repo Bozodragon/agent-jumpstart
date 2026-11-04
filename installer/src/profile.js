@@ -49,8 +49,9 @@ const profilesFolder = fileURLToPath(new URL('../../profiles/', import.meta.url)
 
 /**
  * A connector the person can tick. `what` says what it lets the agent do, in a few plain words
- * that follow its name in the connectors notice ("Gmail: search and read your email").
- * @typedef {Choice & { what?: string }} Connector
+ * that follow its name in the connectors notice ("Gmail: search and read your email"). `note`, when
+ * it's ticked, is said under the list, such as which of the service's workspaces to choose.
+ * @typedef {Choice & { what?: string, note?: string }} Connector
  */
 
 /** @returns {Promise<string[]>} */

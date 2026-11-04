@@ -41,6 +41,8 @@ Greet them, by first name if you have it, then open with about six short lines, 
    - `default`: "Whether Anthropic's AI learns from your conversations depends on a setting of yours. To keep them out of its training, switch off 'Help improve Claude' here: https://claude.ai/settings/data-privacy-controls. Anthropic then deletes them within 30 days, unless its safety checks flag something."
 5. They can run `/jumpstart` again any time to update it.
 
+**Check the connectors before anything else,** so the research reads the right services. For each of their `connectors`, make the check [`connector-checks.md`](connector-checks.md) names for it, as step 10 describes; for Asana that includes asking which workspace their team's tasks are in, and its fix. Say nothing about the others unless one isn't **Working**: then one line, such as "I can't get into your calendar, so I'll leave it out; I'll tell you how to fix it at the end."
+
 Then ask their job title and team, as one question; if the account gave no name, ask what you should call them in the same question.
 
 Done when you have their job title and team (and their name, if you asked), in their words. If they leave one out, ask once more for it.
@@ -60,7 +62,7 @@ Done when they've chosen. Anything short of a clear yes is a no.
 
 Spin up a **background agent** to do the reading, so you keep talking while it reads: an ordinary general-purpose agent run in the background, with no custom agent type. Its prompt is everything below the line in [`research-brief.md`](research-brief.md), with the person's details filled in and its source list cut to the ones they have:
 
-- Google Calendar, Google Drive and Asana, each only when it is in `connectors`.
+- Google Calendar, Google Drive and Asana, each only when it is in `connectors` and its check in step 2 came out **Working**.
 - Gmail only when they said yes in step 3.
 - The public web, always.
 
@@ -149,7 +151,7 @@ Done when every workspace is in `t3_project_list`, or noted as not added.
 
 ## 10. Check the connectors
 
-For each of their `connectors`, make the one harmless read [`connector-checks.md`](connector-checks.md) names for it. For a connector it doesn't name, use the read that touches the least, such as listing names or titles. Make the read even when the research already used that service: this check is what you report. Each comes out as one of:
+You made these checks in step 2, before the other questions; this is what they are and how each comes out, and those results are what you report. For each of their `connectors`, make the one harmless read [`connector-checks.md`](connector-checks.md) names for it (for Asana, its whole check). For a connector it doesn't name, use the read that touches the least, such as listing names or titles. Each comes out as one of:
 
 - **Working**: the read came back, even with nothing in it.
 - **Not connected**: no tools for it in this session. The fix: on claude.ai's Connectors page, click Connect next to it and sign in, then start a new conversation.

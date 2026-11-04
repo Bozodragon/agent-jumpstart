@@ -43,7 +43,8 @@
     {
       "name": "Asana",
       "what": "see your tasks and projects and, when you ask, create or update tasks",
-      "default": false
+      "default": false,
+      "note": "For Asana: at the top of Asana's page, choose your team's workspace. Unless your team works there, don't choose york.ac.uk. Asana makes that one for everyone with a York email address."
     },
     {
       "name": "Google Docs",
