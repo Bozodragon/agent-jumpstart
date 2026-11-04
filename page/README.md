@@ -28,7 +28,7 @@ Our own text never says "project": a workspace is a "workspace", and what's in o
 The workspaces demo is ported from its prototype ("What it sees"): drag the agent onto a workspace and it lights the agent instructions it follows from the start (that workspace's and every one above it), what it looks through first (everything inside it), and, dashed, the files those instructions point to. Its styles are in the page's `<style>` and its script sits in the slot, so each page stays one file. The example tree is the nested list in the slot, which is also what shows if the script doesn't run: each `li[data-node]` is a workspace, with `data-instr` for its agent instructions, `data-points` for the files they point to and `data-files` for the rest (`|` between names); `data-work` marks a piece of work, and `data-top` the top workspace, named from the profile. The script reads the list and draws the tree you drag onto, so changing the example is an edit to the list, plus the notes in the script that name its workspaces. The tests check the demo's text is on both pages; the dragging is checked by hand in a browser, with a mouse and at phone width.
 
 ```
-npm run build:page      # renders dist/page/<profile>/index.html
+npm run build:page      # renders dist/page/<profile>/index.html, with Jumpstart's templates beside it
 npm run publish:page    # renders, then publishes each page as a public Portall item
 ```
 
@@ -43,3 +43,7 @@ The install line and the share-log line are shown the same way, and neither has 
 Each box also has a "See what this runs" link. The build takes the address out of the line (`irm <address> | iex`) and links to it, so the link is that profile's script for the install line and `share-log.ps1` for the share-log line. The build fails if a line isn't in that form.
 
 Under the install line the page warns that nothing may appear for up to half a minute after pasting: that wait is Windows PowerShell fetching the script, before the installer's own code runs.
+
+## Jumpstart's templates
+
+The build also copies Jumpstart's page templates into every profile's site, under `jumpstart/`, so `https://jumpstart-york.arcforge.uk/jumpstart/writing-picker.js` is the writing picker for York and `jumpstart/review-page.js` beside it is the review page, where the person checks what Jumpstart found. Jumpstart writes only a small page that loads its template from there, with any data it needs (the review page's Findings, as JSON), instead of writing the whole page out ([ADR 0001](../docs/adr/0001-jumpstart-pages-load-from-the-setup-site.md)). A template's source is beside the skill, in `skills/jumpstart/`, so it changes in the same commit as the instructions that use it. The skill reaches people from `main` and the templates from this site, so run `npm run publish:page` whenever a merge to `main` changes a template. `installer/test/page.test.js` checks that each profile's build holds them.

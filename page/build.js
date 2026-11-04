@@ -12,7 +12,7 @@
 // Each profile's `page` is the address its item ends up at, so https://jumpstart-york.arcforge.uk/
 // is published as the item `jumpstart-york`.
 import { spawnSync } from 'node:child_process';
-import { mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
@@ -206,6 +206,14 @@ for (const id of ids) {
   await writeFile(join(folder, 'index.html'), render(template, id, profiles[id], allLines, skills));
 }
 console.log(`Rendered the setup page for ${ids.join(', ')} into ${out}`);
+
+// Jumpstart's page templates are published with every profile's site, at <page>jumpstart/<name>,
+// so the skill's small pages can load them (docs/adr/0001). Their source is beside the skill.
+const jumpstartTemplates = ['writing-picker.js', 'review-page.js'];
+for (const id of ids) {
+  await mkdir(join(out, id, 'jumpstart'), { recursive: true });
+  for (const name of jumpstartTemplates) await copyFile(join(repo, 'skills', 'jumpstart', name), join(out, id, 'jumpstart', name));
+}
 
 if (values.publish) {
   for (const id of ids) {
