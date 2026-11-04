@@ -9,7 +9,7 @@ The page a team member follows along with, and comes back to as a reference. "Se
 | `pastedLine` | The one line to paste, in step 1. |
 | `shareLogLine` | The line under "If something went wrong". |
 | `logGoesTo` | Who to send the log to, as it reads after "send it to". |
-| `logEmail` | Optional. With it, "If something went wrong" links to a Gmail draft to this address instead of only naming `logGoesTo`. |
+| `logEmail` | Optional. With it, "If something went wrong" links to a Gmail draft to this address and shows it, instead of only naming `logGoesTo`. The log-sharing script names the same person and address, from the same profile. |
 | `workspaces.top` | The top workspace's folder name (`{{topWorkspace}}`), which step 2 says T3 Code already lists and "Your workspaces" draws at the top of its tree. The installer creates that folder. |
 | `connectors` | Each connector's `name` and `what`, listed under "Your connectors". |
 | `connectorsPage` | claude.ai's Connectors page, linked from the steps for reconnecting a connector. |

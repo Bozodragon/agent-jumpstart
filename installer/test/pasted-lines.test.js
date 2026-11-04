@@ -117,3 +117,27 @@ test("the bootstrap shows one line per download, with its size and a percentage,
   assert.match(text, /Save-Download \$programUrl \$programZip 'the installer'/);
   assert.match(text, /Invoke-WebRequest -UseBasicParsing -Uri \$Url -OutFile \$Path/);
 });
+
+test('both profiles name who the log goes to, with an email address', async () => {
+  for (const [id, who, email] of [['york', 'Jacob', 'jacob.hamood@york.ac.uk'], ['default', 'Jacob', 'jacob.hamood@live.co.uk']]) {
+    const profile = JSON.parse(await readFile(join(repo, 'profiles', `${id}.json`), 'utf8'));
+    assert.equal(profile.logGoesTo, who, id);
+    assert.equal(profile.logEmail, email, id);
+  }
+});
+
+test("share-log.ps1 reads which profile ran from the installer's settings.json, and names that profile's person and email, with a plain fallback", async () => {
+  const text = code((await read('share-log.ps1')).toString('ascii'));
+  assert.match(text, /Join-Path \$env:LOCALAPPDATA 'agent-jumpstart'/);
+  assert.match(text, /'settings\.json'/);
+  assert.match(text, /ConvertFrom-Json/);
+  assert.match(text, /\.profile\b/, 'the profile key of settings.json');
+  assert.match(text, /program\\profiles\\\$\w+\.json/, "the unpacked profile's own file");
+  assert.match(text, /\.logGoesTo\b/);
+  assert.match(text, /\.logEmail\b/);
+  // No one hard-coded: the person comes only from the profile.
+  assert.doesNotMatch(text, /Jacob|hamood/i);
+  // A run that stopped before settings.json, or an old install with no profile file, still gets a line that works.
+  assert.match(text, /person helping you/);
+  assert.match(text, /\bcatch\b/);
+});
