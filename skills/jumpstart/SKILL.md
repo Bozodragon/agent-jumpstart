@@ -41,6 +41,8 @@ Greet them, by first name if you have it, then open with about six short lines, 
    - `default`: "Whether Anthropic's AI learns from your conversations depends on a setting of yours. To keep them out of its training, switch off 'Help improve Claude' here: https://claude.ai/settings/data-privacy-controls. Anthropic then deletes them within 30 days, unless its safety checks flag something."
 5. They can run `/jumpstart` again any time to update it.
 
+**Check the connectors before anything else,** so the research reads the right services. For each of their `connectors`, make the check [`connector-checks.md`](connector-checks.md) names for it, as step 10 describes; for Asana that includes asking which workspace their team's tasks are in, and its fix. Say nothing about the others unless one isn't **Working**: then one line, such as "I can't get into your calendar, so I'll leave it out; I'll tell you how to fix it at the end."
+
 Then ask their job title and team, as one question; if the account gave no name, ask what you should call them in the same question.
 
 Done when you have their job title and team (and their name, if you asked), in their words. If they leave one out, ask once more for it.
@@ -60,7 +62,7 @@ Done when they've chosen. Anything short of a clear yes is a no.
 
 Spin up a **background agent** to do the reading, so you keep talking while it reads: an ordinary general-purpose agent run in the background, with no custom agent type. Its prompt is everything below the line in [`research-brief.md`](research-brief.md), with the person's details filled in and its source list cut to the ones they have:
 
-- Google Calendar, Google Drive and Asana, each only when it is in `connectors`.
+- Google Calendar, Google Drive and Asana, each only when it is in `connectors` and its check in step 2 came out **Working**.
 - Gmail only when they said yes in step 3.
 - The public web, always.
 
@@ -149,7 +151,7 @@ Done when every workspace is in `t3_project_list`, or noted as not added.
 
 ## 10. Check the connectors
 
-For each of their `connectors`, make the one harmless read [`connector-checks.md`](connector-checks.md) names for it. For a connector it doesn't name, use the read that touches the least, such as listing names or titles. Make the read even when the research already used that service: this check is what you report. Each comes out as one of:
+You made these checks in step 2, before the other questions; this is what they are and how each comes out, and those results are what you report. For each of their `connectors`, make the one harmless read [`connector-checks.md`](connector-checks.md) names for it (for Asana, its whole check). For a connector it doesn't name, use the read that touches the least, such as listing names or titles. Each comes out as one of:
 
 - **Working**: the read came back, even with nothing in it.
 - **Not connected**: no tools for it in this session. The fix: on claude.ai's Connectors page, click Connect next to it and sign in, then start a new conversation.
@@ -159,15 +161,29 @@ Done when every connector has a result.
 
 ## 11. Finish
 
-Close with one short message in plain words:
+Close with one short message in plain words, in this shape. It names none of the files you wrote: they're plumbing.
 
-- **What you kept**: in this folder, `CLAUDE.md` holds how you'll work with them, and `me.md`, `work.md` and `people.md` hold what they approved about themselves, their work and the people they work with. They can open and change these files at any time, and you'll suggest additions and make them only once they agree. Where they kept their own files, say which, and that you left them exactly as they were.
-- **What you put aside**: only if steps 7 and 8 renamed anything. Name each file you renamed with " (before Jumpstart)" and the folder it's in, say that nothing in it was changed or lost, and that it no longer loads, so they can open it, copy back anything they still want, and delete it when they're done.
-- **Their workspaces**: each one, with a line on what it's for and whether it's in T3. For one that isn't, tell them to add its folder as a project in T3, giving the full path.
-- **Their services**: each one by name, working or not, from step 10, with the fix for each that isn't.
-- **Where to start**: open the workspace whose template is marked **Open first** in T3 and start a conversation there with whatever's on their mind. If they didn't choose that one, name the first of their `workspaces`; if they chose none, this folder.
+> That's you set up.
+> - **What I kept:** how we'll work together, and what you approved about you, your work and the people you work with. Ask me any time to show you or change it.
+> - **Your workspaces:** Personal assistant, for your messages, calendar and tasks, and Thinking space, for ideas. Both are in T3 Code's list.
+> - **One thing to fix:** [only the services that need fixing, each with its fix]
+> - **Where to start:** each area of your work gets its own workspace. Most of your work looks like event management. Do you want me to make a workspace for it now?
+>
+> Whatever you do next, start a new conversation for it, in the workspace it belongs to. There's more on all of this here: [links to the setup page's sections].
 
-Done when that message is sent. Jumpstart ends there; carry on with whatever they ask next.
+- **What I kept**: word for word as above.
+- **Your own files**: only if steps 7 and 8 set any of their files aside. A line after **What I kept** naming each file you renamed with " (before Jumpstart)" and the folder it's in, saying that nothing in it was lost, and that they can ask you to bring back anything they still want from it. These are the only files the message names.
+- **Your workspaces**: their `workspaces`, each with a few words on what it's for, as above for Personal assistant and Thinking space. Say they're in T3 Code's list. For one step 9 couldn't add, say so and give its folder's full path so they can add it to T3 Code's list themselves.
+- **One thing to fix**: only the services from step 10 that are **Not connected** or **Not working**, each by name with its fix. With more than one, it reads "Things to fix". Leave the line out when nothing needs fixing; never list what's working.
+- **Where to start**: name their main area of work from what you learned, at a broad level ("event management", "email campaigns"), never one event or one piece of work. If one of their workspaces already covers it, tell them to start there instead and don't offer. If you learned too little to name one, ask what their main area of work is in the same line.
+- **The last line**: word for word, with links to these sections of the setup page. The page's address depends on their `profile`: `york` is https://jumpstart-york.arcforge.uk/, anything else https://jumpstart.arcforge.uk/. Link each section by name: [Your workspaces](<address>#your-workspaces), [Your connectors](<address>#your-connectors), [Your skills](<address>#your-skills), [Finding your way round T3 Code](<address>#finding-your-way-round-t3-code) and [If something went wrong](<address>#if-something-went-wrong).
+
+Then read their reply to the offer. Make it once: whatever they say, don't ask again.
+
+- **A clear yes**: make the workspace with the steps under "A new workspace" in [`agent-instructions.md`](agent-instructions.md)'s "Setting things up" section, with `[top workspace]` as this folder, starting from the area you named.
+- **Anything else**: leave it. They can ask for a workspace any time.
+
+Done when that message is sent and, if they said yes, the workspace is made. Jumpstart ends there; carry on with whatever they ask next.
 
 ## The profile
 

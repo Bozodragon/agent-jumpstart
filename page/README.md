@@ -1,15 +1,29 @@
 # The setup page
 
-The page a team member follows along with: paste the line, type `/jumpstart` in their top workspace, open Personal assistant and start a conversation, plus "If something went wrong" with the share-log line. The installer doesn't open it.
+The page a team member follows along with, and comes back to as a reference. "Set up" has the three steps: paste the line, type `/jumpstart` in their top workspace, and start work in the workspace it belongs to. "When you need it" has the reference sections, each closed until opened: What Jumpstart does, Your privacy, Your workspaces, Your skills, Your connectors, Finding your way round T3 Code, If something went wrong (with the share-log line and where to send the log), and Why T3 Code rather than the Claude app?. The installer doesn't open it.
 
-`template.html` is the one source. `build.js` renders it once per profile, filling in four keys from `profiles/<id>.json`:
+`template.html` is the one source. `build.js` renders it once per profile, filling it in from `profiles/<id>.json`:
 
 | Key | What the page does with it |
 | --- | --- |
 | `pastedLine` | The one line to paste, in step 1. |
 | `shareLogLine` | The line under "If something went wrong". |
 | `logGoesTo` | Who to send the log to, as it reads after "send it to". |
-| `workspaces.top` | The top workspace's folder name (`{{topWorkspace}}`), which step 2 says T3 Code already lists. The installer creates that folder. |
+| `logEmail` | Optional. With it, "If something went wrong" links to a Gmail draft to this address instead of only naming `logGoesTo`. |
+| `workspaces.top` | The top workspace's folder name (`{{topWorkspace}}`), which step 2 says T3 Code already lists and "Your workspaces" draws at the top of its tree. The installer creates that folder. |
+| `connectors` | Each connector's `name` and `what`, listed under "Your connectors". |
+| `connectorsPage` | claude.ai's Connectors page, linked from the steps for reconnecting a connector. |
+| `setupPage.workspaces` | `heading` and `text`: the paragraph that ends "Your workspaces", saying where they are and why ("Why Google Drive?" for York; Documents only for the default profile). |
+| `setupPage.whyT3Code` | The paragraphs under "Why T3 Code rather than the Claude app?". York's names the admin rights its laptops don't give; the default profile's leaves that out. |
+| `setupPage.privacy` | The paragraphs under "Your privacy". Keep them to what Anthropic's own pages say, quoting them where it matters, and check them again when those pages change. |
+
+The `setupPage` texts are plain text with two marks: `**words**` for bold and `[words](https://address)` for a link, which opens in a new tab. Everything else is shown as written. Adapting the page for a new team is an edit to its profile, not to the template.
+
+`skills.json` holds "Your skills": the four headings, and under each the skills in order, each with a line of about ten words and `text`, the address of its own `SKILL.md` in the source it's installed from. The build refuses a skill that a profile doesn't install (a name in its `skills`, or the last part of a one-skill source).
+
+Our own text never says "project": a workspace is a "workspace", and what's in one is "work" or "a piece of work". The one exception is the sentence in "Finding your way round T3 Code" saying T3 Code calls workspaces "projects". That includes the profiles' wording, and the tests count it.
+
+"Finding your way round T3 Code" (`id="t3-code"`) and "Your workspaces" (`id="workspaces"`, with an empty `.demo-slot` for the workspaces demo) are where the labelled screenshots and the demo go.
 
 ```
 npm run build:page      # renders dist/page/<profile>/index.html
@@ -18,7 +32,7 @@ npm run publish:page    # renders, then publishes each page as a public Portall 
 
 Each page is published as the item named by the first part of its profile's `page` address, so `https://jumpstart-york.arcforge.uk/` is the item `jumpstart-york` and `https://jumpstart.arcforge.uk/` is `jumpstart`. The publish stops if Portall prints a different address.
 
-The build refuses a page that doesn't show its own line exactly once, shows another profile's line, or leaves a `{{placeholder}}` unfilled. `installer/test/page.test.js` renders both pages and checks the lines, the order of the steps, and that none of the old setup page's steps are back.
+The build refuses a page that doesn't show its own line exactly once, shows another profile's line, leaves a `{{placeholder}}` unfilled, or lacks one of the keys above. `installer/test/page.test.js` renders both pages and checks the lines, the order of the steps and sections, each section's text in that profile's wording, every skill under its heading with its link, the one "projects", where to send the log, and that none of the old setup page's steps are back.
 
 ## The two lines
 

@@ -56,21 +56,64 @@ function Start-AgentJumpstart {
     }
   }
 
-  # Windows' own curl.exe shows a progress bar at full speed (Invoke-WebRequest's own bar makes
-  # it crawl, so that stays off). If curl.exe isn't there or fails (it doesn't use the proxy
-  # Windows is set to), Invoke-WebRequest tries, with no bar.
+  # Each download is one line: what it is, its size and a percentage, redrawn in place.
+  # Windows' own curl.exe downloads at full speed (Invoke-WebRequest's own bar makes it crawl,
+  # so that stays off) and writes its progress meter to stderr, a line about once a second,
+  # which is read here as it comes. If curl.exe isn't there or fails (it doesn't use the proxy
+  # Windows is set to), Invoke-WebRequest tries, and the line gets its size once it's done.
   function Save-Download([string]$Url, [string]$Path, [string]$What) {
+    $label = "Downloading $What"
+    $units = @{ '' = 'bytes'; 'k' = 'KB'; 'M' = 'MB'; 'G' = 'GB' }
+    $shown = $false
+    Write-Host -NoNewline "$label..."
     $curl = Join-Path $env:SystemRoot 'System32\curl.exe'
     if (Test-Path -LiteralPath $curl) {
-      & $curl --fail --location --progress-bar --output $Path $Url
-      if ($LASTEXITCODE -eq 0) { return }
-      if ($DebugOn) { Write-Host "Debug: curl.exe returned $LASTEXITCODE, so downloading without a progress bar instead" }
+      $said = ''
+      $line = ''
+      # With 2>&1 each of curl's lines arrives as an error record, which mustn't stop the run.
+      $ErrorActionPreference = 'Continue'
+      & $curl --fail --location --output $Path $Url 2>&1 | ForEach-Object {
+        $meter = "$_"
+        # A meter line starts: percent, total size, percent received... The total stays 0 if
+        # the server doesn't say how big the file is.
+        if ($meter -match '^\s*(\d+)\s+(\d+(\.\d+)?)([kMG]?)\s') {
+          if ($Matches[2] -ne '0') {
+            $size = "$($Matches[2]) $($units[$Matches[4]])"
+            $percent = '{0,3}' -f $Matches[1]
+            $line = "$label ($size) $percent%"
+            # A redirect's short reply is finished the moment it starts, so a finished line is
+            # drawn only once curl ends, and the redirect never shows.
+            if ($Matches[1] -ne '100') {
+              Write-Host -NoNewline "`r$line"
+              $shown = $true
+            }
+          }
+        } elseif ($meter -match '^curl: ') {
+          $said = $meter
+        }
+      }
+      $code = $LASTEXITCODE
+      $ErrorActionPreference = 'Stop'
+      if ($code -eq 0) {
+        if ($line) { Write-Host "`r$line" } else { Write-Host '' }
+        return
+      }
+      if ($shown -or $DebugOn) {
+        Write-Host ''
+        if ($DebugOn) { Write-Host "Debug: curl.exe returned $code ($said), so downloading without curl.exe instead" }
+        Write-Host -NoNewline "$label..."
+      }
     }
     try {
       Invoke-WebRequest -UseBasicParsing -Uri $Url -OutFile $Path
     } catch {
+      Write-Host ''
       throw "Couldn't download $What from $Url. Check that you're connected to the internet, then paste the line again. ($($_.Exception.Message))"
     }
+    $bytes = (Get-Item -LiteralPath $Path).Length
+    $size = '{0:N1} KB' -f ($bytes / 1KB)
+    if ($bytes -ge 1MB) { $size = '{0:N2} MB' -f ($bytes / 1MB) }
+    Write-Host "`r$label ($size) 100%"
   }
 
   function Get-Sha256([string]$Path) {
@@ -118,8 +161,7 @@ function Start-AgentJumpstart {
       Write-Host "Node.js $nodeVersion is already here."
     } else {
       $nodeZip = Join-Path $downloads "$nodeName.zip"
-      Write-Host "Downloading Node.js $nodeVersion. This can take a minute..."
-      Save-Download $nodeUrl $nodeZip 'Node.js'
+      Save-Download $nodeUrl $nodeZip "Node.js $nodeVersion"
       Write-Host 'Checking the download...'
       $actual = Get-Sha256 $nodeZip
       if ($DebugOn) { Write-Host "Debug: SHA-256 $actual, expected $($nodeSha256[$arch])" }
@@ -144,7 +186,6 @@ function Start-AgentJumpstart {
       if (-not $DebugOn) { Remove-Item -LiteralPath $nodeZip -Force }
     }
 
-    Write-Host 'Downloading the installer...'
     $programZip = Join-Path $downloads 'installer.zip'
     Save-Download $programUrl $programZip 'the installer'
     Expand-Zip $programZip $unpacking
