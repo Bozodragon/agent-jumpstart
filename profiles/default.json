@@ -59,7 +59,7 @@
     },
     {
       "name": "Asana",
-      "what": "see your tasks and projects and, when you ask, create or update tasks",
+      "what": "see your tasks and, when you ask, create or update them",
       "default": false,
       "note": "For Asana: at the top of Asana's page, choose your team's workspace. Unless your team works there, don't choose the one named after your work email's domain (the part after the @). Asana makes that one for everyone with an email address there."
     },
