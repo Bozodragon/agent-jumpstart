@@ -6,14 +6,6 @@ import { Stop } from './stop.js';
 import * as ui from './ui.js';
 
 /**
- * Names in plain English: "A", "A and B", "A, B and C".
- * @param {string[]} names
- */
-function inWords(names) {
-  return names.length === 1 ? names[0] : `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`;
-}
-
-/**
  * Walks the person through connecting the connectors they ticked. With none
  * ticked, does nothing. When nobody is at the screen (answers came from a file)
  * it waits for nothing, and takes the answers file's word that they were
@@ -32,7 +24,7 @@ export async function walkThroughConnectors(profile, connectors, { attended, con
   }
   if (connectedBefore) {
     log.write('Connectors: walked through on an earlier run, so skipped');
-    return `You said you connected ${inWords(connectors)} last time`;
+    return `You said you connected ${ui.inWords(connectors)} last time`;
   }
   const page = profile.connectorsPage;
   if (typeof page !== 'string') throw new Stop(`The "${profile.id}" profile needs a connectors page address.`);
@@ -62,5 +54,5 @@ export async function walkThroughConnectors(profile, connectors, { attended, con
   } else {
     log.write('Connectors: taken as connected from the answers file');
   }
-  return `You said you connected ${inWords(connectors)}`;
+  return `You said you connected ${ui.inWords(connectors)}`;
 }

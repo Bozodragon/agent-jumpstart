@@ -299,9 +299,10 @@ async function theRest(profile, ask, log, found, { googleDriveFolder, workspaces
  * @param {Record<string, unknown>} settings
  * @param {Asker} ask
  * @param {{ write(line: string): void }} log
+ * @param {Set<string>} [reused] Filled with the key of each answer the settings gave.
  * @returns {Asker}
  */
-export function knownFrom(settings, ask, log) {
+export function knownFrom(settings, ask, log, reused = new Set()) {
   const { topWorkspace, ...answerable } = settings;
   const known = answersFrom(answerable);
   /**
@@ -314,6 +315,7 @@ export function knownFrom(settings, ask, log) {
       try {
         const value = await fromSettings();
         log.write(`Known from settings: ${key}: ${JSON.stringify(value)}`);
+        reused.add(key);
         return value;
       } catch (error) {
         if (!(error instanceof Stop)) throw error;

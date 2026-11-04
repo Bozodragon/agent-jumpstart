@@ -20,6 +20,7 @@ import { setUpClaude } from './claude.js';
 import { walkThroughConnectors } from './connectors.js';
 import { setUpExtraTools } from './extra-tools.js';
 import { setUpGitHub } from './github.js';
+import { loadManifest } from './manifest.js';
 import { findPlaces } from './places.js';
 import { openMachine } from './machine.js';
 import { autoMemoryInUse, switchOffAutoMemory } from './memory.js';
@@ -86,6 +87,40 @@ async function readEarlierSettings(path, profile, log) {
   return settings;
 }
 
+/**
+ * What a re-run takes from the settings file instead of asking, in the person's words: the top
+ * workspace, if it's the one an earlier run wrote down, and each answer the settings gave.
+ * @param {Record<string, unknown>} earlier
+ * @param {import('./questions.js').Answers} choices
+ * @param {Set<string>} reused The keys of the answers the settings gave.
+ * @param {string | undefined} downloads
+ * @returns {Promise<[string, string][]>}
+ */
+async function reusedRows(earlier, choices, reused, downloads) {
+  /** @param {string[]} names */
+  const list = (names) => (names.length === 0 ? 'None' : ui.inWords(names));
+  /** @type {[string, string][]} */
+  const rows = [];
+  if (choices.topWorkspace === earlier.topWorkspace || reused.has('googleDriveFolder') || reused.has('workspacesLocation')) {
+    rows.push(['Top workspace', choices.topWorkspace]);
+  }
+  if (reused.has('channel')) rows.push(['T3 Code', choices.channel === 'nightly' ? 'Nightly' : 'Stable']);
+  if (reused.has('github')) rows.push(['GitHub', choices.github ? 'Set up' : 'Not set up']);
+  if (reused.has('workspaces')) rows.push(['Workspaces', list(choices.workspaces)]);
+  if (reused.has('connectors')) rows.push(['Connectors', list(choices.connectors)]);
+  if (reused.has('extraTools')) {
+    // Named as the checklist names them, by the tools they install.
+    const tools = await loadManifest(downloads).then(({ tools }) => tools, () => []);
+    const names = choices.extraTools.flatMap((id) => {
+      const named = tools.filter((tool) => tool.when === id).map((tool) => tool.name);
+      return named.length > 0 ? named : [id];
+    });
+    rows.push(['Extra tools', list(names)]);
+  }
+  if (reused.has('switchOffMemory')) rows.push(["Claude's memory", choices.switchOffMemory ? 'Switch it off' : 'Leave it on']);
+  return rows;
+}
+
 /** @param {string} path @param {Record<string, unknown>} settings */
 async function writeSettings(path, settings) {
   await mkdir(dirname(path), { recursive: true });
@@ -128,7 +163,6 @@ async function main() {
     // A re-run asks nothing an earlier run already wrote down.
     const earlier = await readEarlierSettings(places.settings, profile.id, log);
     const asker = unattended ? answersFrom(answers) : ui.ask;
-    if (earlier) ui.step('Using your answers from last time.');
     /** @type {import('./tools.js').Context} */
     const context = { places, machine, downloads: options.downloads, keepDownloads: options.debug, log, attended: !unattended };
     // What's already on the laptop decides what's asked. A list of versions that can't be read
@@ -140,7 +174,13 @@ async function main() {
       return undefined;
     });
     const found = { earlier, memoryInUse, t3Channel: foundT3?.channel };
-    const choices = await askQuestions(profile, places, earlier ? knownFrom(earlier, asker, log) : asker, log, found, { machine, attended: !unattended });
+    /** @type {Set<string>} */
+    const reused = new Set();
+    const choices = await askQuestions(profile, places, earlier ? knownFrom(earlier, asker, log, reused) : asker, log, found, { machine, attended: !unattended });
+    if (earlier) {
+      const rows = await reusedRows(earlier, choices, reused, options.downloads);
+      if (rows.length > 0) ui.summary(rows, 'Using your answers from last time');
+    }
 
     // Keys this run doesn't write (another program's, or a later version's) are kept.
     /** @type {Record<string, unknown>} */
