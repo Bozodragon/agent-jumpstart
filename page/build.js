@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Renders the setup page once per profile from page/template.html, filling in that
-// profile's pastedLine, shareLogLine and top workspace's name, and the sentence saying where
-// to send the log, and checks each page shows its own line to paste exactly once.
+// profile's pastedLine, shareLogLine (and the script address inside each, for the "See what this
+// runs" links) and top workspace's name, and the sentence saying where to send the log, and checks each page shows its own line to paste exactly once.
 //
 //   node page/build.js [<folder>]       write <folder>/<profile>/index.html (default: dist/page)
 //   node page/build.js --publish        render, then publish each page as a public Portall
@@ -59,6 +59,16 @@ function sendTheLog(logGoesTo, logEmail) {
   return `Then <a href="${escape(href)}" target="_blank" rel="noopener">email it to ${escape(logGoesTo)}</a>. The email opens ready to send: paste the log (Ctrl+V) where it says, then send it.`;
 }
 
+/**
+ * The address inside a pasted `irm <address> | iex` line: where "See what this runs" goes.
+ * @param {string} line @param {string} id @param {string} key
+ */
+function scriptAddress(line, id, key) {
+  const address = line.match(/^irm (\S+) \| iex$/)?.[1];
+  if (!address) fail(`profiles/${id}.json: "${key}" must look like "irm <address> | iex", so the page can link to its script.`);
+  return address;
+}
+
 /** @param {string} haystack @param {string} needle */
 const count = (haystack, needle) => haystack.split(needle).length - 1;
 
@@ -84,7 +94,11 @@ function render(template, id, profile, otherLines) {
     filled[field] = value;
   }
   /** @type {Record<string, string>} each placeholder's HTML */
-  const html = { sendTheLog: sendTheLog(filled.logGoesTo, profile.logEmail) };
+  const html = {
+    sendTheLog: sendTheLog(filled.logGoesTo, profile.logEmail),
+    pastedUrl: escape(scriptAddress(filled.pastedLine, id, 'pastedLine')),
+    shareLogUrl: escape(scriptAddress(filled.shareLogLine, id, 'shareLogLine')),
+  };
   for (const [field, value] of Object.entries(filled)) html[field] = escape(value);
   const page = template.replace(/\{\{(\w+)\}\}/g, (whole, name) => html[name] ?? whole);
   const left = page.match(/\{\{\w+\}\}/);
