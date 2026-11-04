@@ -121,6 +121,14 @@ async function reusedRows(earlier, choices, reused, downloads) {
   return rows;
 }
 
+/**
+ * @param {unknown} value
+ * @returns {value is Record<string, unknown>}
+ */
+function isRecord(value) {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
 /** @param {string} path @param {Record<string, unknown>} settings */
 async function writeSettings(path, settings) {
   await mkdir(dirname(path), { recursive: true });
@@ -197,7 +205,10 @@ async function main() {
     const github = await setUpGitHub(profile, choices.github, programs, context);
     done.push(['GitHub', github]);
     const ours = Array.isArray(earlier?.skillsInstalled) ? earlier.skillsInstalled.filter((name) => typeof name === 'string') : [];
-    const skills = await installSkills(profile, ours, context);
+    const installedFrom = /** @type {Record<string, string>} */ (
+      Object.fromEntries(Object.entries(isRecord(earlier?.skillSources) ? earlier.skillSources : {}).filter(([, commit]) => typeof commit === 'string'))
+    );
+    const skills = await installSkills(profile, ours, installedFrom, context);
     /** @type {[string, string][]} */
     const skillsRows = skills.cli === undefined ? [] : [['Skills CLI', skills.cli]];
     skillsRows.push(['Skills', skills.line]);
@@ -209,8 +220,10 @@ async function main() {
     // Written now, so a run that stops later still knows which skills are the installer's to
     // update, and Jumpstart knows whether memory is off.
     Object.assign(settings, { skillsInstalled, autoMemory: memoryResult.autoMemory });
+    // And which commit each skill source was installed from, so the next run can skip those that haven't changed.
+    if (Object.keys(skills.sources).length > 0 || 'skillSources' in settings) settings.skillSources = skills.sources;
     await writeSettings(places.settings, settings);
-    log.write(`Written to settings: skillsInstalled: ${JSON.stringify(skillsInstalled)}, autoMemory: "${memoryResult.autoMemory}"`);
+    log.write(`Written to settings: skillsInstalled: ${JSON.stringify(skillsInstalled)}, skillSources: ${JSON.stringify(skills.sources)}, autoMemory: "${memoryResult.autoMemory}"`);
     // Settings' connectors are kept only when every one is still offered, so equal means known.
     const connectedBefore = JSON.stringify(earlier?.connectors) === JSON.stringify(choices.connectors);
     const connectors = await walkThroughConnectors(profile, choices.connectors, { ...context, connectedBefore });
