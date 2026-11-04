@@ -19,7 +19,9 @@ export async function readProfile(name) {
 /**
  * `signed-in, no My Drive yet`: signed in, but My Drive hasn't appeared yet, as it can take a few
  * seconds to after the sign-in (a test can make it appear later, with the fake machine's `setWaiting`).
- * @typedef {'signed-in' | 'signed-out' | 'missing' | 'signed-in, no My Drive yet'} GoogleDriveState
+ * `installed, never opened`: its program is in Program Files, but it has never been started, so
+ * it has left nothing in the profile folder yet.
+ * @typedef {'signed-in' | 'signed-out' | 'missing' | 'signed-in, no My Drive yet' | 'installed, never opened'} GoogleDriveState
  */
 
 /** @typedef {{ code?: number, output?: string, creates?: string[], writes?: Record<string, string>, reads?: string[] }} Reply What a faked program run returns, leaves behind, and looks for as it starts (its record says which of `reads` it `found`). */
@@ -52,12 +54,20 @@ const driveAccount = '104857600123456789012';
 /**
  * Leaves the traces Google Drive for desktop leaves in a profile folder: its
  * data folder in local AppData (with one folder per signed-in account) and,
- * when signed in, the mirrored `My Drive` folder.
+ * when signed in, the mirrored `My Drive` folder. One installed but never
+ * opened leaves only its program, in a version folder in Program Files, which
+ * the home stands in for (`<home>\Program Files`).
  * @param {string} home
  * @param {GoogleDriveState} state
  */
 export async function fakeGoogleDrive(home, state) {
   if (state === 'missing') return;
+  if (state === 'installed, never opened') {
+    const program = join(home, 'Program Files', 'Google', 'Drive File Stream', '112.0.3.0');
+    await mkdir(program, { recursive: true });
+    await writeFile(join(program, 'GoogleDriveFS.exe'), 'stand-in');
+    return;
+  }
   const data = join(home, 'AppData', 'Local', 'Google', 'DriveFS');
   await mkdir(join(data, 'Logs'), { recursive: true });
   if (state === 'signed-in' || state === 'signed-in, no My Drive yet') await mkdir(join(data, driveAccount), { recursive: true });

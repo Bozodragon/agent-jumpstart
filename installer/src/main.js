@@ -26,7 +26,7 @@ import { autoMemoryInUse, switchOffAutoMemory } from './memory.js';
 import { loadProfile } from './profile.js';
 import { answersFrom, askQuestions, knownFrom } from './questions.js';
 import { installSkills } from './skills.js';
-import { messageOf, Stop } from './stop.js';
+import { End, messageOf, Stop } from './stop.js';
 import { findT3, installT3 } from './t3.js';
 import { installTools } from './tools.js';
 import * as ui from './ui.js';
@@ -213,6 +213,12 @@ async function main() {
     log.write('Installer finished');
     return 0;
   } catch (error) {
+    if (error instanceof End) {
+      log.write(`Ended early, as the person chose: ${error.message}`);
+      ui.finish(error.message);
+      log.write('Installer finished');
+      return 0;
+    }
     if (!(error instanceof Stop)) {
       log.write(`Failed: ${error instanceof Error ? error.stack : String(error)}`);
       throw error;

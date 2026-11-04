@@ -19,12 +19,14 @@ import { join } from 'node:path';
  * @property {string} [fakeMachine] Set only with a home override: the folder that stands in
  *   for the rest of the machine (user environment, programs run). See machine.js.
  * @property {string[]} driveRoots The roots of the drive letters to look on for a streamed Google Drive.
+ * @property {string} programFiles The machine's 64-bit Program Files folder, where programs
+ *   installed for every user (such as Google Drive for desktop) are. Only ever read.
  */
 
 const driveLetters = 'DEFGHIJKLMNOPQRSTUVWXYZ';
 
 /**
- * With a home override, local AppData is taken to sit inside it and no drive
+ * With a home override, local AppData and Program Files are taken to sit inside it and no drive
  * letters are looked on, so a test never touches the real machine.
  * @param {string} [homeOverride]
  * @returns {Places}
@@ -43,6 +45,7 @@ export function findPlaces(homeOverride) {
     settings: join(state, 'settings.json'),
     logs: join(state, 'logs'),
     driveRoots,
+    programFiles: homeOverride ? join(home, 'Program Files') : (process.env.ProgramW6432 ?? process.env.ProgramFiles ?? 'C:\\Program Files'),
     programs: join(localAppData, 'Programs'),
     // Under a home override the real CLAUDE_CONFIG_DIR is ignored: it points outside the home.
     claudeConfig: (!homeOverride && process.env.CLAUDE_CONFIG_DIR) || join(home, '.claude'),
