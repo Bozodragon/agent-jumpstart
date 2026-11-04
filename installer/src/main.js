@@ -13,11 +13,12 @@
 //                         nothing waits for Enter, because nobody is at the screen
 //   --downloads <folder>  take downloads from this folder instead of the internet
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
-import { dirname } from 'node:path';
+import { basename, dirname } from 'node:path';
 import { parseArgs } from 'node:util';
 import { openLog } from './log.js';
 import { setUpClaude } from './claude.js';
 import { walkThroughConnectors } from './connectors.js';
+import { newEnding, note, showEnding } from './ending.js';
 import { setUpExtraTools } from './extra-tools.js';
 import { setUpGitHub } from './github.js';
 import { findPlaces } from './places.js';
@@ -27,7 +28,7 @@ import { loadProfile } from './profile.js';
 import { answersFrom, askQuestions, knownFrom } from './questions.js';
 import { installSkills } from './skills.js';
 import { messageOf, Stop } from './stop.js';
-import { findT3, installT3 } from './t3.js';
+import { findT3, installT3, openT3 } from './t3.js';
 import { installTools } from './tools.js';
 import * as ui from './ui.js';
 import { addToT3, createWorkspaces } from './workspaces.js';
@@ -116,6 +117,8 @@ async function main() {
    * @type {[string, string][]}
    */
   const done = [];
+  /** What the ending says: the steps that didn't work, noted as the run meets them. */
+  const ending = newEnding();
 
   try {
     const profile = await loadProfile(options.profile);
@@ -151,21 +154,27 @@ async function main() {
 
     const workspaces = await createWorkspaces(choices.topWorkspace, choices.workspaces, log);
     done.push(...workspaces.rows);
+    note(ending, workspaces.rows, 'Workspaces');
 
     const { rows: tools, programs } = await installTools(context);
     done.push(...tools);
+    note(ending, tools);
     const github = await setUpGitHub(profile, choices.github, programs, context);
     done.push(['GitHub', github]);
+    note(ending, [['GitHub', github]]);
     const ours = Array.isArray(earlier?.skillsInstalled) ? earlier.skillsInstalled.filter((name) => typeof name === 'string') : [];
     const skills = await installSkills(profile, ours, context);
     /** @type {[string, string][]} */
     const skillsRows = skills.cli === undefined ? [] : [['Skills CLI', skills.cli]];
     skillsRows.push(['Skills', skills.line]);
     done.push(...skillsRows);
+    if (skills.cli !== undefined) note(ending, [['Skills CLI', skills.cli]]);
+    note(ending, skills.rows, 'Skills');
     const skillsInstalled = [...new Set([...ours, ...skills.installed])];
     const memoryResult = await switchOffAutoMemory(choices.switchOffMemory, context);
     const memory = memoryResult.row;
     done.push(['Memory', memory]);
+    note(ending, [['Memory', memory]]);
     // Written now, so a run that stops later still knows which skills are the installer's to
     // update, and Jumpstart knows whether memory is off.
     Object.assign(settings, { skillsInstalled, autoMemory: memoryResult.autoMemory });
@@ -177,18 +186,22 @@ async function main() {
     done.push(['Connectors', connectors]);
     const extraTools = await setUpExtraTools(profile, choices.extraTools, context);
     done.push(...extraTools);
+    note(ending, extraTools);
     // Before T3, which finds Claude Code only if it's on PATH when T3 starts.
     const claude = await setUpClaude(context);
     done.push(['Claude Code', claude.row]);
+    note(ending, [['Claude Code', claude.row]]);
     settings.email = claude.email;
     await writeSettings(places.settings, settings);
     log.write(`Signed-in email written to settings: ${claude.email ?? 'none'}`);
     // Last of the installs, after every other tool and its PATH entry: T3 reads PATH only when it starts.
     const t3 = await installT3(profile, choices.channel, foundT3, context);
     done.push(['T3 Code', t3.row]);
+    note(ending, [['T3 Code', t3.row]]);
     // After T3's first start, which leaves the command-line shim that adds a project.
     const workspacesLine = await addToT3(workspaces, t3, context);
     done.push(['Workspaces', workspacesLine]);
+    note(ending, [['Workspaces', workspacesLine]]);
 
     /** @type {[string, string][]} */
     const checklist = [
@@ -209,7 +222,13 @@ async function main() {
     for (const [label, value] of [...skills.rows, ...workspaces.rows, ...checklist]) log.write(`Checklist: ${label}: ${value}`);
     ui.step(`Log: ${log.path}`);
 
-    ui.finish('Done.');
+    // T3 Code is opened at the end of every run that has it, so the person ends up where they
+    // work, unless this run's install has just started it (its installer does, and it has opened).
+    if (!ending.openT3) log.write("Ending: T3 Code isn't opened");
+    else if (!t3.installed) log.write("Ending: T3 Code isn't opened: it isn't installed");
+    else if (!foundT3 && t3.opened) log.write("Ending: T3 Code isn't opened again: its install just started it");
+    else await openT3(foundT3?.channel ?? choices.channel, context);
+    showEnding(ending, { top: basename(choices.topWorkspace), t3Installed: t3.installed, log });
     log.write('Installer finished');
     return 0;
   } catch (error) {

@@ -7,7 +7,8 @@
 //                                         holds them; the user PATH is `Path`, joined with `;`
 //   <home>/fake-machine/runs.json         every program it was asked to run: [{ file, args, path }],
 //                                         `path` being the PATH it was started with, and
-//                                         `onScreen: true` for one run in the person's window
+//                                         `onScreen: true` for one run in the person's window,
+//                                         `leftRunning: true` for one started and not waited for
 //   <home>/fake-machine/pages.json        every address it was asked to open in the browser
 //   <home>/fake-machine/replies.json      written by a test: what a run returns, keyed by the
 //                                         file name, or the file name and its first arguments
@@ -43,7 +44,7 @@
 // CLI wouldn't find Git, and T3 Code, which reads PATH only when it starts, wouldn't find Node or
 // Claude Code. On the fake machine the two PATHs are machine-path.json and environment.json's.
 //
-// Every program the installer runs goes through `run`, `runHere` or `runOnScreen`, real or fake,
+// Every program the installer runs goes through `run`, `runHere`, `runOnScreen` or `launch`, real or fake,
 // so a debug run's log holds each one with its exit code and full output (for `runOnScreen`,
 // the command and code only: its output goes to the person's window), and every run's log holds
 // each `run` or `runHere` that failed (a code other than 0), with its output. Nothing else has
@@ -78,6 +79,8 @@ import { setTimeout as sleep } from 'node:timers/promises';
  * @property {(file: string, args: string[]) => Promise<number>} runOnScreen Runs a program in the
  *   person's window, so they see what it prints and can answer it, and waits for it. Returns its
  *   exit code, or -1 if it couldn't start.
+ * @property {(file: string, args: string[]) => Promise<void>} launch Starts a program, such as an
+ *   app with a window, and leaves it running without waiting for it. Rejects if it couldn't start.
  * @property {(url: string) => Promise<void>} openPage Opens an address in the person's default
  *   browser without waiting for it. Rejects if the browser couldn't be started.
  * @property {number} patience How long, in milliseconds, to wait for what happens after a
@@ -127,10 +130,11 @@ export async function keepTrying({ machine, every, patience = machine.patience }
  * What the real and the fake machine each supply: everything but running programs, the two
  * PATHs a program's PATH is rebuilt from, and how to start a program with an environment.
  * @typedef {object} Parts
- * @property {Omit<Machine, 'run' | 'runHere' | 'runOnScreen'>} machine
+ * @property {Omit<Machine, 'run' | 'runHere' | 'runOnScreen' | 'launch'>} machine
  * @property {() => Promise<PathSources>} pathSources
  * @property {(file: string, args: string[], env: NodeJS.ProcessEnv) => Promise<Ran>} start
  * @property {(file: string, args: string[], env: NodeJS.ProcessEnv) => Promise<number>} startOnScreen
+ * @property {(file: string, args: string[], env: NodeJS.ProcessEnv) => Promise<void>} startAndLeave
  */
 
 /**
@@ -165,7 +169,7 @@ export function openMachine(places, log) {
     log.detail("  (its output went to the person's window, not the log)");
     return code;
   };
-  const { machine, pathSources, start, startOnScreen } = places.fakeMachine
+  const { machine, pathSources, start, startOnScreen, startAndLeave } = places.fakeMachine
     ? fakeMachine(places.fakeMachine, places.home)
     : realMachine(logged((file, args) => runProgram(file, args)));
   /** @type {string | undefined} */
@@ -186,6 +190,10 @@ export function openMachine(places, log) {
     run: logged(async (file, args) => start(file, args, await environment())),
     runHere: logged(async (file, args) => runProgram(file, args, await environment())),
     runOnScreen: loggedOnScreen(async (file, args) => startOnScreen(file, args, await environment())),
+    async launch(file, args) {
+      log.detail(`Starting, without waiting for it: ${[file, ...args].map(quoted).join(' ')}`);
+      await startAndLeave(file, args, await environment());
+    },
     openPage,
   };
 }
@@ -316,11 +324,15 @@ function fakeMachine(folder, home) {
     pathSources,
     start: (file, args, env) => reply(file, args, { file, args, path: env.Path ?? '' }),
     startOnScreen: async (file, args, env) => (await reply(file, args, { file, args, path: env.Path ?? '', onScreen: true })).code,
+    async startAndLeave(file, args, env) {
+      const { code, output } = await reply(file, args, { file, args, path: env.Path ?? '', leftRunning: true });
+      if (code === -1) throw new Error(output || `${basename(file)} couldn't be started`);
+    },
   };
 
   /**
    * @param {string} file @param {string[]} args
-   * @param {{ file: string, args: string[], path: string, onScreen?: boolean, found?: string[] }} record
+   * @param {{ file: string, args: string[], path: string, onScreen?: boolean, leftRunning?: boolean, found?: string[] }} record
    * @returns {Promise<Ran>}
    */
   async function reply(file, args, record) {
@@ -475,6 +487,19 @@ function realMachine(loggedRun) {
         const child = spawn(how.file, how.args, { ...how.options, env, stdio: 'inherit' });
         child.once('error', () => resolve(-1));
         child.once('close', (code) => resolve(code ?? -1));
+      });
+    },
+    startAndLeave(file, args, env) {
+      const how = startable(file, args);
+      if ('refused' in how) return Promise.reject(new Error(how.refused));
+      return new Promise((resolve, reject) => {
+        // Detached, so it stays open after the installer and its window have gone.
+        const child = spawn(how.file, how.args, { ...how.options, env, detached: true, stdio: 'ignore' });
+        child.once('error', reject);
+        child.once('spawn', () => {
+          child.unref();
+          resolve();
+        });
       });
     },
   };
