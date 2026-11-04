@@ -21,7 +21,7 @@ import { walkThroughConnectors } from './connectors.js';
 import { newEnding, note, showEnding } from './ending.js';
 import { setUpExtraTools } from './extra-tools.js';
 import { setUpGitHub } from './github.js';
-import { loadManifest } from './manifest.js';
+import { loadManifest, toolEntry } from './manifest.js';
 import { findPlaces } from './places.js';
 import { openMachine } from './machine.js';
 import { autoMemoryInUse, switchOffAutoMemory } from './memory.js';
@@ -240,18 +240,22 @@ async function main() {
     const extraTools = await setUpExtraTools(profile, choices.extraTools, context);
     done.push(...extraTools);
     note(ending, extraTools);
+    // Their steps are named as their manifest entries name them (installTools has read it).
+    const manifest = await loadManifest(options.downloads);
+    /** @type {import('./ending.js').ToolNames} */
+    const named = { claude: toolEntry(manifest, 'claude')?.name ?? 'claude', t3: toolEntry(manifest, 't3')?.name ?? 't3' };
     // Before T3, which finds Claude Code only if it's on PATH when T3 starts.
     const claude = await setUpClaude(context, asker);
-    done.push(['Claude Code', claude.row]);
-    note(ending, [['Claude Code', claude.row]]);
-    if (claude.skipped !== undefined) endAfterSkippedSignIn(ending, claude.skipped);
+    done.push([named.claude, claude.row]);
+    note(ending, [[named.claude, claude.row]]);
+    if (claude.skipped !== undefined) endAfterSkippedSignIn(ending, claude.skipped, named);
     settings.email = claude.email;
     await writeSettings(places.settings, settings);
     log.write(`Signed-in email written to settings: ${claude.email ?? 'none'}`);
     // Last of the installs, after every other tool and its PATH entry: T3 reads PATH only when it starts.
     const t3 = await installT3(profile, choices.channel, foundT3, context);
-    done.push(['T3 Code', t3.row]);
-    note(ending, [['T3 Code', t3.row]]);
+    done.push([named.t3, t3.row]);
+    note(ending, [[named.t3, t3.row]]);
     // After T3's first start, which leaves the command-line shim that adds a project.
     const workspacesLine = await addToT3(workspaces, t3, context);
     done.push(['Workspaces', workspacesLine]);
@@ -262,8 +266,8 @@ async function main() {
       ['Profile', profile.name],
       ...tools,
       ...extraTools,
-      ['Claude Code', claude.row],
-      ['T3 Code', t3.row],
+      [named.claude, claude.row],
+      [named.t3, t3.row],
       ...skillsRows,
       ['Memory', memory],
       ['Workspaces', workspacesLine],
@@ -282,7 +286,7 @@ async function main() {
     else if (!t3.installed) log.write("Ending: T3 Code isn't opened: it isn't installed");
     else if (!foundT3 && t3.opened) log.write("Ending: T3 Code isn't opened again: its install just started it");
     else await openT3(foundT3?.channel ?? choices.channel, context);
-    showEnding(ending, { top: basename(choices.topWorkspace), t3Installed: t3.installed, log });
+    showEnding(ending, { top: basename(choices.topWorkspace), t3Installed: t3.installed, tools: named, log });
     log.write('Installer finished');
     return 0;
   } catch (error) {

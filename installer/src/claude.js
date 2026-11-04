@@ -121,11 +121,11 @@ export async function setUpClaude({ places, machine, downloads, log, attended },
  * what didn't work; Claude's own reason is repeated with it.
  * @param {import('./ending.js').Ending} ending
  * @param {string} reason Claude's own reason the sign-in failed.
+ * @param {import('./ending.js').ToolNames} tools
  */
-export function endAfterSkippedSignIn(ending, reason) {
+export function endAfterSkippedSignIn(ending, reason, { claude, t3 }) {
   ending.lines.push(reason);
-  ending.closing =
-    "One step didn't work: Claude Code isn't signed in, so T3 Code can't use it yet. If T3 Code is open, close it. Then paste the line again: it signs you in and skips everything that's already done.";
+  ending.closing = `One step didn't work: ${claude} isn't signed in, so ${t3} can't use it yet. If ${t3} is open, close it. Then paste the line again: it signs you in and skips everything that's already done.`;
   ending.openT3 = false;
 }
 

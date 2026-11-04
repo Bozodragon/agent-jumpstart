@@ -59,19 +59,25 @@ export function closingLine(ending) {
   return 'All done.';
 }
 
-/** The steps Jumpstart needs, in T3 Code, in the top workspace. */
-const neededForJumpstart = ['Claude Code', 'T3 Code', 'Workspaces'];
+/**
+ * The steps Jumpstart needs, in T3 Code, in the top workspace.
+ * @param {ToolNames} tools
+ */
+const neededForJumpstart = (tools) => [tools.claude, tools.t3, 'Workspaces'];
+
+/** @typedef {{ claude: string, t3: string }} ToolNames Claude Code's and T3 Code's names, as their manifest entries give them. */
 
 /**
  * Shows the ending: what to do next, the failures repeated, and the closing line.
  * @param {Ending} ending
- * @param {{ top: string, t3Installed: boolean, log: import('./log.js').Log }} how `top` is the
- *   top workspace's name, as T3 Code lists it.
+ * @param {{ top: string, t3Installed: boolean, tools: ToolNames, log: import('./log.js').Log }} how
+ *   `top` is the top workspace's name, as T3 Code lists it; `tools` names the steps for Claude
+ *   Code and T3 Code, as the checklist does.
  */
-export function showEnding(ending, { top, t3Installed, log }) {
+export function showEnding(ending, { top, t3Installed, tools, log }) {
   /** @type {string[]} */
   const next = [];
-  if (t3Installed && !ending.failed.some(({ step }) => neededForJumpstart.includes(step))) {
+  if (t3Installed && !ending.failed.some(({ step }) => neededForJumpstart(tools).includes(step))) {
     next.push(`In T3 Code, open ${top}, your top workspace, and start a new conversation there. Type /jumpstart and press Enter.`);
   }
   if (ending.failed.length > 0 && ending.closing === undefined) {
