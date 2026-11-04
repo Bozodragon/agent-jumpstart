@@ -25,7 +25,8 @@ for (const answers of [{}, { topWorkspace: 'new' }, { withoutGoogleDrive: 'docum
 
     assert.equal(result.code, 0, result.stdout + result.stderr);
     assert.ok(flowing(result.stdout).includes(documentsText), result.stdout);
-    assert.match(result.stdout, /Done\./);
+    // Nothing is downloadable in this test, so 32's ending names the steps that didn't work; the run still got to its end.
+    assert.match(flowing(result.stdout), /What to do next|These steps didn't work/);
     const settings = await readSettings(where.home);
     assert.deepEqual([settings.topWorkspace, settings.workspacesLocation, settings.googleDriveFolder], [top, documents, null]);
     assert.deepEqual(await foldersIn(top), ['Personal assistant', 'Thinking space']);
