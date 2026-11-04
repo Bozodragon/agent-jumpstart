@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { basename, join } from 'node:path';
 import { checklistSays, fakeMachine, gitOnMachinePath, makeHome, readOnlyLog, readProfile, readSettings, runWith, seedSettings, skillsCli, supplyDownloads } from './harness.js';
 
 /** Where a skill's SKILL.md is, relative to the home. @param {string} name */
@@ -173,6 +173,131 @@ test('on a re-run, the skills the installer put there before are added again, so
   checklistSays(result.stdout, '/jumpstart ', 'Already there, left as it is');
   checklistSays(result.stdout, '/frontend-design ', 'Installed');
   assert.deepEqual((await readSettings(where.home)).skillsInstalled, ours);
+});
+
+/**
+ * The repository a skill source is cloned from: its first two parts on GitHub, as the skills CLI
+ * reads `owner/repo[/path]`.
+ * @param {string} source
+ */
+const upstream = (source) => `https://github.com/${source.split('/').slice(0, 2).join('/')}.git`;
+
+/** The reply key for looking up where a source's default branch is. @param {string} source */
+const lookUp = (source) => `git.exe ls-remote ${upstream(source)} HEAD`;
+
+/** What `git ls-remote <url> HEAD` prints for a branch at this commit. @param {string} commit */
+const at = (commit) => ({ output: `${commit}\tHEAD\n` });
+
+/**
+ * A made-up commit for each York source, keyed by source.
+ * @param {string} digit
+ * @returns {Promise<Record<string, string>>}
+ */
+async function commits(digit) {
+  return Object.fromEntries((await yorkSkills()).map(({ source }, index) => [source, `${index}`.padEnd(40, digit)]));
+}
+
+/**
+ * Each `git ls-remote` run, by the repository it looked at.
+ * @param {string} home
+ */
+async function lookUps(home) {
+  return (await fakeMachine(home).runs()).filter((ran) => basename(ran.file) === 'git.exe' && ran.args[0] === 'ls-remote').map((ran) => ran.args[1]);
+}
+
+/**
+ * A home an earlier run set up: every York skill in Claude's skills folder, put there by the
+ * installer from the given commits.
+ * @param {import('node:test').TestContext} t @param {Record<string, string>} installedFrom
+ */
+async function homeSetUpEarlier(t, installedFrom) {
+  const where = await homeWithSkillsCli(t);
+  const all = (await yorkSkills()).flatMap(({ names }) => names);
+  for (const name of all) {
+    await mkdir(join(where.home, '.claude', 'skills', name), { recursive: true });
+    await writeFile(join(where.home, skillFile(name)), 'an earlier copy');
+  }
+  await seedSettings(where.home, { profile: 'york', skillsInstalled: all, skillSources: installedFrom });
+  return { ...where, all };
+}
+
+/** Replies giving each source's latest commit. @param {Record<string, string>} latest */
+const latestAt = (latest) => Object.fromEntries(Object.entries(latest).map(([source, commit]) => [lookUp(source), at(commit)]));
+
+test('a first run looks up each skill source with git ls-remote, installs every one as before, and records the commit each was installed from', async (t) => {
+  const where = await homeWithSkillsCli(t);
+  const sources = (await yorkSkills()).map(({ source }) => source);
+  const all = (await yorkSkills()).flatMap(({ names }) => names);
+  const latest = await commits('a');
+  await fakeMachine(where.home).setReplies({ ...where.cli.install, [where.cli.key('add')]: { creates: all.map(skillFile) }, ...latestAt(latest) });
+
+  const result = await runWith(where, 'york');
+
+  assert.equal(result.code, 0, result.stdout + result.stderr);
+  assert.deepEqual(await lookUps(where.home), sources.map(upstream));
+  assert.deepEqual((await skillsCliRuns(where.home)).map((ran) => ran.args[1]), sources);
+  // Looked up before anything is downloaded, so what's recorded is never newer than what came.
+  const runs = await fakeMachine(where.home).runs();
+  const lastLookUp = runs.findLastIndex((ran) => ran.args[0] === 'ls-remote');
+  assert.ok(lastLookUp < runs.findIndex((ran) => where.cli.isRun(ran) && ran.args[1] === 'add'), JSON.stringify(runs));
+  checklistSays(result.stdout, 'Skills', 'All 18 installed');
+  assert.deepEqual((await readSettings(where.home)).skillSources, latest);
+});
+
+test("a re-run with no skill source changed upstream since the last run downloads none of them again, and says they're up to date", async (t) => {
+  const latest = await commits('a');
+  const where = await homeSetUpEarlier(t, latest);
+  await fakeMachine(where.home).setReplies({ ...where.cli.install, ...latestAt(latest) });
+
+  const result = await runWith(where, 'york');
+
+  assert.equal(result.code, 0, result.stdout + result.stderr);
+  assert.deepEqual(await skillsCliRuns(where.home), []);
+  assert.equal((await lookUps(where.home)).length, 4);
+  for (const name of where.all) checklistSays(result.stdout, `/${name} `, 'Up to date');
+  checklistSays(result.stdout, 'Skills', 'All 18 up to date');
+  for (const name of where.all) assert.equal(await readFile(join(where.home, skillFile(name)), 'utf8'), 'an earlier copy');
+  const settings = await readSettings(where.home);
+  assert.deepEqual(settings.skillSources, latest);
+  assert.deepEqual(settings.skillsInstalled, where.all);
+});
+
+test('a re-run where one skill source changed upstream downloads only that one again, and records its new commit', async (t) => {
+  const earlier = await commits('a');
+  const where = await homeSetUpEarlier(t, earlier);
+  const latest = { ...earlier, 'anthropics/skills': 'b'.repeat(40) };
+  await fakeMachine(where.home).setReplies({ ...where.cli.install, [where.cli.key('add')]: { creates: [skillFile('frontend-design')] }, ...latestAt(latest) });
+
+  const result = await runWith(where, 'york');
+
+  assert.equal(result.code, 0, result.stdout + result.stderr);
+  assert.deepEqual((await skillsCliRuns(where.home)).map((ran) => ran.args), [['add', 'anthropics/skills', '-g', '-a', 'claude-code', '-y', '-s', 'frontend-design']]);
+  checklistSays(result.stdout, '/frontend-design ', 'Installed');
+  checklistSays(result.stdout, '/grilling ', 'Up to date');
+  checklistSays(result.stdout, 'Skills', 'All 18 there: 1 installed, 17 up to date');
+  assert.deepEqual((await readSettings(where.home)).skillSources, latest);
+});
+
+test("an unchanged skill source is installed again when one of its skills has gone from Claude's skills folder, and so is one whose commit can't be looked up", async (t) => {
+  const latest = await commits('a');
+  const where = await homeSetUpEarlier(t, latest);
+  await rm(join(where.home, '.claude', 'skills', 'wizard'), { recursive: true });
+  await fakeMachine(where.home).setReplies({
+    ...where.cli.install,
+    [where.cli.key('add')]: { creates: [skillFile('wizard')] },
+    ...latestAt(latest),
+    [lookUp('Bozodragon/agent-jumpstart')]: { code: 128, output: 'fatal: unable to access' },
+  });
+
+  const result = await runWith(where, 'york');
+
+  assert.equal(result.code, 0, result.stdout + result.stderr);
+  assert.deepEqual((await skillsCliRuns(where.home)).map((ran) => ran.args[1]), ['mattpocock/skills', 'Bozodragon/agent-jumpstart']);
+  checklistSays(result.stdout, '/wizard ', 'Installed');
+  checklistSays(result.stdout, '/frontend-design ', 'Up to date');
+  // Nothing is known about what jumpstart came from now, so the next run installs it again too.
+  const { 'Bozodragon/agent-jumpstart': _, ...rest } = latest;
+  assert.deepEqual((await readSettings(where.home)).skillSources, rest);
 });
 
 test("someone using Claude's automatic memory who says to switch it off has it switched off in its settings, keeping what was there, and in the user environment", async (t) => {
