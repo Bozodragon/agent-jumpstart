@@ -208,7 +208,7 @@ async function newLocation(profile, places, ask, found, context) {
   let googleDriveFolder = null;
   let workspacesLocation;
   if (found) {
-    const drive = await readyGoogleDrive(places, ask, found, context);
+    const drive = await readyGoogleDrive(profile, places, ask, found, context);
     if (drive.status === 'documents') {
       const documents = join(places.home, 'Documents');
       return { googleDriveFolder: null, workspacesLocation: documents, topWorkspace: topWorkspaceIn(profile, documents) };
