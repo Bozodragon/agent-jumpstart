@@ -87,7 +87,11 @@ for (const [id, ownLine] of Object.entries(pages)) {
 
   test(`the ${id} page has no Copy button and no script that writes to the clipboard`, async (t) => {
     const html = await readFile(join(await render(t), id, 'index.html'), 'utf8');
-    assert.doesNotMatch(html, /<button/i, 'a button is still on the page');
+    // The workspaces demo has buttons of its own; neither line's box has one, and none says Copy.
+    const boxes = html.split('class="copybox"').slice(1).map((box) => box.slice(0, box.indexOf('</div>', box.indexOf('class="line"'))));
+    assert.equal(boxes.length, 2, 'the install line and the share-log line each have a box');
+    for (const box of boxes) assert.doesNotMatch(box, /<button/i, "a button is still in a line's box");
+    assert.doesNotMatch(html, /<button[^>]*>[^<]*copy/i, 'a Copy button is still on the page');
     assert.ok(!textOf(html).includes('Copy'), 'the page still says "Copy"');
     assert.doesNotMatch(html, /clipboard|execCommand/i, 'a script still writes to the clipboard');
   });
@@ -234,6 +238,51 @@ for (const id of Object.keys(pages)) {
     const said = profile.logEmail ? `email it to ${profile.logGoesTo}` : `send it to ${profile.logGoesTo}`;
     const section = sectionOf(text, 'If something went wrong');
     assert.ok(section.indexOf(shareLogLine) < section.indexOf(said), `"${said}" belongs after the share-log line`);
+  });
+}
+
+for (const id of Object.keys(pages)) {
+  test(`the ${id} page's "Your workspaces" has the workspaces demo: the example tree, its key and the "What it sees" panel`, async (t) => {
+    const { html, text } = await pageOf(t, id);
+    const profile = JSON.parse(await readFile(join(repo, 'profiles', `${id}.json`), 'utf8'));
+    const section = sectionOf(text, 'Your workspaces');
+    assert.ok(section.includes('Drag your agent onto a workspace to see what it works with there.'), section);
+    for (const key of [
+      'Agent instructions it follows from the start',
+      'What it looks through first',
+      'Files its instructions point to, read when needed',
+      'Out of the way: it can reach them, but has to go looking',
+    ]) {
+      assert.ok(section.includes(key), `the key is missing "${key}"`);
+    }
+    const tree = [
+      profile.workspaces.top,
+      'Personal assistant',
+      'Thinking space',
+      'Event management',
+      'Open day 2026',
+      'Graduation 2027',
+      'Email campaigns',
+      'Offer holders 2026',
+      'Marketing',
+    ];
+    const places = tree.map((name) => section.indexOf(` ${name} `));
+    assert.ok(places.every((place) => place >= 0), `missing from the tree: ${tree.filter((_, i) => places[i] < 0)}`);
+    assert.deepEqual([...places].sort((a, b) => a - b), places, 'the tree is out of order');
+    assert.ok(section.includes('Show deeper nesting'), 'no way to show deeper nesting');
+    assert.ok(section.includes('Drag your agent onto a workspace on the left to see what it works with there.'), 'the panel is missing');
+    // What the panel says after a drop is written by the demo's script, which is part of the section.
+    const panel = sectionHtml(html, 'Your workspaces');
+    for (const label of ['Your agent, starting in', 'Follows from the start', 'Looks through first', 'Reads when it needs them', 'Has to go looking']) {
+      assert.ok(panel.includes(label), `the panel never says "${label}"`);
+    }
+  });
+
+  test(`the ${id} page is one page: its scripts and styles are in it, and only its fonts come from elsewhere`, async (t) => {
+    const { html } = await pageOf(t, id);
+    assert.doesNotMatch(html, /<script[^>]+src=/i, 'a script is loaded from elsewhere');
+    const sheets = [...html.matchAll(/<link [^>]*rel="stylesheet"[^>]*>/g)].map((match) => match[0]);
+    assert.ok(sheets.every((sheet) => sheet.includes('https://fonts.googleapis.com/')), `a stylesheet is loaded from elsewhere: ${sheets}`);
   });
 }
 
