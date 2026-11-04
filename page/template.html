@@ -114,10 +114,50 @@
   details.help .chevron svg { width: 16px; height: 16px; transition: transform .15s ease; }
   details.help[open] .chevron svg { transform: rotate(180deg); }
 
+  /* Reference sections, closed until someone needs them */
+  .more { margin-top: 40px; }
+  .more > .section-head { padding-bottom: 8px; }
+  details.help.row { border-top: 1px solid var(--hairline); }
+  details.help.row:last-of-type { border-bottom: 1px solid var(--hairline); }
+  details.help.row > summary { padding: 13px 4px; align-items: center; }
+  details.help.row[open] > .panel { margin: 0 0 16px; }
+
+  .ref p { margin: 0; color: var(--secondary); }
+  .plain.ref > * + * { margin-top: 12px; }
+  .ref strong, .rows b { color: var(--text); font-weight: 500; }
+  .ref ul { margin-bottom: 0; padding: 0; list-style: none; }
+  .ref ul > li { position: relative; padding-left: 18px; color: var(--secondary); }
+  .ref ul > li + li { margin-top: 6px; }
+  .ref ul > li::before { content: ""; position: absolute; left: 5px; top: .72em; width: 4px; height: 4px; border-radius: 50%; background: var(--muted); }
+  .ref .note { font-size: 13.5px; color: var(--muted); }
+  .ref .privacy { padding: 12px 14px; border: 1px solid var(--hairline); border-radius: 12px; background: var(--bg); font-size: 14px; }
+
+  .tree {
+    margin-bottom: 0; padding: 12px 14px; overflow-x: auto;
+    font-family: var(--mono); font-size: 12.5px; line-height: 1.7; color: var(--text);
+    background: var(--bg); border: 1px solid var(--hairline); border-radius: 12px;
+  }
+  .tree span { color: var(--muted); }
+
+  .rows { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 7px 18px; align-items: baseline; }
+  .rows > b, .rows > a { font-weight: 500; white-space: nowrap; }
+  .rows > span { color: var(--secondary); }
+  .rows.skills > a { font-family: var(--mono); font-size: 12.5px; justify-self: start; }
+
+  .sub { margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--hairline); }
+  .sub .step-title { margin-top: 0; }
+
+  .ref ol.numbered { margin: 0; padding-left: 22px; color: var(--secondary); }
+  .ref ol.numbered > li + li { margin-top: 4px; }
+  .ref h3 { font-size: 13.5px; font-weight: 600; margin: 18px 0 8px; color: var(--text); }
+  .demo-slot:empty { display: none; }
+
   .foot { margin-top: 40px; padding: 0 4px; text-align: center; color: var(--muted); font-size: 13.5px; }
 
   @media (prefers-reduced-motion: reduce) { details.help .chevron svg { transition: none; } }
   @media (max-width: 600px) {
+    .rows { grid-template-columns: minmax(0, 1fr); gap: 0; }
+    .rows > span { margin-bottom: 8px; }
     main { padding: 48px 16px 72px; }
     h1 { font-size: 26px; }
     ol.steps > li { gap: 12px; padding: 12px 8px; }
@@ -160,15 +200,108 @@
         </div></li>
 
         <li><div>
-          <p class="step-title">Open Personal assistant and start a conversation</p>
-          <p class="step-body"><strong>Personal assistant</strong> is now in T3 Code's list too. Open it, start a conversation and ask for what you need, such as "Help me plan today".</p>
+          <p class="step-title">Start work in the workspace it belongs to.</p>
+          <p class="step-body">Give each area of your work its own workspace, such as 'Event management' or 'Email campaigns'. Ask your agent to make one, for example 'Make me a workspace for event management'. Then open it in T3 Code and start a conversation there. Your messages, calendar and tasks go in <strong>Personal assistant</strong>.</p>
         </div></li>
       </ol>
     </div>
   </section>
 
-  <section>
-    <details class="help">
+  <section class="more">
+    <div class="section-head"><h2>When you need it</h2></div>
+
+    <details class="help row">
+      <summary class="section-head"><h2>What Jumpstart does</h2><span class="chevron" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></span></summary>
+      <div class="panel">
+        <div class="plain ref">
+          <p>When you type <code>/jumpstart</code> in your top workspace:</p>
+          <ul>
+            <li>It asks a few questions: your job title and team, whether it may read your email, what you'd like help with, and how you like things written.</li>
+            <li>While you talk, a helper agent reads your calendar, Drive and Asana, and your email if you say yes. It also looks for you on the public web, such as a staff page. T3 Code shows it working.</li>
+            <li>It shows what it found on one page, the review page, for you to check and correct.</li>
+            <li>Nothing is kept until you've checked it. Then it writes your agent instructions and sets up your workspaces.</li>
+          </ul>
+          <p>You can run <code>/jumpstart</code> again any time to update it.</p>
+        </div>
+      </div>
+    </details>
+
+    <details class="help row">
+      <summary class="section-head"><h2>Your privacy</h2><span class="chevron" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></span></summary>
+      <div class="panel">
+        <div class="plain ref">
+{{privacy}}
+        </div>
+      </div>
+    </details>
+
+    <details class="help row" id="workspaces">
+      <summary class="section-head"><h2>Your workspaces</h2><span class="chevron" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></span></summary>
+      <div class="panel">
+        <div class="plain ref">
+          <p>Your workspaces sit inside your top workspace, <strong>{{topWorkspace}}</strong>.</p>
+          <pre class="tree">{{topWorkspace}}                <span>your top workspace</span>
+├─ Personal assistant
+├─ Thinking space
+└─ <span>a workspace for each area of your work</span></pre>
+          <p>The top workspace's agent instructions apply in every workspace inside it. Instructions flow down, never across: what you set up in one workspace doesn't reach the ones beside it.</p>
+          <ul>
+            <li><strong>{{topWorkspace}}</strong>, your top workspace, is for setting things up: running <code>/jumpstart</code>, making a new workspace, and moving things over from claude.ai. It's not for everyday work.</li>
+            <li><strong>Each area of your work</strong>, such as Event management or Email campaigns, has its own workspace. Each piece of work goes inside the workspace it belongs to.</li>
+            <li><strong>Personal assistant</strong> is for organisation and admin: your messages, calendar and tasks.</li>
+            <li><strong>Thinking space</strong> is for getting ideas out of your head, including thinking through something that might become a workspace of its own.</li>
+          </ul>
+          <div class="demo-slot"></div>
+          <p><strong>Making a new workspace.</strong> Ask your agent, in any workspace, for example "Make me a workspace for event management". For something narrower, it suggests the broader workspace it belongs in and puts the work there. Then open the new workspace in T3 Code and start a conversation there.</p>
+{{whereWorkspacesAre}}
+        </div>
+      </div>
+    </details>
+
+    <details class="help row">
+      <summary class="section-head"><h2>Your skills</h2><span class="chevron" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></span></summary>
+      <div class="panel">
+        <div class="plain ref">
+          <p>A skill is a way of working your agent can follow. To use one, type <code>/</code> and its name, such as <code>/grill-me</code>. Most were written for software work: your agent follows their method and puts it in terms of your work. Each name links to the skill's own text.</p>
+{{skills}}
+        </div>
+      </div>
+    </details>
+
+    <details class="help row">
+      <summary class="section-head"><h2>Your connectors</h2><span class="chevron" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></span></summary>
+      <div class="panel">
+        <div class="plain ref">
+          <p>A connector lets your agent read from and act in another service. These are the ones the installer offers, and you chose yours when you ran it. Each one lets your agent:</p>
+          <div class="rows">
+{{connectorRows}}
+          </div>
+          <p><strong>To reconnect one:</strong></p>
+          <ol class="numbered">
+            <li>On claude.ai's <a href="{{connectorsPage}}" target="_blank" rel="noopener">Connectors page</a>, disconnect it and connect it again.</li>
+            <li>For Asana, choose your team's workspace at the top of Asana's page.</li>
+            <li>Start a new thread.</li>
+          </ol>
+        </div>
+      </div>
+    </details>
+
+    <details class="help row" id="t3-code">
+      <summary class="section-head"><h2>Finding your way round T3 Code</h2><span class="chevron" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></span></summary>
+      <div class="panel">
+        <div class="plain ref">
+          <div class="rows tour">
+            <b>Conversations</b><span>Listed down the left, under each workspace. T3 Code calls them threads, and it calls workspaces "projects". Start a new one in the workspace the work belongs to.</span>
+            <b>Files</b><span>The files sidebar shows what's in the workspace you're in, such as its agent instructions.</span>
+            <b>Terminal</b><span>Where you type a command, such as <code>claude auth login</code>.</span>
+            <b>Settings</b><span>Where you refresh your Claude sign-in and switch things on.</span>
+            <b>Usage and context</b><span>How much of your Claude allowance you've used, and how full this conversation is. When it's nearly full, start a new conversation. The context display starts switched off: turn it on in Settings, under Labs or Legacy depending on your version.</span>
+          </div>
+        </div>
+      </div>
+    </details>
+
+    <details class="help row">
       <summary class="section-head"><h2>If something went wrong</h2><span class="chevron" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></span></summary>
       <div class="panel">
         <div class="plain">
@@ -181,6 +314,23 @@
             <div class="copybox-body cmd"><span class="prompt-sign" aria-hidden="true">&gt;</span><span class="line">{{shareLogLine}}</span></div>
           </div>
           <p class="after">{{sendTheLog}}</p>
+          <div class="sub">
+            <p class="step-title">Claude sign-in didn't work</p>
+            <p class="step-body">In <strong>T3 Code</strong>, go to <strong>Settings &gt; Providers &gt; Claude</strong> and click <strong>Refresh</strong>. Then type <code>claude auth login</code> in T3 Code's terminal, press Enter and follow what it says.</p>
+          </div>
+          <div class="sub">
+            <p class="step-title">Asana shows the wrong workspace</p>
+            <p class="step-body">When Asana asks, pick your team's workspace at the top of its page. To fix it, reconnect Asana as <strong>Your connectors</strong> says: disconnect it on claude.ai's Connectors page, connect it again and pick your team's workspace. Then start a new thread.</p>
+          </div>
+        </div>
+      </div>
+    </details>
+
+    <details class="help row">
+      <summary class="section-head"><h2>Why T3 Code rather than the Claude app?</h2><span class="chevron" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></span></summary>
+      <div class="panel">
+        <div class="plain ref">
+{{whyT3Code}}
         </div>
       </div>
     </details>

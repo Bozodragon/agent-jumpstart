@@ -15,6 +15,9 @@ const profilesFolder = fileURLToPath(new URL('../../profiles/', import.meta.url)
  * @property {string} [logGoesTo] Who the setup page says to send the log to, as it reads after "send it to".
  * @property {string} [logEmail] Their email address. With it, the setup page links to a Gmail
  *   draft to them, ready for the log; the draft's greeting uses `logGoesTo`.
+ * @property {{ workspaces: { heading: string, text: string }, whyT3Code: string[], privacy: string[] }} [setupPage]
+ *   The setup page's wording for this profile, read only by `page/build.js`: where workspaces are
+ *   (and why), why T3 Code, and the privacy explanation. See `page/README.md`.
  * @property {{ top: string, inGoogleDrive: boolean, defaultLocation?: string, choices: Choice[] }} workspaces
  *   `top` is the top workspace's folder name, created in the confirmed location with the chosen
  *   workspaces inside it. `defaultLocation` is the folder, within the user's profile folder,
