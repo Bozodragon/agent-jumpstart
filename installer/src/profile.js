@@ -16,10 +16,18 @@ const profilesFolder = fileURLToPath(new URL('../../profiles/', import.meta.url)
  * @property {string} [logEmail] Their email address. With it, the setup page links to a Gmail
  *   draft to them, ready for the log; the draft's greeting uses `logGoesTo`. The log-sharing
  *   script (bootstrap/share-log.ps1) reads both from the unpacked profile to say who to send it to.
+ * @property {{ workspaces: { heading: string, text: string }, whyT3Code: string[], privacy: string[] }} [setupPage]
+ *   The setup page's wording for this profile, read only by `page/build.js`: where workspaces are
+ *   (and why), why T3 Code, and the privacy explanation. See `page/README.md`.
  * @property {{ top: string, inGoogleDrive: boolean, defaultLocation?: string, choices: Choice[] }} workspaces
  *   `top` is the top workspace's folder name, created in the confirmed location with the chosen
  *   workspaces inside it. `defaultLocation` is the folder, within the user's profile folder,
  *   offered for workspaces when they aren't in Google Drive.
+ * @property {{ softwareCenter?: string }} [googleDrive] Under a profile whose workspaces live in
+ *   Google Drive: `softwareCenter` is the name (or part of it) that the laptop's Software Center
+ *   lists Google Drive under. With it, a laptop without Drive is checked for a Software Center
+ *   that offers Drive, and the person is offered to install it from there; without it, that
+ *   check never runs.
  * @property {{ defaultModel?: string, effort?: string, codex?: boolean }} [t3] How T3 Code is set up
  *   when the installer installs it (never for a T3 already there): new threads use Claude with
  *   `defaultModel`, which must be a model id T3 knows exactly (`claude-opus-5-5`; T3 quietly

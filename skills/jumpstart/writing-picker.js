@@ -1,11 +1,9 @@
-<!doctype html>
-<html lang="en-GB">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>How you like things written</title>
-
-<script>
+// Jumpstart's writing picker: published with the setup site (page/build.js copies it to
+// <page address>jumpstart/writing-picker.js for every profile) and loaded by the small page the
+// skill writes, so the agent never writes this file out. See docs/adr/0001. It builds the whole
+// picker into the element with id "writing-picker", or just before this script if there's none.
+// Edit it here, beside SKILL.md, and publish the setup site when the change reaches main.
+(() => {
 /*
   THE EXAMPLES AND SWITCHES. Edit them here; nothing below this block needs to change.
 
@@ -23,7 +21,8 @@
     label    the switch's name on the page.
     start    the option value everyone starts on.
     options  value (what the page uses), label (the button), and line: what is copied, and
-             becomes a line of the person's profile when they choose it.
+             becomes a line of the person's profile when they choose it. An option with
+             explain has that sentence shown under its switch, saying what the option means.
 
   examples: the tabs, in order. Each has
     name     the tab.
@@ -34,14 +33,17 @@
   such as { warm: "...", plain: "...", formal: "..." }. from is optional: leave it out and the
   point shows at every length. Write each point as a full sentence: in paragraphs they are joined.
 */
-window.PICKER = {
+const PICKER = {
   switches: [
     {
       id: "length", label: "Length", start: "medium",
       options: [
-        { value: "short", label: "Short", line: "Short: the main point and what happens next" },
-        { value: "medium", label: "Medium", line: "Medium length: the main points with a little detail" },
-        { value: "detailed", label: "Detailed", line: "Detailed: the background, the reasons and the next steps" },
+        { value: "short", label: "Short", line: "Short: the main point and what happens next",
+          explain: "Just the main point and what happens next, in a few lines." },
+        { value: "medium", label: "Medium", line: "Medium length: the main points with a little detail",
+          explain: "The main points, each with a little detail." },
+        { value: "detailed", label: "Detailed", line: "Detailed: the background, the reasons and the next steps",
+          explain: "The background, the reasons and the next steps, for when you want the full picture." },
       ],
     },
     {
@@ -249,9 +251,8 @@ window.PICKER = {
     },
   ],
 };
-</script>
 
-<style>
+const STYLE = `
   :root { color-scheme: light dark; --serif: Charter, "Bitstream Charter", "Sitka Text", Cambria, Georgia, serif; }
   [hidden] { display: none !important; }
   body { font-family: var(--font-sans, system-ui, sans-serif); color: var(--foreground, inherit); line-height: 1.45; }
@@ -261,6 +262,10 @@ window.PICKER = {
   .switches { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 24px; }
   .switch { border: 0; margin: 0; padding: 0; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
   .switch legend { padding: 0; font-size: 13px; color: var(--muted-foreground, inherit); }
+  .switch.wide { grid-column: 1 / -1; }
+  .meanings { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 2px; font-size: 13px; color: var(--muted-foreground, inherit); }
+  .meanings strong { font-weight: 600; }
+  .meanings .chosen { color: var(--foreground, inherit); }
   .seg { display: flex; flex-wrap: wrap; gap: 2px; padding: 2px; border: 1px solid var(--border, #8884); border-radius: calc(var(--radius, 8px) * 0.75); align-self: flex-start; }
   .seg label { position: relative; padding: 5px 12px; font-size: 13px; border-radius: calc(var(--radius, 8px) * 0.55); color: var(--muted-foreground, inherit); cursor: pointer; }
   .seg label:hover { color: var(--foreground, inherit); }
@@ -297,200 +302,213 @@ window.PICKER = {
   .copy:focus-visible { outline: 2px solid var(--ring, Highlight); outline-offset: 2px; }
   .status { margin: 0; font-size: 13px; color: var(--muted-foreground, inherit); min-height: 1.2em; }
   .output { font-family: var(--font-mono, monospace); font-size: 13px; background: var(--code-background, transparent); color: var(--code-foreground, inherit); }
-  .error { color: var(--destructive, inherit); }
 
   @media (max-width: 520px) {
     .switches { grid-template-columns: 1fr; }
     .reply { padding: 16px; }
     .ask { max-width: 92%; }
   }
-</style>
-</head>
-<body>
-<div class="page" id="page">
-  <p class="intro">Here's how I might write a few everyday things for you. Flip the switches until they read the way you like, then copy your choices into the chat. Telling me in the chat works just as well.</p>
-</div>
+`;
 
-<script>
-(() => {
-  const page = document.getElementById('page');
-  const data = window.PICKER;
-  if (!data || !Array.isArray(data.switches) || !Array.isArray(data.examples) || !data.examples.length) {
-    page.append(el('p', 'error', "The examples couldn't be shown here. Tell me in the chat how you like things written instead."));
+const script = document.currentScript;
+let page = document.getElementById('writing-picker');
+if (!page) {
+  page = document.createElement('div');
+  if (script && script.parentNode) script.parentNode.insertBefore(page, script);
+  else document.body.append(page);
+}
+page.classList.add('page');
+page.replaceChildren();
+const style = document.createElement('style');
+style.textContent = STYLE;
+document.head.append(style);
+
+const data = PICKER;
+page.append(el('p', 'intro', "Here's how I might write a few everyday things for you. Flip the switches until they read the way you like, then copy your choices into the chat. Telling me in the chat works just as well."));
+
+/** The heading the skill looks for when this is pasted. SKILL.md relies on it. */
+const HEADER = 'How I like things written:';
+
+const choice = {};
+for (const s of data.switches) choice[s.id] = s.start;
+let shown = 0;
+
+function el(tag, className, text) {
+  const node = document.createElement(tag);
+  if (className) node.className = className;
+  if (text !== undefined) node.textContent = text;
+  return node;
+}
+
+function grow(area) {
+  area.style.height = 'auto';
+  area.style.height = area.scrollHeight + 2 + 'px';
+}
+
+function radios(name, options, isChecked, onPick, groupClass, labelClass) {
+  const group = el('div', groupClass);
+  for (const option of options) {
+    const label = el('label', labelClass);
+    const input = el('input');
+    input.type = 'radio';
+    input.name = name;
+    input.value = option.value;
+    input.checked = isChecked(option);
+    input.addEventListener('change', () => { if (input.checked) onPick(option); });
+    label.append(input, document.createTextNode(option.label));
+    group.append(label);
+  }
+  return group;
+}
+
+// The switches.
+const switches = el('div', 'switches');
+for (const s of data.switches) {
+  const set = el('fieldset', 'switch');
+  set.append(el('legend', '', s.label));
+  // What each option means, when the options say: every one is listed, the chosen one stands out.
+  const meanings = s.options.filter((o) => o.explain).map((o) => {
+    const item = el('li');
+    item.append(el('strong', '', o.label + ':'), document.createTextNode(' ' + o.explain));
+    item.dataset.value = o.value;
+    return item;
+  });
+  const mark = () => { for (const item of meanings) item.classList.toggle('chosen', item.dataset.value === choice[s.id]); };
+  set.append(radios('switch-' + s.id, s.options, (o) => o.value === s.start,
+    (o) => { choice[s.id] = o.value; mark(); draw(); refresh(); }, 'seg', ''));
+  if (meanings.length) {
+    set.classList.add('wide');
+    const list = el('ul', 'meanings');
+    list.append(...meanings);
+    set.append(list);
+    mark();
+  }
+  switches.append(set);
+}
+page.append(switches);
+
+// The example tabs, the question and the reply.
+const example = el('section', 'example');
+const tabs = radios('example', data.examples.map((e, i) => ({ value: String(i), label: e.name })),
+  (o) => o.value === '0', (o) => { shown = Number(o.value); draw(); }, 'tabs', '');
+tabs.setAttribute('role', 'radiogroup');
+tabs.setAttribute('aria-label', 'Examples');
+const ask = el('p', 'ask');
+const reply = el('div', 'reply');
+reply.setAttribute('aria-live', 'polite');
+example.append(tabs, ask, reply);
+page.append(example);
+
+const lengthOrder = (data.switches.find((s) => s.id === 'length') || { options: [] }).options.map((o) => o.value);
+
+function visible(point) {
+  if (!point) return false;
+  if (!point.from || !('length' in choice)) return true;
+  return lengthOrder.indexOf(choice.length) >= lengthOrder.indexOf(point.from);
+}
+
+function words(point) {
+  const text = point.text;
+  if (typeof text === 'string') return text;
+  if (!text) return '';
+  if ('tone' in choice && text[choice.tone]) return text[choice.tone];
+  return Object.values(text)[0] || '';
+}
+
+function draw() {
+  const e = data.examples[shown];
+  ask.textContent = e.ask || '';
+  ask.hidden = !e.ask;
+  const bullets = choice.layout !== 'paragraphs';
+  const headings = choice.headings === 'yes';
+  const parts = [];
+  if (visible(e.opening)) parts.push(el('p', '', words(e.opening)));
+  for (const section of e.sections || []) {
+    const points = (section.points || []).filter(visible).map(words);
+    if (!points.length) continue;
+    if (headings && section.heading) parts.push(el('h3', '', section.heading));
+    if (bullets) {
+      const list = el('ul');
+      for (const text of points) list.append(el('li', '', text));
+      parts.push(list);
+    } else {
+      parts.push(el('p', '', points.join(' ')));
+    }
+  }
+  if (visible(e.closing)) parts.push(el('p', '', words(e.closing)));
+  reply.replaceChildren(...parts);
+  reply.classList.remove('fresh');
+  void reply.offsetWidth;
+  reply.classList.add('fresh');
+}
+
+// Anything else, and the copy.
+const extra = el('div', 'extra');
+const extraLabel = el('label', '', 'Anything else about how you like things written?');
+extraLabel.htmlFor = 'extra';
+const extraField = el('textarea');
+extraField.id = 'extra';
+extraField.rows = 1;
+extraField.addEventListener('input', () => { grow(extraField); refresh(); });
+extra.append(extraLabel, extraField);
+page.append(extra);
+
+const finish = el('div', 'finish');
+const copy = el('button', 'copy', 'Copy my choices');
+copy.type = 'button';
+const status = el('p', 'status');
+status.setAttribute('role', 'status');
+const output = el('textarea', 'output');
+output.readOnly = true;
+output.hidden = true;
+output.setAttribute('aria-label', 'Your choices, to paste into the chat');
+finish.append(copy, status, output);
+page.append(finish);
+
+const tidy = (text) => String(text || '').replace(/\s+/g, ' ').trim();
+
+function choices() {
+  const lines = [HEADER];
+  for (const s of data.switches) {
+    const option = s.options.find((o) => o.value === choice[s.id]);
+    if (option && option.line) lines.push('- ' + tidy(option.line));
+  }
+  if (tidy(extraField.value)) lines.push('- ' + tidy(extraField.value));
+  return lines.join('\n');
+}
+
+function show(text, message) {
+  output.hidden = false;
+  output.value = text;
+  grow(output);
+  status.textContent = message;
+}
+
+function refresh() {
+  if (!output.hidden && output.value !== choices()) show(choices(), 'You changed something since you copied it: copy it again.');
+}
+
+copy.addEventListener('click', () => {
+  const text = choices();
+  show(text, '');
+  output.focus();
+  output.select();
+  let copied = false;
+  try { copied = document.execCommand('copy'); } catch (error) { copied = false; }
+  if (copied) {
+    status.textContent = 'Copied. Paste it into the chat and send it.';
     return;
   }
-
-  /** The heading the skill looks for when this is pasted. SKILL.md relies on it. */
-  const HEADER = 'How I like things written:';
-
-  const choice = {};
-  for (const s of data.switches) choice[s.id] = s.start;
-  let shown = 0;
-
-  function el(tag, className, text) {
-    const node = document.createElement(tag);
-    if (className) node.className = className;
-    if (text !== undefined) node.textContent = text;
-    return node;
+  const fallback = 'This page couldn\'t copy it. Select the text below, copy it and paste it into the chat.';
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(
+      () => { status.textContent = 'Copied. Paste it into the chat and send it.'; },
+      () => { status.textContent = fallback; output.select(); },
+    );
+  } else {
+    status.textContent = fallback;
   }
+});
 
-  function grow(area) {
-    area.style.height = 'auto';
-    area.style.height = area.scrollHeight + 2 + 'px';
-  }
-
-  function radios(name, options, isChecked, onPick, groupClass, labelClass) {
-    const group = el('div', groupClass);
-    for (const option of options) {
-      const label = el('label', labelClass);
-      const input = el('input');
-      input.type = 'radio';
-      input.name = name;
-      input.value = option.value;
-      input.checked = isChecked(option);
-      input.addEventListener('change', () => { if (input.checked) onPick(option); });
-      label.append(input, document.createTextNode(option.label));
-      group.append(label);
-    }
-    return group;
-  }
-
-  // The switches.
-  const switches = el('div', 'switches');
-  for (const s of data.switches) {
-    const set = el('fieldset', 'switch');
-    set.append(el('legend', '', s.label));
-    set.append(radios('switch-' + s.id, s.options, (o) => o.value === s.start,
-      (o) => { choice[s.id] = o.value; draw(); refresh(); }, 'seg', ''));
-    switches.append(set);
-  }
-  page.append(switches);
-
-  // The example tabs, the question and the reply.
-  const example = el('section', 'example');
-  const tabs = radios('example', data.examples.map((e, i) => ({ value: String(i), label: e.name })),
-    (o) => o.value === '0', (o) => { shown = Number(o.value); draw(); }, 'tabs', '');
-  tabs.setAttribute('role', 'radiogroup');
-  tabs.setAttribute('aria-label', 'Examples');
-  const ask = el('p', 'ask');
-  const reply = el('div', 'reply');
-  reply.setAttribute('aria-live', 'polite');
-  example.append(tabs, ask, reply);
-  page.append(example);
-
-  const lengthOrder = (data.switches.find((s) => s.id === 'length') || { options: [] }).options.map((o) => o.value);
-
-  function visible(point) {
-    if (!point) return false;
-    if (!point.from || !('length' in choice)) return true;
-    return lengthOrder.indexOf(choice.length) >= lengthOrder.indexOf(point.from);
-  }
-
-  function words(point) {
-    const text = point.text;
-    if (typeof text === 'string') return text;
-    if (!text) return '';
-    if ('tone' in choice && text[choice.tone]) return text[choice.tone];
-    return Object.values(text)[0] || '';
-  }
-
-  function draw() {
-    const e = data.examples[shown];
-    ask.textContent = e.ask || '';
-    ask.hidden = !e.ask;
-    const bullets = choice.layout !== 'paragraphs';
-    const headings = choice.headings === 'yes';
-    const parts = [];
-    if (visible(e.opening)) parts.push(el('p', '', words(e.opening)));
-    for (const section of e.sections || []) {
-      const points = (section.points || []).filter(visible).map(words);
-      if (!points.length) continue;
-      if (headings && section.heading) parts.push(el('h3', '', section.heading));
-      if (bullets) {
-        const list = el('ul');
-        for (const text of points) list.append(el('li', '', text));
-        parts.push(list);
-      } else {
-        parts.push(el('p', '', points.join(' ')));
-      }
-    }
-    if (visible(e.closing)) parts.push(el('p', '', words(e.closing)));
-    reply.replaceChildren(...parts);
-    reply.classList.remove('fresh');
-    void reply.offsetWidth;
-    reply.classList.add('fresh');
-  }
-
-  // Anything else, and the copy.
-  const extra = el('div', 'extra');
-  const extraLabel = el('label', '', 'Anything else about how you like things written?');
-  extraLabel.htmlFor = 'extra';
-  const extraField = el('textarea');
-  extraField.id = 'extra';
-  extraField.rows = 1;
-  extraField.addEventListener('input', () => { grow(extraField); refresh(); });
-  extra.append(extraLabel, extraField);
-  page.append(extra);
-
-  const finish = el('div', 'finish');
-  const copy = el('button', 'copy', 'Copy my choices');
-  copy.type = 'button';
-  const status = el('p', 'status');
-  status.setAttribute('role', 'status');
-  const output = el('textarea', 'output');
-  output.readOnly = true;
-  output.hidden = true;
-  output.setAttribute('aria-label', 'Your choices, to paste into the chat');
-  finish.append(copy, status, output);
-  page.append(finish);
-
-  const tidy = (text) => String(text || '').replace(/\s+/g, ' ').trim();
-
-  function choices() {
-    const lines = [HEADER];
-    for (const s of data.switches) {
-      const option = s.options.find((o) => o.value === choice[s.id]);
-      if (option && option.line) lines.push('- ' + tidy(option.line));
-    }
-    if (tidy(extraField.value)) lines.push('- ' + tidy(extraField.value));
-    return lines.join('\n');
-  }
-
-  function show(text, message) {
-    output.hidden = false;
-    output.value = text;
-    grow(output);
-    status.textContent = message;
-  }
-
-  function refresh() {
-    if (!output.hidden && output.value !== choices()) show(choices(), 'You changed something since you copied it: copy it again.');
-  }
-
-  copy.addEventListener('click', () => {
-    const text = choices();
-    show(text, '');
-    output.focus();
-    output.select();
-    let copied = false;
-    try { copied = document.execCommand('copy'); } catch (error) { copied = false; }
-    if (copied) {
-      status.textContent = 'Copied. Paste it into the chat and send it.';
-      return;
-    }
-    const fallback = 'This page couldn\'t copy it. Select the text below, copy it and paste it into the chat.';
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(text).then(
-        () => { status.textContent = 'Copied. Paste it into the chat and send it.'; },
-        () => { status.textContent = fallback; output.select(); },
-      );
-    } else {
-      status.textContent = fallback;
-    }
-  });
-
-  draw();
+draw();
 })();
-</script>
-</body>
-</html>

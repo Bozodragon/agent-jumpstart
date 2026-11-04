@@ -16,7 +16,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { basename, dirname } from 'node:path';
 import { parseArgs } from 'node:util';
 import { openLog } from './log.js';
-import { setUpClaude } from './claude.js';
+import { endAfterSkippedSignIn, setUpClaude } from './claude.js';
 import { walkThroughConnectors } from './connectors.js';
 import { newEnding, note, showEnding } from './ending.js';
 import { setUpExtraTools } from './extra-tools.js';
@@ -241,9 +241,10 @@ async function main() {
     done.push(...extraTools);
     note(ending, extraTools);
     // Before T3, which finds Claude Code only if it's on PATH when T3 starts.
-    const claude = await setUpClaude(context);
+    const claude = await setUpClaude(context, asker);
     done.push(['Claude Code', claude.row]);
     note(ending, [['Claude Code', claude.row]]);
+    if (claude.skipped !== undefined) endAfterSkippedSignIn(ending, claude.skipped);
     settings.email = claude.email;
     await writeSettings(places.settings, settings);
     log.write(`Signed-in email written to settings: ${claude.email ?? 'none'}`);
