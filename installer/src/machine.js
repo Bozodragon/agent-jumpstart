@@ -47,7 +47,9 @@
 // so a debug run's log holds each one with its exit code and full output (for `runOnScreen`,
 // the command and code only: its output goes to the person's window), and every run's log holds
 // each `run` or `runHere` that failed (a code other than 0), with its output. Nothing else has
-// to log a program's command or output. A debug run's log also holds the PATH programs are
+// to log a program's command or output. A failure the caller expects (`run`'s `expected`, such as
+// a registry value that isn't there) isn't one: only a debug run's log holds it, and the caller
+// logs what it means in plain words. A debug run's log also holds the PATH programs are
 // given, each time it changes.
 import { spawn } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
@@ -67,8 +69,9 @@ import { setTimeout as sleep } from 'node:timers/promises';
  *   variable's value, or undefined if it isn't set.
  * @property {(name: string, value: string) => Promise<void>} setUserVariable Sets a user
  *   environment variable, seen by programs started afterwards.
- * @property {(file: string, args: string[]) => Promise<Ran>} run Runs a program and waits for it.
- *   Never throws: a program that couldn't start gives code -1 and the reason as its output.
+ * @property {(file: string, args: string[], how?: RunOptions) => Promise<Ran>} run Runs a program
+ *   and waits for it. Never throws: a program that couldn't start gives code -1 and the reason as
+ *   its output.
  * @property {(file: string, args: string[]) => Promise<Ran>} runHere Like `run`, but always runs
  *   the program for real, even on the fake machine. Only for programs that change nothing but
  *   the installer's own folders, such as tar.exe unpacking a download into its scratch folder.
@@ -105,7 +108,14 @@ export async function keepTrying({ machine, every, patience = machine.patience }
   return { result, waited };
 }
 
-/** @typedef {(file: string, args: string[]) => Promise<Ran>} Runner */
+/** @typedef {(file: string, args: string[], how?: RunOptions) => Promise<Ran>} Runner */
+
+/**
+ * @typedef {object} RunOptions
+ * @property {(ran: Ran) => boolean} [expected] Whether a run that failed failed as expected: a
+ *   miss the caller looks for, such as a registry value that isn't there or T3 Code still
+ *   starting, rather than something going wrong. Only a debug run's log holds it.
+ */
 
 /** @typedef {{ code: number, output: string }} Ran */
 
@@ -132,7 +142,7 @@ export function openMachine(places, log) {
   // In a debug run, logged before it starts as well as after, so a program that never returns
   // still shows. In any run, a program that fails is logged once it has, with its output.
   /** @param {Runner} run @returns {Runner} */
-  const logged = (run) => async (file, args) => {
+  const logged = (run) => async (file, args, how = {}) => {
     const running = `Running: ${[file, ...args].map(quoted).join(' ')}`;
     log.detail(running);
     const ran = await run(file, args);
@@ -141,7 +151,7 @@ export function openMachine(places, log) {
       `Ran: ${basename(file)} (code ${ran.code})`,
       ...(output ? output.split(/\r?\n/).map((line) => `  | ${line}`) : ['  (no output)']),
     ];
-    if (ran.code === 0) log.detail(lines.join('\n'));
+    if (ran.code === 0 || how.expected?.(ran)) log.detail(lines.join('\n'));
     else for (const line of [...(log.debug ? [] : [running]), ...lines]) log.write(line);
     return ran;
   };
@@ -360,6 +370,14 @@ function inside(home, path) {
   return target;
 }
 
+/**
+ * Whether `reg.exe query` found nothing: the key or value isn't there, which is how a variable
+ * that isn't set or a program that isn't installed looks. Anything else, such as access denied,
+ * is a failure.
+ * @param {Ran} ran
+ */
+export const registryMiss = (ran) => ran.code === 1 && /unable to find the specified registry key or value/i.test(ran.output);
+
 /** @param {string} name */
 export const system32 =(name) => join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', name);
 
@@ -380,7 +398,7 @@ function realMachine(loggedRun) {
    * @returns {Promise<string | undefined>}
    */
   async function readVariable(name, key = 'HKCU\\Environment', run = loggedRun) {
-    const { code, output } = await run(reg, ['query', key, '/v', name]);
+    const { code, output } = await run(reg, ['query', key, '/v', name], { expected: registryMiss });
     if (code !== 0) return undefined;
     const match = new RegExp(`^\\s+${name}\\s+REG_(?:EXPAND_)?SZ\\s+(.*)$`, 'im').exec(output);
     return match ? match[1].trimEnd() : '';
