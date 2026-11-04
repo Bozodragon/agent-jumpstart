@@ -15,7 +15,7 @@
 // Its settings aren't touched.
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { basename, join } from 'node:path';
-import { keepTrying, system32 } from './machine.js';
+import { keepTrying, registryMiss, system32 } from './machine.js';
 import { loadManifest, toolEntry } from './manifest.js';
 import { messageOf } from './stop.js';
 import { checkSha512, findRelease } from './t3-release.js';
@@ -45,15 +45,19 @@ import * as ui from './ui.js';
 export async function findT3({ places, machine, downloads, log }) {
   const entry = toolEntry(await loadManifest(downloads), 't3');
   if (!entry) return undefined;
-  const version = await installedVersion(machine, entry.install.versionIn);
   /** @type {('stable' | 'nightly')[]} */
   const channels = ['stable', 'nightly'];
-  /** @type {('stable' | 'nightly')[]} */
-  const programsThere = [];
-  for (const channel of channels) {
-    const where = entry.channels[channel];
-    if (where && (await exists(join(places.programs, entry.install.folder, where.program)))) programsThere.push(channel);
-  }
+  // reg.exe can take a moment, before anything else is on screen.
+  const { version, programsThere } = await ui.busy(`Checking whether ${entry.name} is installed`, async () => {
+    const version = await installedVersion(machine, entry.install.versionIn);
+    /** @type {('stable' | 'nightly')[]} */
+    const programsThere = [];
+    for (const channel of channels) {
+      const where = entry.channels[channel];
+      if (where && (await exists(join(places.programs, entry.install.folder, where.program)))) programsThere.push(channel);
+    }
+    return { version, programsThere };
+  });
   if (!version && programsThere.length === 0) {
     log.write(`${entry.name}: not installed yet`);
     return undefined;
@@ -181,7 +185,7 @@ async function setUpT3(profile, folder, say) {
  */
 async function installedVersion(machine, key) {
   const reg = system32('reg.exe');
-  const { code, output } = await machine.run(reg, ['query', key, '/v', 'DisplayVersion']);
+  const { code, output } = await machine.run(reg, ['query', key, '/v', 'DisplayVersion'], { expected: registryMiss });
   if (code !== 0) return undefined;
   return /^\s+DisplayVersion\s+REG_SZ\s+(\S+)/im.exec(output)?.[1];
 }
