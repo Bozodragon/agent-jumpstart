@@ -30,7 +30,7 @@ import { answersFrom, askQuestions, knownFrom } from './questions.js';
 import { installSkills } from './skills.js';
 import { findT3, installT3, openT3 } from './t3.js';
 import { End, messageOf, Stop } from './stop.js';
-import { installTools } from './tools.js';
+import { installTools, isRecord } from './tools.js';
 import * as ui from './ui.js';
 import { addToT3, createWorkspaces } from './workspaces.js';
 
@@ -76,7 +76,7 @@ async function readEarlierSettings(path, profile, log) {
     }
     return undefined;
   }
-  if (settings === null || typeof settings !== 'object' || Array.isArray(settings)) {
+  if (!isRecord(settings)) {
     log.write(`Settings: ${path} isn't a JSON object, so every question is asked`);
     return undefined;
   }
@@ -120,14 +120,6 @@ async function reusedRows(earlier, choices, reused, downloads) {
   }
   if (reused.has('switchOffMemory')) rows.push(["Claude's memory", choices.switchOffMemory ? 'Switch it off' : 'Leave it on']);
   return rows;
-}
-
-/**
- * @param {unknown} value
- * @returns {value is Record<string, unknown>}
- */
-function isRecord(value) {
-  return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
 /** @param {string} path @param {Record<string, unknown>} settings */
