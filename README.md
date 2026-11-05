@@ -27,10 +27,10 @@ A team member opens Windows PowerShell from the Start menu and pastes one of the
 
 | Line | What it's for |
 | --- | --- |
-| `irm https://jumpstart-install.arcforge.uk/york.ps1 \| iex` | York team members |
-| `irm https://jumpstart-install.arcforge.uk/install.ps1 \| iex` | Everyone else (the `default` profile) |
-| `irm https://jumpstart-install.arcforge.uk/york-debug.ps1 \| iex` | A supervised York test run: debug on, downloads kept |
-| `irm https://jumpstart-install.arcforge.uk/share-log.ps1 \| iex` | Copies the newest installer log to the clipboard, opens its folder and says who to send it to: the person and email in the profile the installer ran with (it reads `profile` from `settings.json`, then that profile's file in `program\profiles\`), or "the person helping you" when it can't tell |
+| `irm https://jumpstart-install.portall.dev/york.ps1 \| iex` | York team members |
+| `irm https://jumpstart-install.portall.dev/install.ps1 \| iex` | Everyone else (the `default` profile) |
+| `irm https://jumpstart-install.portall.dev/york-debug.ps1 \| iex` | A supervised York test run: debug on, downloads kept |
+| `irm https://jumpstart-install.portall.dev/share-log.ps1 \| iex` | Copies the newest installer log to the clipboard, opens its folder and says who to send it to: the person and email in the profile the installer ran with (it reads `profile` from `settings.json`, then that profile's file in `program\profiles\`), or "the person helping you" when it can't tell |
 
 The first three are the same bootstrap with a different top line naming the profile and whether debug is on. It downloads the Node.js zip pinned in `manifest.json`, checks its SHA-256, unpacks it into `%LOCALAPPDATA%\agent-jumpstart\node` (unless that already holds the pinned version), a folder of the installer's own that is never on PATH, so a Node.js the person already has is never moved or replaced; downloads `installer.zip` (this program, its profiles and its dependencies) from the same Portall item into `%LOCALAPPDATA%\agent-jumpstart\program\`, and runs it. Each download prints one line, saying what it is, its size and a percentage that updates in place; the bootstrap reads these from the progress meter of Windows' own `curl.exe` as it downloads. If `curl.exe` is missing or fails (it doesn't use the proxy Windows is set to), `Invoke-WebRequest` downloads instead, and the line gets its size when it's done. It has to work through `irm | iex` on Windows PowerShell 5.1 under Constrained Language Mode, so it stays plain ASCII with no byte-order mark and avoids `exit`, `Add-Type` and .NET method calls; `npm test` checks this.
 
@@ -42,7 +42,7 @@ npm run publish:portall
 
 ## The setup page
 
-Each profile has its own page showing only its line to paste: [York](https://jumpstart-york.arcforge.uk/) and [everyone else](https://jumpstart.arcforge.uk/). `npm run publish:page` renders and publishes both; see `page/README.md`.
+Each profile has its own page showing only its line to paste: [York](https://jumpstart-york.portall.dev/) and [everyone else](https://jumpstart.portall.dev/). `npm run publish:page` renders and publishes both; see `page/README.md`.
 
 ## Running the installer
 

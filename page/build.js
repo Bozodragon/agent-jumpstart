@@ -10,7 +10,7 @@
 //   node page/build.js --publish        render, then publish each page as a public Portall
 //                                       item named after its profile's page address
 //
-// Each profile's `page` is the address its item ends up at, so https://jumpstart-york.arcforge.uk/
+// Each profile's `page` is the address its item ends up at, so https://jumpstart-york.portall.dev/
 // is published as the item `jumpstart-york`.
 import { spawnSync } from 'node:child_process';
 import { copyFile, mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';

@@ -78,7 +78,7 @@ Two questions while the research runs, one after the other.
 
 **How they like things written.** Once they've answered, show the writing picker: fixed examples, the same for everyone, that change as they flip switches for length, tone, bullets and headings, and a line on what each length means. The picker itself is published on their setup site, so you write only the small page below, which loads it.
 
-1. Show this page with `html_render`, titled "How you like things written", with `height` 900. Don't preview it first with `html_preview`: the frame fits itself to the page. Write it exactly as it is here, with `[setup site]` replaced by their profile's setup site: `https://jumpstart-york.arcforge.uk/` for `york`, `https://jumpstart.arcforge.uk/` for `default`.
+1. Show this page with `html_render`, titled "How you like things written", with `height` 900. Don't preview it first with `html_preview`: the frame fits itself to the page. Write it exactly as it is here, with `[setup site]` replaced by their profile's setup site: `https://jumpstart-york.portall.dev/` for `york`, `https://jumpstart.portall.dev/` for `default`.
 
    ```html
    <!doctype html>
@@ -204,7 +204,7 @@ Close with one short message in plain words, in this shape. It names none of the
 - **Your workspaces**: their `workspaces`, each with a few words on what it's for, as above for Personal assistant and Thinking space. Say they're in T3 Code's list. For one step 9 couldn't add, say so and give its folder's full path so they can add it to T3 Code's list themselves.
 - **One thing to fix**: only the services from step 10 that are **Not connected** or **Not working**, each by name with its fix. With more than one, it reads "Things to fix". Leave the line out when nothing needs fixing; never list what's working.
 - **Where to start**: name their main area of work from what you learned, at a broad level ("event management", "email campaigns"), never one event or one piece of work. If one of their workspaces already covers it, tell them to start there instead and don't offer. If you learned too little to name one, ask what their main area of work is in the same line.
-- **The last line**: word for word, with links to these sections of the setup page. The page's address depends on their `profile`: `york` is https://jumpstart-york.arcforge.uk/, anything else https://jumpstart.arcforge.uk/. Link each section by name: [Your workspaces](<address>#your-workspaces), [Your connectors](<address>#your-connectors), [Your skills](<address>#your-skills), [Finding your way round T3 Code](<address>#finding-your-way-round-t3-code) and [If something went wrong](<address>#if-something-went-wrong).
+- **The last line**: word for word, with links to these sections of the setup page. The page's address depends on their `profile`: `york` is https://jumpstart-york.portall.dev/, anything else https://jumpstart.portall.dev/. Link each section by name: [Your workspaces](<address>#your-workspaces), [Your connectors](<address>#your-connectors), [Your skills](<address>#your-skills), [Finding your way round T3 Code](<address>#finding-your-way-round-t3-code) and [If something went wrong](<address>#if-something-went-wrong).
 
 Then read their reply to the offer. Make it once: whatever they say, don't ask again.
 

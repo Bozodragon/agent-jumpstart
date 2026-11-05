@@ -31,7 +31,7 @@ function Start-AgentJumpstart {
     arm64 = '34567581ee63967b37afb6b7a0cc63a2d550a43d5d838adb75982d7e356f2e2c'
   }
   # The Portall item this file is published from (npm run publish:portall).
-  $portall = 'https://jumpstart-install.arcforge.uk'
+  $portall = 'https://jumpstart-install.portall.dev'
 
   $arch = 'x64'
   if ($env:PROCESSOR_ARCHITECTURE -eq 'ARM64' -or $env:PROCESSOR_ARCHITEW6432 -eq 'ARM64') { $arch = 'arm64' }

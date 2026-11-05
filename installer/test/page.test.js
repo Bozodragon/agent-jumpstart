@@ -10,7 +10,7 @@ import { promisify } from 'node:util';
 import { repo } from './harness.js';
 
 const run = promisify(execFile);
-const shareLogLine = 'irm https://jumpstart-install.arcforge.uk/share-log.ps1 | iex';
+const shareLogLine = 'irm https://jumpstart-install.portall.dev/share-log.ps1 | iex';
 const steps = ['Paste the line', 'Type /jumpstart in your top workspace', 'Start work in the workspace it belongs to.'];
 /** The page's sections, in the order they appear. */
 const sections = [
@@ -42,8 +42,8 @@ const anchors = {
   'if-something-went-wrong': 'If something went wrong',
 };
 const pages = {
-  york: 'irm https://jumpstart-install.arcforge.uk/york.ps1 | iex',
-  default: 'irm https://jumpstart-install.arcforge.uk/install.ps1 | iex',
+  york: 'irm https://jumpstart-install.portall.dev/york.ps1 | iex',
+  default: 'irm https://jumpstart-install.portall.dev/install.ps1 | iex',
 };
 /** What each page says after the share-log line: who to email the log to, and where. @type {Record<string, string>} */
 const sendTheLogSays = {
