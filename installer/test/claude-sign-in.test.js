@@ -111,6 +111,8 @@ test("Skip for now finishes the install, with an ending that says how to fix it,
   assert.equal(ending.match(/Claude Code: 2\.1\.317, not signed in/g)?.length, 1, 'Claude Code is named once among what didn\'t work');
   assert.deepEqual(await t3Starts(), [], "T3 Code's program isn't started by the ending");
   assert.deepEqual((await t3Install())?.args, ['/S'], "T3 Code's installer isn't told to start it");
+  checklistSays(result.stdout, 'Workspaces', "Claude, not in T3 Code yet: it's added when you paste the line again");
+  assert.doesNotMatch(ending, /open T3 Code/, "nothing in the ending asks for T3 Code to be opened, since its closing line says to close it");
   assert.equal((await readSettings(where.home)).email, null);
   assert.match((await readOnlyLog(where.home)).text, /Ending: T3 Code isn't opened/);
 });

@@ -249,7 +249,7 @@ async function main() {
     const t3 = await installT3(profile, choices.channel, foundT3, ending.openT3, context);
     record([[named.t3, t3.row]]);
     // After T3's first start, which leaves the command-line shim that adds a project.
-    const workspacesLine = await addToT3(workspaces, t3, context);
+    const workspacesLine = await addToT3(workspaces, t3, ending.openT3, context);
     record([['Workspaces', workspacesLine]]);
 
     /** @type {[string, string][]} */
