@@ -1,8 +1,8 @@
 {
   "name": "Default",
-  "page": "https://jumpstart.arcforge.uk/",
-  "pastedLine": "irm https://jumpstart-install.arcforge.uk/install.ps1 | iex",
-  "shareLogLine": "irm https://jumpstart-install.arcforge.uk/share-log.ps1 | iex",
+  "page": "https://jumpstart.portall.dev/",
+  "pastedLine": "irm https://jumpstart-install.portall.dev/install.ps1 | iex",
+  "shareLogLine": "irm https://jumpstart-install.portall.dev/share-log.ps1 | iex",
   "logGoesTo": "Jacob",
   "logEmail": "jacob.hamood@live.co.uk",
   "setupPage": {
