@@ -3,8 +3,9 @@
 // profile's pastedLine, shareLogLine (and the script address inside each, for the "See what this
 // runs" links), top workspace's name, connectors, the sentence saying where to send the log and
 // the wording in its `setupPage` (where workspaces are, why T3 Code, privacy), plus the skills
-// in page/skills.json and the screenshots in page/screenshots (as data addresses, so each page is
-// one file), and checks each page shows its own line to paste exactly once.
+// in page/skills.json with each one's text (from page/skill-texts, which
+// page/fetch-skill-texts.js fills) and the screenshots in page/screenshots (as data addresses, so
+// each page is one file), and checks each page shows its own line to paste exactly once.
 //
 //   node page/build.js [<folder>]       write <folder>/<profile>/index.html (default: dist/page)
 //   node page/build.js --publish        render, then publish each page as a public Portall
@@ -18,6 +19,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { skillNames } from '../installer/src/profile.js';
+import { ownSource, skillTextHtml } from './skill-texts.js';
 
 const repo = fileURLToPath(new URL('..', import.meta.url));
 /** Each placeholder, and where in a profile its text is (`workspaces.top` is the key `top` inside `workspaces`). */
@@ -99,9 +101,16 @@ function installedSkills(skills) {
 }
 
 /**
- * The skills under their headings, each name linking to the skill's own text. Fails if the page
- * lists a skill the profile doesn't install.
- * @param {string} id @param {Record<string, { name: string, line: string, text: string }[]>} skills
+ * @typedef {{ name: string, line: string, source: string, about?: string, runs?: string[] }} Skill
+ * One skill on the page, from page/skills.json. `source` is its SKILL.md on GitHub, `about` the
+ * page that says more about it (AI Hero's, for Matt Pocock's skills), and `runs` the skills its
+ * text only hands over to, whose texts its box shows too.
+ */
+
+/**
+ * The skills under their headings, each name a button that opens the box with the skill's text.
+ * Fails if the page lists a skill the profile doesn't install.
+ * @param {string} id @param {Record<string, Skill[]>} skills
  * @param {Set<string>} installed
  */
 function skillGroups(id, skills, installed) {
@@ -109,11 +118,76 @@ function skillGroups(id, skills, installed) {
     .map(([heading, list]) => {
       const rows = list.map((skill) => {
         if (!installed.has(skill.name)) fail(`page/skills.json lists /${skill.name}, which profiles/${id}.json doesn't install.`);
-        return `            <a href="${escape(skill.text)}" target="_blank" rel="noopener">/${escape(skill.name)}</a><span>${escape(skill.line)}</span>`;
+        return `            <button type="button" data-skill="${escape(skill.name)}" aria-haspopup="dialog">/${escape(skill.name)}</button><span>${escape(skill.line)}</span>`;
       });
       return `          <h3>${escape(heading)}</h3>\n          <div class="rows skills">\n${rows.join('\n')}\n          </div>`;
     })
     .join('\n');
+}
+
+/** @param {string[]} names @returns {string} HTML: "/a", "/a and /b", "/a, /b and /c" */
+const listOf = (names) =>
+  names
+    .map((name) => `<code>/${escape(name)}</code>`)
+    .join(', ')
+    .replace(/, ([^,]*)$/, ' and $1');
+
+/**
+ * Each skill's box: its text as the agent reads it, the text of any skill it only hands over to,
+ * and a link to read more (AI Hero's page for Matt Pocock's skills, the skill's source otherwise).
+ * @param {Record<string, Skill[]>} skills @param {Record<string, string>} texts each skill's text, as HTML
+ * @returns {string}
+ */
+function skillBoxes(skills, texts) {
+  const all = Object.values(skills).flat();
+  const names = new Set(all.map((skill) => skill.name));
+  return all
+    .map((skill) => {
+      const name = escape(skill.name);
+      const runs = (skill.runs ?? []).map((other) => {
+        if (!names.has(other)) fail(`page/skills.json says /${skill.name} runs /${other}, which isn't on the page.`);
+        return `        <h3 class="skill-runs">/${escape(other)}</h3>\n        <div class="skill-text">\n${texts[other]}\n        </div>`;
+      });
+      const handsOver = runs.length
+        ? `\n        <p class="skill-note">All <code>/${name}</code> does is hand over to ${listOf(skill.runs ?? [])}, so ${runs.length === 1 ? 'its text is' : 'their texts are'} below.</p>\n${runs.join('\n')}`
+        : '';
+      const more = skill.about
+        ? `<a href="${escape(skill.about)}" target="_blank" rel="noopener">Matt Pocock on /${name}, at AI Hero</a>`
+        : `<a href="${escape(skill.source)}" target="_blank" rel="noopener">/${name}'s source, on GitHub</a>`;
+      return [
+        `    <dialog class="skill" id="skill-${name}" aria-labelledby="skill-${name}-name" closedby="any">`,
+        `      <div class="skill-head">`,
+        `        <div><h2 id="skill-${name}-name">/${name}</h2><p>${escape(skill.line)}</p></div>`,
+        `        <form method="dialog"><button class="skill-close" aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></form>`,
+        `      </div>`,
+        `      <div class="skill-body" tabindex="-1" autofocus>`,
+        `        <p class="skill-note">This is what your agent follows when you type <code>/${name}</code>. It's written to the agent, so "you" is your agent and "the user" is you.</p>`,
+        `        <div class="skill-text">\n${texts[skill.name]}\n        </div>${handsOver}`,
+        `      </div>`,
+        `      <p class="skill-foot">${more}</p>`,
+        `    </dialog>`,
+      ].join('\n');
+    })
+    .join('\n');
+}
+
+/**
+ * Each skill's text, as HTML: its copy in page/skill-texts or, for one of this repository's own
+ * skills, its SKILL.md where it is.
+ * @param {Record<string, Skill[]>} skills
+ * @returns {Promise<Record<string, string>>}
+ */
+async function skillTexts(skills) {
+  /** @type {Record<string, string>} */
+  const texts = {};
+  for (const skill of Object.values(skills).flat()) {
+    const own = ownSource(skill.source);
+    const file = own ? join(repo, own) : join(repo, 'page', 'skill-texts', `${skill.name}.md`);
+    const markdown = await readFile(file, 'utf8').catch(() => undefined);
+    if (markdown === undefined) fail(`/${skill.name} has no text at ${file}. Run node page/fetch-skill-texts.js to copy the skills' texts.`);
+    texts[skill.name] = skillTextHtml(markdown, skill.source);
+  }
+  return texts;
 }
 
 /**
@@ -162,10 +236,12 @@ function fail(message) {
  * @param {string} id
  * @param {Record<string, unknown>} profile
  * @param {string[]} otherLines every other profile's pasted line, none of which may appear
- * @param {Record<string, { name: string, line: string, text: string }[]>} skills page/skills.json
+ * @param {Record<string, Skill[]>} skills page/skills.json
+ * @param {string} boxes every skill's box, which goes in the page after its checks: a skill's text is
+ *   its author's, so it may say what the page's own text mustn't
  * @param {Record<string, string>} shots each screenshot's placeholder and its data address
  */
-function render(template, id, profile, otherLines, skills, shots) {
+function render(template, id, profile, otherLines, skills, boxes, shots) {
   /** @type {Record<string, string>} */
   const filled = {};
   for (const [field, key] of Object.entries(fields)) {
@@ -193,11 +269,13 @@ function render(template, id, profile, otherLines, skills, shots) {
   for (const other of otherLines) {
     if (other !== filled.pastedLine && page.includes(escape(other))) fail(`The ${id} page shows another profile's line: ${other}`);
   }
-  return page;
+  if (count(page, '<!-- skill texts -->') !== 1) fail('page/template.html needs <!-- skill texts --> once, where the skills\' boxes go.');
+  return page.replace('<!-- skill texts -->', () => `<!-- skill texts -->\n${boxes}\n    <!-- end of skill texts -->`);
 }
 
 const template = await readFile(join(repo, 'page', 'template.html'), 'utf8');
 const skills = JSON.parse(await readFile(join(repo, 'page', 'skills.json'), 'utf8'));
+const boxes = skillBoxes(skills, await skillTexts(skills));
 /** @type {Record<string, string>} */
 const shots = {};
 for (const [field, file] of Object.entries(screenshots)) {
@@ -213,7 +291,7 @@ await rm(out, { recursive: true, force: true });
 for (const id of ids) {
   const folder = join(out, id);
   await mkdir(folder, { recursive: true });
-  await writeFile(join(folder, 'index.html'), render(template, id, profiles[id], allLines, skills, shots));
+  await writeFile(join(folder, 'index.html'), render(template, id, profiles[id], allLines, skills, boxes, shots));
 }
 console.log(`Rendered the setup page for ${ids.join(', ')} into ${out}`);
 

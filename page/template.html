@@ -143,7 +143,55 @@
   .rows { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 7px 18px; align-items: baseline; }
   .rows > b, .rows > a { font-weight: 500; white-space: nowrap; }
   .rows > span { color: var(--secondary); }
-  .rows.skills > a { font-family: var(--mono); font-size: 12.5px; justify-self: start; }
+  .rows.skills > button {
+    font-family: var(--mono); font-size: 12.5px; font-weight: 500; white-space: nowrap; justify-self: start;
+    color: var(--accent); background: none; border: 0; border-bottom: 1px solid rgba(91, 149, 255, .35);
+    padding: 0; line-height: inherit; cursor: pointer;
+  }
+  .rows.skills > button:hover { border-bottom-color: var(--accent); }
+  .rows.skills > button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+
+  /* A skill's box: its text as the agent reads it, opened from its name in "Your skills". */
+  html:has(dialog.skill[open]) { overflow: hidden; }
+  dialog.skill {
+    padding: 0; width: min(680px, calc(100% - 32px)); max-height: min(86vh, 900px);
+    color: var(--text); background: var(--panel); border: 1px solid var(--outline); border-radius: 16px;
+    box-shadow: var(--lit), 0 24px 80px rgba(0, 0, 0, .7);
+  }
+  dialog.skill[open] { display: flex; flex-direction: column; }
+  dialog.skill::backdrop { background: rgba(0, 0, 0, .72); }
+  .skill-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 16px 14px 14px 20px; border-bottom: 1px solid var(--hairline); }
+  .skill-head h2 { font-family: var(--mono); font-size: 15px; font-weight: 500; }
+  .skill-head p { margin: 2px 0 0; font-size: 13.5px; color: var(--secondary); }
+  .skill-head form { margin: 0; }
+  .skill-close {
+    flex: none; width: 32px; height: 32px; display: grid; place-items: center; cursor: pointer;
+    color: var(--secondary); background: none; border: 1px solid var(--outline); border-radius: 9px;
+  }
+  .skill-close:hover { color: var(--text); background: var(--hover); }
+  .skill-close:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .skill-close svg { width: 16px; height: 16px; }
+  .skill-body { flex: 1; min-height: 0; overflow-y: auto; padding: 16px 20px 20px; }
+  .skill-body:focus { outline: none; }
+  .skill-note { margin: 0 0 14px; font-size: 13.5px; color: var(--muted); }
+  .skill-text + .skill-note { margin-top: 16px; }
+  .skill-runs { margin: 22px 0 12px; padding-top: 18px; border-top: 1px solid var(--hairline); font-family: var(--mono); font-size: 14px; font-weight: 500; }
+  .skill-foot { margin: 0; padding: 12px 20px; border-top: 1px solid var(--hairline); font-size: 13.5px; }
+  .skill-text { font-size: 14px; line-height: 1.65; color: var(--secondary); overflow-wrap: break-word; }
+  .skill-text > :first-child { margin-top: 0; }
+  .skill-text > :last-child { margin-bottom: 0; }
+  .skill-text p, .skill-text ul, .skill-text ol, .skill-text pre, .skill-text blockquote { margin: 0 0 10px; }
+  .skill-text h3, .skill-text h4, .skill-text h5, .skill-text h6 { margin: 20px 0 6px; font-size: 14px; font-weight: 600; color: var(--text); }
+  .skill-text h3 { font-size: 15px; }
+  .skill-text ul, .skill-text ol { padding-left: 22px; }
+  .skill-text li + li, .skill-text li > ul, .skill-text li > ol { margin-top: 4px; }
+  .skill-text li > :last-child { margin-bottom: 0; }
+  .skill-text strong { color: var(--text); font-weight: 500; }
+  .skill-text code { font-size: 12px; padding: 0 5px; }
+  .skill-text pre { padding: 10px 12px; overflow-x: auto; background: var(--bg); border: 1px solid var(--hairline); border-radius: 10px; font-family: var(--mono); font-size: 12px; line-height: 1.55; color: var(--text); }
+  .skill-text pre code { padding: 0; font-size: inherit; background: none; border: 0; }
+  .skill-text blockquote { padding-left: 12px; border-left: 2px solid var(--outline); }
+  .skill-text hr { margin: 16px 0; border: 0; border-top: 1px solid var(--hairline); }
 
   .sub { margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--hairline); }
   .sub .step-title { margin-top: 0; }
@@ -722,7 +770,7 @@
       <summary class="section-head"><h2>Your skills</h2><span class="chevron" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></span></summary>
       <div class="panel">
         <div class="plain ref">
-          <p>A skill is a way of working your agent can follow. To use one, type <code>/</code> and its name, such as <code>/grill-me</code>. Most were written for software work: your agent follows their method and puts it in terms of your work. Each name links to the skill's own text.</p>
+          <p>A skill is a way of working your agent can follow. To use one, type <code>/</code> and its name, such as <code>/grill-me</code>. Most were written for software work: your agent follows their method and puts it in terms of your work. Click a name to read what the skill tells your agent, without leaving this page.</p>
 {{skills}}
         </div>
       </div>
@@ -836,6 +884,8 @@
   </section>
 
   <p class="foot">An agent only knows what it can see in the workspace you open it in. Start each conversation in the workspace the work belongs to.</p>
+
+  <!-- skill texts -->
 </main>
 
 <script>
@@ -849,6 +899,22 @@
       var selection = window.getSelection();
       selection.removeAllRanges();
       selection.addRange(range);
+    });
+  });
+
+  // A skill's name in "Your skills" opens its box, with the skill's text, over the page. Esc, the
+  // close button or a click outside the box closes it.
+  document.querySelectorAll("[data-skill]").forEach(function (name) {
+    var box = document.getElementById("skill-" + name.getAttribute("data-skill"));
+    if (!box || typeof box.showModal !== "function") return;
+    name.addEventListener("click", function () {
+      box.showModal();
+      box.querySelector(".skill-body").scrollTop = 0;
+    });
+  });
+  document.querySelectorAll("dialog.skill").forEach(function (box) {
+    box.addEventListener("click", function (event) {
+      if (event.target === box) box.close();
     });
   });
 

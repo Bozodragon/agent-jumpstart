@@ -11,7 +11,8 @@
     "build:portall": "node bootstrap/build.js",
     "publish:portall": "node bootstrap/build.js && portall publish dist/portall --item jumpstart-install --public",
     "build:page": "node page/build.js",
-    "publish:page": "node page/build.js --publish"
+    "fetch:skill-texts": "node page/fetch-skill-texts.js",
+    "publish:page": "node page/fetch-skill-texts.js && node page/build.js --publish"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",

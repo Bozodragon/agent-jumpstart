@@ -3,10 +3,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, readdir, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
+import { ownSource, skillTextHtml } from '../../page/skill-texts.js';
 import { repo } from './harness.js';
 
 const run = promisify(execFile);
@@ -75,6 +76,18 @@ function sectionOf(text, heading) {
   return text.slice(start, end);
 }
 
+/**
+ * The page without the skills' boxes. A skill's text is its author's, so it may say what the page's
+ * own text mustn't ("project", "Copy", a clipboard): the checks on the page's own words leave it out.
+ * @param {string} html
+ */
+const withoutSkillTexts = (html) => html.replace(/<!-- skill texts -->[\s\S]*<!-- end of skill texts -->/, '');
+
+/** @param {import('node:test').TestContext} t @param {string} id @returns {Promise<string>} the page's HTML, without the skills' boxes */
+async function ownHtmlOf(t, id) {
+  return withoutSkillTexts(await readFile(join(await render(t), id, 'index.html'), 'utf8'));
+}
+
 /** @param {string} html @returns {string} the page's visible text, roughly as a reader sees it */
 function textOf(html) {
   return html
@@ -91,7 +104,7 @@ function textOf(html) {
 
 for (const [id, ownLine] of Object.entries(pages)) {
   test(`the ${id} page shows its own line to paste, once, and no other installer line`, async (t) => {
-    const html = await readFile(join(await render(t), id, 'index.html'), 'utf8');
+    const html = await ownHtmlOf(t, id);
     const pasted = [...html.matchAll(/irm\s+\S+\s*\|\s*iex/g)].map((match) => match[0]);
     assert.deepEqual(pasted, [ownLine, shareLogLine]);
     assert.doesNotMatch(html, /york-debug/);
@@ -99,7 +112,7 @@ for (const [id, ownLine] of Object.entries(pages)) {
   });
 
   test(`the ${id} page gives the three steps in order, then the share-log line under "If something went wrong"`, async (t) => {
-    const text = textOf(await readFile(join(await render(t), id, 'index.html'), 'utf8'));
+    const text = textOf(await ownHtmlOf(t, id));
     const places = [...steps, 'If something went wrong', shareLogLine].map((phrase) => text.indexOf(phrase));
     assert.ok(places.every((place) => place >= 0), `missing from the page: ${steps.filter((_, i) => places[i] < 0)}`);
     assert.deepEqual([...places].sort((a, b) => a - b), places, 'out of order');
@@ -107,7 +120,7 @@ for (const [id, ownLine] of Object.entries(pages)) {
   });
 
   test(`the ${id} page has no Copy button and no script that writes to the clipboard`, async (t) => {
-    const html = await readFile(join(await render(t), id, 'index.html'), 'utf8');
+    const html = await ownHtmlOf(t, id);
     // The workspaces demo has buttons of its own; neither line's box has one, and none says Copy.
     const boxes = html.split('class="copybox"').slice(1).map((box) => box.slice(0, box.indexOf('</div>', box.indexOf('class="line"'))));
     assert.equal(boxes.length, 2, 'the install line and the share-log line each have a box');
@@ -118,7 +131,7 @@ for (const [id, ownLine] of Object.entries(pages)) {
   });
 
   test(`the ${id} page tells you to click each line and press Ctrl+C, and a click selects the whole line`, async (t) => {
-    const html = await readFile(join(await render(t), id, 'index.html'), 'utf8');
+    const html = await ownHtmlOf(t, id);
     const hint = textOf(html).split('Click the line, then press Ctrl+C').length - 1;
     assert.equal(hint, 2, 'the hint belongs in the box of the install line and the box of the share-log line');
     assert.match(html, /addEventListener\("click"/, 'nothing happens on a click');
@@ -126,13 +139,13 @@ for (const [id, ownLine] of Object.entries(pages)) {
   });
 
   test(`the ${id} page links "See what this runs" to the script of each of its two lines`, async (t) => {
-    const html = await readFile(join(await render(t), id, 'index.html'), 'utf8');
+    const html = await ownHtmlOf(t, id);
     const links = [...html.matchAll(/<a [^>]*href="([^"]+)"[^>]*>\s*See what this runs\s*<\/a>/g)].map((match) => match[1]);
     assert.deepEqual(links, [addressIn(ownLine), addressIn(shareLogLine)]);
   });
 
   test(`the ${id} page warns that nothing may appear for up to half a minute after pasting`, async (t) => {
-    const text = textOf(await readFile(join(await render(t), id, 'index.html'), 'utf8'));
+    const text = textOf(await ownHtmlOf(t, id));
     const warning = text.indexOf('nothing may appear for up to half a minute');
     assert.ok(warning >= 0, 'the half-minute warning is missing');
     assert.ok(text.indexOf(ownLine) < warning && warning < text.indexOf(steps[1]), 'the warning belongs after the install line, in step 1');
@@ -140,14 +153,14 @@ for (const [id, ownLine] of Object.entries(pages)) {
   });
 
   test(`the ${id} page has its sections in order`, async (t) => {
-    const text = textOf(await readFile(join(await render(t), id, 'index.html'), 'utf8'));
+    const text = textOf(await ownHtmlOf(t, id));
     const places = sections.map((heading) => text.indexOf(` ${heading} `));
     assert.ok(places.every((place) => place >= 0), `missing from the page: ${sections.filter((_, i) => places[i] < 0)}`);
     assert.deepEqual([...places].sort((a, b) => a - b), places, 'out of order');
   });
 
   test(`the ${id} page's step 3 says to start work in the workspace it belongs to`, async (t) => {
-    const text = sectionOf(textOf(await readFile(join(await render(t), id, 'index.html'), 'utf8')), 'Set up');
+    const text = sectionOf(textOf(await ownHtmlOf(t, id)), 'Set up');
     assert.ok(
       text.includes(
         "Start work in the workspace it belongs to. Give each area of your work its own workspace, such as 'Event management' or 'Email campaigns'. " +
@@ -169,7 +182,7 @@ for (const [id, ownLine] of Object.entries(pages)) {
   });
 
   test(`the ${id} page has none of the old setup page's steps`, async (t) => {
-    const text = textOf(await readFile(join(await render(t), id, 'index.html'), 'utf8'));
+    const text = textOf(await ownHtmlOf(t, id));
     for (const old of ['Before the call', 'Install Claude Code', 'Setup prompt', 'Plan your day', 'Software Centre', 'Open Personal assistant and start a conversation']) {
       assert.ok(!text.includes(old), `still says "${old}"`);
     }
@@ -178,7 +191,7 @@ for (const [id, ownLine] of Object.entries(pages)) {
 
 /** @param {import('node:test').TestContext} t @param {string} id @returns {Promise<{ html: string, text: string }>} */
 async function pageOf(t, id) {
-  const html = await readFile(join(await render(t), id, 'index.html'), 'utf8');
+  const html = await ownHtmlOf(t, id);
   return { html, text: textOf(html) };
 }
 
@@ -191,7 +204,8 @@ function sectionHtml(html, heading) {
 }
 
 /** Where each skill's own text is: its SKILL.md in the source the profiles install it from. */
-const skillText = {
+const skillSource = {
+  'ask-matt': 'https://github.com/mattpocock/skills/blob/main/skills/engineering/ask-matt/SKILL.md',
   'grill-me': 'https://github.com/mattpocock/skills/blob/main/skills/productivity/grill-me/SKILL.md',
   grilling: 'https://github.com/mattpocock/skills/blob/main/skills/productivity/grilling/SKILL.md',
   'grill-with-docs': 'https://github.com/mattpocock/skills/blob/main/skills/engineering/grill-with-docs/SKILL.md',
@@ -211,15 +225,33 @@ const skillText = {
   jumpstart: 'https://github.com/Bozodragon/agent-jumpstart/blob/main/skills/jumpstart/SKILL.md',
   'setup-matt-pocock-skills': 'https://github.com/mattpocock/skills/blob/main/skills/engineering/setup-matt-pocock-skills/SKILL.md',
 };
+/** @param {string} name @returns {string} the address of a skill's own text */
+const sourceOf = (name) => skillSource[/** @type {keyof typeof skillSource} */ (name)];
+/** The skills whose text only hands over to others, and the skills it hands over to. */
+const handsOver = { 'grill-me': ['grilling'], 'grill-with-docs': ['grilling', 'domain-modeling'] };
 const skillHeadings = {
-  'Thinking something through': ['grill-me', 'grilling', 'grill-with-docs', 'domain-modeling', 'wait-what', 'teach'],
+  'Thinking something through': ['ask-matt', 'grill-me', 'grilling', 'grill-with-docs', 'domain-modeling', 'wait-what', 'teach'],
   'Planning work': ['wayfinder', 'to-spec', 'to-tickets', 'to-questionnaire', 'handoff'],
   'Finding out and making things': ['research', 'prototype', 'wizard', 'frontend-design', 'unslop'],
   'Setting up': ['jumpstart', 'setup-matt-pocock-skills'],
 };
 
+/** @param {string} name @returns {Promise<string>} a skill's text as its box shows it: from page/skill-texts, or ours where it is */
+async function skillTextOf(name) {
+  const own = ownSource(sourceOf(name));
+  const markdown = await readFile(own ? join(repo, own) : join(repo, 'page', 'skill-texts', `${name}.md`), 'utf8');
+  return skillTextHtml(markdown, sourceOf(name));
+}
+
+/** @param {string} html @param {string} name @returns {string} the HTML of that skill's box */
+function boxOf(html, name) {
+  const start = html.indexOf(`<dialog class="skill" id="skill-${name}"`);
+  assert.ok(start >= 0, `/${name} has no box`);
+  return html.slice(start, html.indexOf('</dialog>', start));
+}
+
 for (const id of Object.keys(pages)) {
-  test(`the ${id} page lists the skills under four headings, each name linking to the skill's own text with a short line`, async (t) => {
+  test(`the ${id} page lists the skills under four headings, each name a button that opens its box, with a short line`, async (t) => {
     const { html } = await pageOf(t, id);
     const groups = sectionHtml(html, 'Your skills').split('<h3>').slice(1);
     assert.deepEqual(
@@ -228,20 +260,40 @@ for (const id of Object.keys(pages)) {
     );
     for (const group of groups) {
       const heading = group.slice(0, group.indexOf('</h3>'));
-      const listed = [...group.matchAll(/<a href="([^"]+)"[^>]*>\/([\w-]+)<\/a>\s*<span>([^<]*)<\/span>/g)];
+      const listed = [...group.matchAll(/<button type="button" data-skill="([\w-]+)"[^>]*>\/([\w-]+)<\/button>\s*<span>([^<]*)<\/span>/g)];
       assert.deepEqual(listed.map((match) => match[2]), skillHeadings[/** @type {keyof typeof skillHeadings} */ (heading)], heading);
-      for (const [, href, name, line] of listed) {
-        assert.equal(href, skillText[/** @type {keyof typeof skillText} */ (name)], name);
+      for (const [, opens, name, line] of listed) {
+        assert.equal(opens, name, `/${name}'s button opens another skill's box`);
         const words = line.trim().split(/\s+/).length;
         assert.ok(words >= 6 && words <= 15, `/${name}'s line is ${words} words: "${line}"`);
       }
     }
+    assert.doesNotMatch(sectionHtml(html, 'Your skills'), /<a href="https:\/\/github\.com/, 'a skill name still takes the reader off the page');
     assert.ok(
       textOf(sectionHtml(html, 'Your skills')).includes('the agent runs this one when a skill needs it'),
       '/setup-matt-pocock-skills should say the agent runs it when a skill needs it',
     );
+    assert.match(html, /\.showModal\(\)/, "nothing opens a skill's box");
   });
 
+  test(`the ${id} page has a box for each skill with its text, linking Matt Pocock's skills to their AI Hero page and the rest to their source`, async (t) => {
+    const html = await readFile(join(await render(t), id, 'index.html'), 'utf8');
+    for (const name of Object.values(skillHeadings).flat()) {
+      const box = boxOf(html, name);
+      assert.ok(box.includes(await skillTextOf(name)), `/${name}'s box doesn't show its text`);
+      assert.doesNotMatch(box, /^(name|description): /m, `/${name}'s box shows its front matter`);
+      const links = [...box.slice(box.indexOf('class="skill-foot"')).matchAll(/<a href="([^"]+)"/g)].map((match) => match[1]);
+      const matts = sourceOf(name).startsWith('https://github.com/mattpocock/');
+      assert.deepEqual(links, [matts ? `https://www.aihero.dev/skills-${name}` : sourceOf(name)], name);
+    }
+    for (const [name, others] of Object.entries(handsOver)) {
+      const box = boxOf(html, name);
+      for (const other of others) {
+        assert.ok(box.includes(`<h3 class="skill-runs">/${other}</h3>`) && box.includes(await skillTextOf(other)), `/${name}'s box should show /${other}'s text`);
+      }
+      assert.ok(textOf(box).includes(`All /${name} does is hand over to`), `/${name}'s box should say it hands over`);
+    }
+  });
   test(`the ${id} page says "project" once, to say T3 Code calls workspaces that`, async (t) => {
     const { text } = await pageOf(t, id);
     assert.equal(text.match(/project/gi)?.length, 1, 'our own things are workspaces, never projects');
@@ -436,7 +488,7 @@ test('each profile names the line its page shows, and that line runs the bootstr
 });
 
 test('the york page links to a Gmail draft to Jacob, with the subject and a place for the log', async (t) => {
-  const html = await readFile(join(await render(t), 'york', 'index.html'), 'utf8');
+  const html = await ownHtmlOf(t, 'york');
   const href = html.match(/href="(https:\/\/mail\.google\.com\/[^"]+)"/)?.[1];
   assert.ok(href, 'no Gmail link on the page');
   const draft = new URL(href.replace(/&amp;/g, '&')).searchParams;
@@ -449,7 +501,7 @@ test('the york page links to a Gmail draft to Jacob, with the subject and a plac
 });
 
 test('the default page links to a Gmail draft to Jacob at his live.co.uk address, and names him and that address', async (t) => {
-  const html = await readFile(join(await render(t), 'default', 'index.html'), 'utf8');
+  const html = await ownHtmlOf(t, 'default');
   const href = html.match(/href="(https:\/\/mail\.google\.com\/[^"]+)"/)?.[1];
   assert.ok(href, 'no Gmail link on the page');
   const draft = new URL(href.replace(/&amp;/g, '&')).searchParams;
@@ -462,6 +514,59 @@ test('the default page links to a Gmail draft to Jacob at his live.co.uk address
 });
 
 test('the york page also shows the address it sends the log to', async (t) => {
-  const text = textOf(await readFile(join(await render(t), 'york', 'index.html'), 'utf8'));
+  const text = textOf(await ownHtmlOf(t, 'york'));
   assert.ok(text.includes('jacob.hamood@york.ac.uk'), 'the address is not shown');
+});
+
+
+test("a skill's text shows as written, escaped, without its front matter, and with the files beside it linked on GitHub", () => {
+  const source = 'https://github.com/mattpocock/skills/blob/main/skills/productivity/teach/SKILL.md';
+  const html = skillTextHtml(
+    [
+      '---',
+      'name: teach',
+      'description: Teach.',
+      '---',
+      '',
+      '# Teach',
+      '',
+      'Use **`/grill-me`** first. Fill in <question title>, then',
+      'read [the format](./MISSION-FORMAT.md) or [the guide](https://example.com/a?b=1&c=2).',
+      '',
+      '- one',
+      '  - nested _here_',
+      '- two',
+      '',
+      '1. first',
+      '2. second',
+      '',
+      '```',
+      '<spec-template>',
+      '```',
+      '',
+      'Then [your page](<address>#your-skills).',
+    ].join('\n'),
+    source,
+  );
+  assert.ok(!html.includes('name: teach'), 'the front matter is shown');
+  assert.match(html, /^<h3>Teach<\/h3>/, "the skill's top heading sits under the box's own");
+  assert.ok(html.includes('<strong><code>/grill-me</code></strong>'));
+  assert.ok(html.includes('Fill in &lt;question title&gt;, then read'), 'a placeholder should show as written, and a paragraph read as one');
+  assert.ok(html.includes('<a href="https://github.com/mattpocock/skills/blob/main/skills/productivity/teach/MISSION-FORMAT.md" target="_blank" rel="noopener">the format</a>'));
+  assert.ok(html.includes('<a href="https://example.com/a?b=1&amp;c=2" target="_blank" rel="noopener">the guide</a>'));
+  assert.ok(html.includes('<ul><li>one<ul><li>nested <em>here</em></li></ul></li><li>two</li></ul>'), html);
+  assert.ok(html.includes('<ol><li>first</li><li>second</li></ol>'), html);
+  assert.ok(html.includes('<pre><code>&lt;spec-template&gt;</code></pre>'));
+  assert.ok(html.includes('<p>Then your page.</p>'), "a placeholder address isn't a link");
+  assert.doesNotMatch(html, /<(?!\/?(h3|p|strong|code|a|ul|ol|li|em|pre)\b)[a-z]/, 'only the tags the renderer writes are in it');
+});
+
+test("page/skill-texts holds the text of every skill on the page that isn't this repository's own, and nothing else", async () => {
+  const copied = (await readdir(join(repo, 'page', 'skill-texts'))).sort();
+  const expected = Object.values(skillHeadings)
+    .flat()
+    .filter((name) => !ownSource(sourceOf(name)))
+    .map((name) => `${name}.md`)
+    .sort();
+  assert.deepEqual(copied, expected, 'run node page/fetch-skill-texts.js');
 });
