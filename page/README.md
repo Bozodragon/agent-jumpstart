@@ -19,7 +19,11 @@ The page a team member follows along with, and comes back to as a reference. "Se
 
 The `setupPage` texts are plain text with two marks: `**words**` for bold and `[words](https://address)` for a link, which opens in a new tab. Everything else is shown as written. Adapting the page for a new team is an edit to its profile, not to the template.
 
-`skills.json` holds "Your skills": the four headings, and under each the skills in order, each with a line of about ten words and `text`, the address of its own `SKILL.md` in the source it's installed from. The build refuses a skill that a profile doesn't install (a name in its `skills`, or the last part of a one-skill source).
+`skills.json` holds "Your skills": the four headings, and under each the skills in order. Each skill has a line of about ten words; `source`, the address of its own `SKILL.md` on GitHub in the source it's installed from; for Matt Pocock's skills, `about`, his page on that skill at AI Hero (`https://www.aihero.dev/skills-<name>`); and, for a skill whose text only hands over to others (`/grill-me` and `/grill-with-docs`), `runs`, the skills it hands over to. The build refuses a skill that a profile doesn't install (a name in its `skills`, or the last part of a one-skill source).
+
+Each skill's name is a button that opens its box over the page, so the reader doesn't leave it. The box shows the skill's text as the agent reads it (its `SKILL.md`, without the front matter), then the text of each skill in its `runs`, and ends with a link to read more: AI Hero's page for Matt Pocock's skills, the skill's source on GitHub for the rest. The boxes sit at the end of the page, between `<!-- skill texts -->` and `<!-- end of skill texts -->`. A skill's text is its author's, so it may say what the page's own text mustn't ("project", "Copy", the clipboard): the build checks the page's lines before putting the boxes in, and the tests read the page without them.
+
+The texts are copied into `page/skill-texts/<name>.md` by `node page/fetch-skill-texts.js` (`npm run fetch:skill-texts`), from each skill's `source` on its default branch, which is what the installer installs. So the build and the tests need no network. `npm run publish:page` copies them again first, so a published page shows the skills as they are that day: commit any change it makes. Run it by hand after adding or moving a skill in `skills.json`; the tests check the folder holds exactly the page's skills. A skill of this repository's own (`/jumpstart`) isn't copied: the build reads its `SKILL.md` where it is. `page/skill-texts.js` turns a text into HTML: headings, paragraphs, lists, fenced code, quotes and links, with everything else escaped, so a placeholder such as `<question title>` shows as written. A link to a file beside the skill goes to that file on GitHub.
 
 Our own text never says "project": a workspace is a "workspace", and what's in one is "work" or "a piece of work". The one exception is the sentence in "Finding your way round T3 Code" saying T3 Code calls workspaces "projects". That includes the profiles' wording, and the tests count it.
 
@@ -31,12 +35,13 @@ The workspaces demo is ported from its prototype ("What it sees"): drag the agen
 
 ```
 npm run build:page      # renders dist/page/<profile>/index.html, with Jumpstart's templates beside it
-npm run publish:page    # renders, then publishes each page as a public Portall item
+npm run fetch:skill-texts   # copies each skill's text into page/skill-texts
+npm run publish:page    # copies the skills' texts, renders, then publishes each page as a public Portall item
 ```
 
 Each page is published as the item named by the first part of its profile's `page` address, so `https://jumpstart-york.portall.dev/` is the item `jumpstart-york` and `https://jumpstart.portall.dev/` is `jumpstart`. The publish stops if Portall prints a different address.
 
-The build refuses a page that doesn't show its own line exactly once, shows another profile's line, leaves a `{{placeholder}}` unfilled, or lacks one of the keys above. `installer/test/page.test.js` renders both pages and checks the lines, the order of the steps and sections, each section's text in that profile's wording, every skill under its heading with its link, the one "projects", the T3 Code section's points and labelled screenshots, the five anchors, where to send the log, and that none of the old setup page's steps are back.
+The build refuses a page that doesn't show its own line exactly once, shows another profile's line, leaves a `{{placeholder}}` unfilled, or lacks one of the keys above. `installer/test/page.test.js` renders both pages and checks the lines, the order of the steps and sections, each section's text in that profile's wording, every skill under its heading with its box, its text and its link, the one "projects", the T3 Code section's points and labelled screenshots, the five anchors, where to send the log, and that none of the old setup page's steps are back.
 
 ## The two lines
 

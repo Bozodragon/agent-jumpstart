@@ -1,28 +1,29 @@
 {
   "Thinking something through": [
-    { "name": "grill-me", "line": "Interviews you closely, one question at a time, to sharpen a plan.", "text": "https://github.com/mattpocock/skills/blob/main/skills/productivity/grill-me/SKILL.md" },
-    { "name": "grilling", "line": "Asks hard questions about a plan, decision or idea to test it.", "text": "https://github.com/mattpocock/skills/blob/main/skills/productivity/grilling/SKILL.md" },
-    { "name": "grill-with-docs", "line": "The same interview, writing down decisions and agreed words as it goes.", "text": "https://github.com/mattpocock/skills/blob/main/skills/engineering/grill-with-docs/SKILL.md" },
-    { "name": "domain-modeling", "line": "Pins down the words your work uses, and records the decisions made.", "text": "https://github.com/mattpocock/skills/blob/main/skills/engineering/domain-modeling/SKILL.md" },
-    { "name": "wait-what", "line": "Explains the agent's last message again, in a different way.", "text": "https://github.com/mattpocock/skills/blob/main/skills/productivity/wait-what/SKILL.md" },
-    { "name": "teach", "line": "Teaches you a new skill or idea, step by step, where you are.", "text": "https://github.com/mattpocock/skills/blob/main/skills/productivity/teach/SKILL.md" }
+    { "name": "ask-matt", "line": "Suggests which skill fits what you're doing, and what comes next.", "source": "https://github.com/mattpocock/skills/blob/main/skills/engineering/ask-matt/SKILL.md", "about": "https://www.aihero.dev/skills-ask-matt" },
+    { "name": "grill-me", "line": "Interviews you closely, one question at a time, to sharpen a plan.", "source": "https://github.com/mattpocock/skills/blob/main/skills/productivity/grill-me/SKILL.md", "about": "https://www.aihero.dev/skills-grill-me", "runs": ["grilling"] },
+    { "name": "grilling", "line": "Asks hard questions about a plan, decision or idea to test it.", "source": "https://github.com/mattpocock/skills/blob/main/skills/productivity/grilling/SKILL.md", "about": "https://www.aihero.dev/skills-grilling" },
+    { "name": "grill-with-docs", "line": "The same interview, writing down decisions and agreed words as it goes.", "source": "https://github.com/mattpocock/skills/blob/main/skills/engineering/grill-with-docs/SKILL.md", "about": "https://www.aihero.dev/skills-grill-with-docs", "runs": ["grilling", "domain-modeling"] },
+    { "name": "domain-modeling", "line": "Pins down the words your work uses, and records the decisions made.", "source": "https://github.com/mattpocock/skills/blob/main/skills/engineering/domain-modeling/SKILL.md", "about": "https://www.aihero.dev/skills-domain-modeling" },
+    { "name": "wait-what", "line": "Explains the agent's last message again, in a different way.", "source": "https://github.com/mattpocock/skills/blob/main/skills/productivity/wait-what/SKILL.md", "about": "https://www.aihero.dev/skills-wait-what" },
+    { "name": "teach", "line": "Teaches you a new skill or idea, step by step, where you are.", "source": "https://github.com/mattpocock/skills/blob/main/skills/productivity/teach/SKILL.md", "about": "https://www.aihero.dev/skills-teach" }
   ],
   "Planning work": [
-    { "name": "wayfinder", "line": "Maps out work too big for one conversation, then settles each decision.", "text": "https://github.com/mattpocock/skills/blob/main/skills/engineering/wayfinder/SKILL.md" },
-    { "name": "to-spec", "line": "Turns what you've discussed into a written plan for the work.", "text": "https://github.com/mattpocock/skills/blob/main/skills/engineering/to-spec/SKILL.md" },
-    { "name": "to-tickets", "line": "Breaks a plan into separate tasks, saying which must come first.", "text": "https://github.com/mattpocock/skills/blob/main/skills/engineering/to-tickets/SKILL.md" },
-    { "name": "to-questionnaire", "line": "Turns a decision you can't settle into a questionnaire for someone else.", "text": "https://github.com/mattpocock/skills/blob/main/skills/productivity/to-questionnaire/SKILL.md" },
-    { "name": "handoff", "line": "Sums up the conversation in a note another agent can pick up.", "text": "https://github.com/mattpocock/skills/blob/main/skills/productivity/handoff/SKILL.md" }
+    { "name": "wayfinder", "line": "Maps out work too big for one conversation, then settles each decision.", "source": "https://github.com/mattpocock/skills/blob/main/skills/engineering/wayfinder/SKILL.md", "about": "https://www.aihero.dev/skills-wayfinder" },
+    { "name": "to-spec", "line": "Turns what you've discussed into a written plan for the work.", "source": "https://github.com/mattpocock/skills/blob/main/skills/engineering/to-spec/SKILL.md", "about": "https://www.aihero.dev/skills-to-spec" },
+    { "name": "to-tickets", "line": "Breaks a plan into separate tasks, saying which must come first.", "source": "https://github.com/mattpocock/skills/blob/main/skills/engineering/to-tickets/SKILL.md", "about": "https://www.aihero.dev/skills-to-tickets" },
+    { "name": "to-questionnaire", "line": "Turns a decision you can't settle into a questionnaire for someone else.", "source": "https://github.com/mattpocock/skills/blob/main/skills/productivity/to-questionnaire/SKILL.md", "about": "https://www.aihero.dev/skills-to-questionnaire" },
+    { "name": "handoff", "line": "Sums up the conversation in a note another agent can pick up.", "source": "https://github.com/mattpocock/skills/blob/main/skills/productivity/handoff/SKILL.md", "about": "https://www.aihero.dev/skills-handoff" }
   ],
   "Finding out and making things": [
-    { "name": "research", "line": "Looks into a question using trustworthy, original sources, and saves the findings.", "text": "https://github.com/mattpocock/skills/blob/main/skills/engineering/research/SKILL.md" },
-    { "name": "prototype", "line": "Builds a rough, throwaway version of something to answer a question.", "text": "https://github.com/mattpocock/skills/blob/main/skills/engineering/prototype/SKILL.md" },
-    { "name": "wizard", "line": "Makes a step-by-step guide through things only you can do.", "text": "https://github.com/mattpocock/skills/blob/main/skills/engineering/wizard/SKILL.md" },
-    { "name": "frontend-design", "line": "Designs pages and screens that look deliberate, not generic.", "text": "https://github.com/anthropics/skills/blob/main/skills/frontend-design/SKILL.md" },
-    { "name": "unslop", "line": "Takes the tell-tale signs of AI out of a piece of writing.", "text": "https://github.com/cursor/plugins/blob/main/pstack/skills/unslop/SKILL.md" }
+    { "name": "research", "line": "Looks into a question using trustworthy, original sources, and saves the findings.", "source": "https://github.com/mattpocock/skills/blob/main/skills/engineering/research/SKILL.md", "about": "https://www.aihero.dev/skills-research" },
+    { "name": "prototype", "line": "Builds a rough, throwaway version of something to answer a question.", "source": "https://github.com/mattpocock/skills/blob/main/skills/engineering/prototype/SKILL.md", "about": "https://www.aihero.dev/skills-prototype" },
+    { "name": "wizard", "line": "Makes a step-by-step guide through things only you can do.", "source": "https://github.com/mattpocock/skills/blob/main/skills/engineering/wizard/SKILL.md", "about": "https://www.aihero.dev/skills-wizard" },
+    { "name": "frontend-design", "line": "Designs pages and screens that look deliberate, not generic.", "source": "https://github.com/anthropics/skills/blob/main/skills/frontend-design/SKILL.md" },
+    { "name": "unslop", "line": "Takes the tell-tale signs of AI out of a piece of writing.", "source": "https://github.com/cursor/plugins/blob/main/pstack/skills/unslop/SKILL.md" }
   ],
   "Setting up": [
-    { "name": "jumpstart", "line": "Sets up your agent: learns about you, checks with you, makes workspaces.", "text": "https://github.com/Bozodragon/agent-jumpstart/blob/main/skills/jumpstart/SKILL.md" },
-    { "name": "setup-matt-pocock-skills", "line": "Prepares a workspace for skills (the agent runs this one when a skill needs it).", "text": "https://github.com/mattpocock/skills/blob/main/skills/engineering/setup-matt-pocock-skills/SKILL.md" }
+    { "name": "jumpstart", "line": "Sets up your agent: learns about you, checks with you, makes workspaces.", "source": "https://github.com/Bozodragon/agent-jumpstart/blob/main/skills/jumpstart/SKILL.md" },
+    { "name": "setup-matt-pocock-skills", "line": "Prepares a workspace for skills (the agent runs this one when a skill needs it).", "source": "https://github.com/mattpocock/skills/blob/main/skills/engineering/setup-matt-pocock-skills/SKILL.md", "about": "https://www.aihero.dev/skills-setup-matt-pocock-skills" }
   ]
 }

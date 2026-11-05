@@ -58,7 +58,7 @@ test('each skill in the profile is installed with the pinned skills CLI, from it
   // -s <names> last because it takes every word after it. Skill sources aren't pinned at a commit.
   assert.deepEqual(runs.map((ran) => ran.args), [
     ['add', 'mattpocock/skills', '-g', '-a', 'claude-code', '-y', '-s',
-      'grilling', 'grill-me', 'grill-with-docs', 'domain-modeling', 'teach', 'to-questionnaire', 'handoff', 'wait-what',
+      'ask-matt', 'grilling', 'grill-me', 'grill-with-docs', 'domain-modeling', 'teach', 'to-questionnaire', 'handoff', 'wait-what',
       'research', 'wayfinder', 'to-spec', 'to-tickets', 'setup-matt-pocock-skills', 'prototype', 'wizard'],
     ['add', 'anthropics/skills', '-g', '-a', 'claude-code', '-y', '-s', 'frontend-design'],
     ['add', 'cursor/plugins/pstack/skills/unslop', '-g', '-a', 'claude-code', '-y'],
@@ -120,7 +120,7 @@ test("skills found in Claude's skills folder after the skills CLI ran are report
   assert.equal(result.code, 0, result.stderr);
   for (const name of all) checklistSays(result.stdout, `/${name} `, 'Installed');
   assert.doesNotMatch(result.stdout, /Not installed: it didn't arrive/);
-  checklistSays(result.stdout, 'Skills', 'All 18 installed');
+  checklistSays(result.stdout, 'Skills', 'All 19 installed');
   assert.deepEqual((await readSettings(where.home)).skillsInstalled, all);
 });
 
@@ -148,7 +148,7 @@ test("a skill already in Claude's skills folder that the installer didn't put th
     assert.equal(await readFile(join(where.home, skillFile(name)), 'utf8'), 'their own version');
   }
   checklistSays(result.stdout, '/grill-me ', 'Installed');
-  checklistSays(result.stdout, 'Skills', 'All 18 there: 15 installed, 3 already there');
+  checklistSays(result.stdout, 'Skills', 'All 19 there: 16 installed, 3 already there');
   const recorded = (await readSettings(where.home)).skillsInstalled;
   assert.deepEqual(recorded, all.filter((name) => !theirs.includes(name)));
 });
@@ -240,7 +240,7 @@ test('a first run looks up each skill source with git ls-remote, installs every 
   const runs = await fakeMachine(where.home).runs();
   const lastLookUp = runs.findLastIndex((ran) => ran.args[0] === 'ls-remote');
   assert.ok(lastLookUp < runs.findIndex((ran) => where.cli.isRun(ran) && ran.args[1] === 'add'), JSON.stringify(runs));
-  checklistSays(result.stdout, 'Skills', 'All 18 installed');
+  checklistSays(result.stdout, 'Skills', 'All 19 installed');
   assert.deepEqual((await readSettings(where.home)).skillSources, latest);
 });
 
@@ -255,7 +255,7 @@ test("a re-run with no skill source changed upstream since the last run download
   assert.deepEqual(await skillsCliRuns(where.home), []);
   assert.equal((await lookUps(where.home)).length, 4);
   for (const name of where.all) checklistSays(result.stdout, `/${name} `, 'Up to date');
-  checklistSays(result.stdout, 'Skills', 'All 18 up to date');
+  checklistSays(result.stdout, 'Skills', 'All 19 up to date');
   for (const name of where.all) assert.equal(await readFile(join(where.home, skillFile(name)), 'utf8'), 'an earlier copy');
   const settings = await readSettings(where.home);
   assert.deepEqual(settings.skillSources, latest);
@@ -274,7 +274,7 @@ test('a re-run where one skill source changed upstream downloads only that one a
   assert.deepEqual((await skillsCliRuns(where.home)).map((ran) => ran.args), [['add', 'anthropics/skills', '-g', '-a', 'claude-code', '-y', '-s', 'frontend-design']]);
   checklistSays(result.stdout, '/frontend-design ', 'Installed');
   checklistSays(result.stdout, '/grilling ', 'Up to date');
-  checklistSays(result.stdout, 'Skills', 'All 18 there: 1 installed, 17 up to date');
+  checklistSays(result.stdout, 'Skills', 'All 19 there: 1 installed, 18 up to date');
   assert.deepEqual((await readSettings(where.home)).skillSources, latest);
 });
 
