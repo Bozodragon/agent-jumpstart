@@ -14,17 +14,25 @@ const profilesFolder = fileURLToPath(new URL('../../profiles/', import.meta.url)
  * @property {string} [shareLogLine] The line the setup page gives for copying the newest installer log.
  * @property {string} [logGoesTo] Who the setup page says to send the log to, as it reads after "send it to".
  * @property {string} [logEmail] Their email address. With it, the setup page links to a Gmail
- *   draft to them, ready for the log; the draft's greeting uses `logGoesTo`.
+ *   draft to them, ready for the log; the draft's greeting uses `logGoesTo`. The log-sharing
+ *   script (bootstrap/share-log.ps1) reads both from the unpacked profile to say who to send it to.
+ * @property {{ workspaces: { heading: string, text: string }, whyT3Code: string[], privacy: string[] }} [setupPage]
+ *   The setup page's wording for this profile, read only by `page/build.js`: where workspaces are
+ *   (and why), why T3 Code, and the privacy explanation. See `page/README.md`.
  * @property {{ top: string, inGoogleDrive: boolean, defaultLocation?: string, choices: Choice[] }} workspaces
  *   `top` is the top workspace's folder name, created in the confirmed location with the chosen
  *   workspaces inside it. `defaultLocation` is the folder, within the user's profile folder,
  *   offered for workspaces when they aren't in Google Drive.
- * @property {{ install?: string }} [googleDrive] For a profile whose workspaces are in Google Drive:
- *   `install` says, in the person's words, how to get Google Drive for desktop and sign in, for
- *   a laptop that hasn't got it. Without it, they're sent to Google's download page.
- * @property {{ defaultModel?: string, effort?: string, codex?: boolean }} [t3] How T3 Code is set up
- *   when the installer installs it (never for a T3 already there): new threads use Claude with
- *   `defaultModel`, which must be a model id T3 knows exactly (`claude-opus-5-5`; T3 quietly
+ * @property {{ softwareCenter?: string, softwareCenterOffer?: string }} [googleDrive] Under a
+ *   profile whose workspaces live in Google Drive: `softwareCenter` is the name (or part of it)
+ *   that the laptop's Software Center lists Google Drive under. With it, a laptop without Drive
+ *   is checked for a Software Center that offers Drive, and the person is offered to install it
+ *   from there; without it, that check never runs. `softwareCenterOffer` is what's said then,
+ *   in the organisation's words ("York's Software Center can install it for you...").
+ * @property {{ defaultModel?: string, effort?: string, codex?: boolean }} [t3] What T3 Code's
+ *   settings get, just before the installer installs it and on every run for a T3 already there
+ *   (only what's missing: a key the person already has keeps its value): new threads use Claude
+ *   with `defaultModel`, which must be a model id T3 knows exactly (`claude-opus-5-5`; T3 quietly
  *   falls back to its own default for one it doesn't), at `effort` (such as `medium`); and
  *   `codex: false` turns T3's Codex off.
  * @property {Connector[]} connectors
@@ -52,9 +60,19 @@ const profilesFolder = fileURLToPath(new URL('../../profiles/', import.meta.url)
 
 /**
  * A connector the person can tick. `what` says what it lets the agent do, in a few plain words
- * that follow its name in the connectors notice ("Gmail: search and read your email").
- * @typedef {Choice & { what?: string }} Connector
+ * that follow its name in the connectors notice ("Gmail: search and read your email"). `note`, when
+ * it's ticked, is said under the list, such as which of the service's workspaces to choose.
+ * @typedef {Choice & { what?: string, note?: string }} Connector
  */
+
+/**
+ * The skills one of a profile's skill sources brings: its `names`, or, for a source that is the
+ * path to one skill, its last part.
+ * @param {{ source: string, names?: string[] }} source
+ */
+export function skillNames({ source, names }) {
+  return names ?? [source.split('/').at(-1) ?? source];
+}
 
 /** @returns {Promise<string[]>} */
 async function profileIds() {

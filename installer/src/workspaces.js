@@ -92,10 +92,12 @@ export async function createWorkspaces(top, chosen, log) {
  * is open or closed. T3 refuses a folder it already lists, which is taken as done, so a re-run
  * leaves the project as it is.
  * @param {Workspaces} workspaces @param {import('./t3.js').T3Result} t3
+ * @param {boolean} open Whether T3 Code may open this run. If not (Claude Code's sign-in was skipped),
+ * a T3 that hasn't opened yet isn't asked for: the row says the workspace is added on the next run.
  * @param {{ machine: import('./machine.js').Machine, log: import('./log.js').Log }} context
  * @returns {Promise<string>} the checklist's Workspaces line
  */
-export async function addToT3(workspaces, t3, { machine, log }) {
+export async function addToT3(workspaces, t3, open, { machine, log }) {
   const { top, topReady, notCreated } = workspaces;
   if (!topReady) return notCreated ?? 'Not created';
   const name = basename(top);
@@ -105,6 +107,10 @@ export async function addToT3(workspaces, t3, { machine, log }) {
     return `${name}, not in T3 Code: it isn't installed`;
   }
   if (!t3.opened || !t3.shim) {
+    if (!open) {
+      say(`${top} not added: T3 Code hasn't been opened yet, and isn't opened this run`);
+      return `${name}, not in T3 Code yet: it's added when you paste the line again`;
+    }
     say(`${top} not added: T3 Code hasn't been opened yet`);
     return `${name}, not in T3 Code yet: open T3 Code, then run this again`;
   }
@@ -114,7 +120,7 @@ export async function addToT3(workspaces, t3, { machine, log }) {
   const add = () =>
     keepTrying(
       { machine, every: 2000 },
-      () => machine.run(shim, ['project', 'add', top, '--title', name]),
+      () => machine.run(shim, ['project', 'add', top, '--title', name], { expected: stillStarting }),
       (ran) => !stillStarting(ran),
       () => say(`T3 Code is still starting, so adding ${top} is tried again in 2 seconds`),
     );

@@ -7,19 +7,21 @@
 //
 // T3 is set up for the person rather than walked through: just before its installer runs, two
 // files go in T3's data folder, which T3 reads only as it starts. client-settings.json marks its
-// first-run wizard done, and settings.json sets what the profile's `t3` says (Codex off; new
-// threads on Claude, with its model and effort). Either file already there is left as it is.
+// first-run wizard done and turns on usage and context in the floating island (`threadDetailsItems`;
+// the legacy `contextWindowMeterEnabled` is never written), and settings.json sets what the
+// profile's `t3` says (Codex off; new threads on Claude, with its model and effort).
 //
 // A T3 already on the laptop, on either channel and at any build, is left exactly as it is: no
 // download, no update and no switch of channel (T3 updates itself), and the channel isn't asked.
-// Its settings aren't touched.
+// Its settings get only what's missing, on every run: a key the person already has keeps its
+// value, including a `threadDetailsItems` with usage or context turned off.
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { basename, join } from 'node:path';
-import { keepTrying, system32 } from './machine.js';
+import { keepTrying, registryMiss, system32 } from './machine.js';
 import { loadManifest, toolEntry } from './manifest.js';
 import { messageOf } from './stop.js';
 import { checkSha512, findRelease } from './t3-release.js';
-import { change, exists, NotInstalled, obtain } from './tools.js';
+import { change, exists, isRecord, NotInstalled, obtain } from './tools.js';
 import * as ui from './ui.js';
 
 /**
@@ -45,15 +47,19 @@ import * as ui from './ui.js';
 export async function findT3({ places, machine, downloads, log }) {
   const entry = toolEntry(await loadManifest(downloads), 't3');
   if (!entry) return undefined;
-  const version = await installedVersion(machine, entry.install.versionIn);
   /** @type {('stable' | 'nightly')[]} */
   const channels = ['stable', 'nightly'];
-  /** @type {('stable' | 'nightly')[]} */
-  const programsThere = [];
-  for (const channel of channels) {
-    const where = entry.channels[channel];
-    if (where && (await exists(join(places.programs, entry.install.folder, where.program)))) programsThere.push(channel);
-  }
+  // reg.exe can take a moment, before anything else is on screen.
+  const { version, programsThere } = await ui.busy(`Checking whether ${entry.name} is installed`, async () => {
+    const version = await installedVersion(machine, entry.install.versionIn);
+    /** @type {('stable' | 'nightly')[]} */
+    const programsThere = [];
+    for (const channel of channels) {
+      const where = entry.channels[channel];
+      if (where && (await exists(join(places.programs, entry.install.folder, where.program)))) programsThere.push(channel);
+    }
+    return { version, programsThere };
+  });
   if (!version && programsThere.length === 0) {
     log.write(`${entry.name}: not installed yet`);
     return undefined;
@@ -68,13 +74,14 @@ export async function findT3({ places, machine, downloads, log }) {
 }
 
 /**
- * @param {import('./profile.js').Profile} profile Its `t3` says how a T3 installed now is set up.
+ * @param {import('./profile.js').Profile} profile Its `t3` says how T3's settings are set up.
  * @param {'stable' | 'nightly'} channel
- * @param {FoundT3 | undefined} found A T3 already installed, which is left as it is.
+ * @param {FoundT3 | undefined} found A T3 already installed, which is left as it is apart from missing settings.
+ * @param {boolean} open Whether T3 may open. If not, it's installed without being started, and nobody is asked to open it.
  * @param {import('./tools.js').Context} context
  * @returns {Promise<T3Result>}
  */
-export async function installT3(profile, channel, found, context) {
+export async function installT3(profile, channel, found, open, context) {
   const { places, machine, downloads, keepDownloads, log, attended } = context;
   const entry = toolEntry(await loadManifest(downloads), 't3');
   if (!entry) return { row: 'Not installed: the list of versions has no entry for it', installed: false, opened: false };
@@ -84,8 +91,9 @@ export async function installT3(profile, channel, found, context) {
   if (found) {
     ui.step(`Checking ${entry.name}`);
     say(`${found.version ?? 'a version Windows doesn\'t record'} (${found.channel}) is already installed, so it was left as it is`);
+    await setUpT3(profile, places.t3UserData, say);
     // An install that was already there may never have been opened.
-    const opened = await waitForFirstLaunch(shim, 0, { machine, attended, say, name: entry.name });
+    const opened = await waitForFirstLaunch(shim, 0, { machine, attended: attended && open, say, name: entry.name });
     const state = [found.channel, 'already installed, left as it is', ...(opened ? [] : ['not opened yet'])].join(', ');
     return { row: `${found.version ?? 'Version unknown'} (${state})`, installed: true, opened, shim };
   }
@@ -104,7 +112,7 @@ export async function installT3(profile, channel, found, context) {
         await checkSha512(file, release.sha512, say);
         // The install starts T3, which reads its settings only as it starts.
         await setUpT3(profile, places.t3UserData, say);
-        const ran = await machine.run(file, entry.install.arguments);
+        const ran = await machine.run(file, open ? entry.install.arguments : entry.install.arguments.filter((argument) => argument !== '--force-run'));
         if (ran.code !== 0) throw new NotInstalled(`its installer stopped with code ${ran.code}`);
       } finally {
         if (keepDownloads) say(`kept ${file}`);
@@ -124,7 +132,7 @@ export async function installT3(profile, channel, found, context) {
     }
   };
   // The download and the silent install show nothing of their own for about half a minute.
-  const outcome = await ui.busy(`Installing ${entry.name}. This takes about a minute, and ${entry.name} opens by itself when it's done.`, install, (outcome) =>
+  const outcome = await ui.busy(`Installing ${entry.name}. This takes about a minute${open ? `, and ${entry.name} opens by itself when it's done` : ''}.`, install, (outcome) =>
     'release' in outcome
       ? { text: `${entry.name} ${outcome.release.version} installed`, ok: true }
       : { text: `${entry.name} not installed: ${outcome.reason}`, ok: false },
@@ -133,16 +141,18 @@ export async function installT3(profile, channel, found, context) {
   const { release } = outcome;
 
   // The silent install starts T3 (--force-run).
-  const opened = await waitForFirstLaunch(shim, machine.patience, { machine, attended, say, name: entry.name });
+  const opened = await waitForFirstLaunch(shim, open ? machine.patience : 0, { machine, attended: attended && open, say, name: entry.name });
   const state = [channel, change.installed, ...(opened ? [] : ['not opened yet'])].join(', ');
   return { row: `${release.version} (${state})`, installed: true, opened, shim };
 }
 
 /**
- * Writes T3's settings for a T3 about to be installed, before it first starts: its first-run
- * wizard marked done, and what the profile's `t3` says. A file that's already there is left as it
- * is. Each written is read back and parsed, since T3 ignores one it can't parse. A file that
- * can't be written is logged, and the install goes ahead: T3 then starts with its own defaults.
+ * Sets up T3's settings, before T3 first starts when it is about to be installed, and on every
+ * run for one already there: its first-run wizard marked done, what the profile's `t3` says, and
+ * usage and context on in the floating island. Only what's missing is added. A key the person
+ * (or T3) already has keeps its value, and a file with nothing missing isn't written again. Each
+ * file written is read back and parsed, since T3 ignores one it can't parse. A file that can't
+ * be read or written is logged and left, and the run goes on: T3 then uses its own defaults.
  * @param {import('./profile.js').Profile} profile @param {string} folder T3's data folder
  * @param {(line: string) => void} say
  */
@@ -155,23 +165,67 @@ async function setUpT3(profile, folder, say) {
     settings.defaultModelSelection = { instanceId: 'claudeAgent', model: defaultModel, options: effort ? [{ id: 'effort', value: effort }] : [] };
   }
   /** @type {[string, Record<string, unknown>][]} */
-  const files = [['client-settings.json', { onboardingCompletedAt: new Date().toISOString() }]];
+  const files = [['client-settings.json', { onboardingCompletedAt: new Date().toISOString(), threadDetailsItems: { usage: true, context: true } }]];
   if (Object.keys(settings).length > 0) files.push(['settings.json', settings]);
-  for (const [name, contents] of files) {
+  for (const [name, wanted] of files) {
     const file = join(folder, name);
-    if (await exists(file)) {
-      say(`${file} is already there, so it's left as it is`);
-      continue;
-    }
     try {
+      const earlier = await readJson(file);
+      if (earlier === 'unreadable') {
+        say(`${file} can't be read, so it's left as it is`);
+        continue;
+      }
+      const added = missingFrom(earlier ?? {}, wanted);
+      if (Object.keys(added).length === 0) {
+        say(`${file} already has everything, so it's left as it is`);
+        continue;
+      }
       await mkdir(folder, { recursive: true });
-      await writeFile(file, `${JSON.stringify(contents, null, 2)}\n`, { flag: 'wx' });
+      await writeFile(file, `${JSON.stringify({ ...earlier, ...added }, null, 2)}
+`);
       JSON.parse(await readFile(file, 'utf8'));
-      say(`wrote ${file}: ${JSON.stringify(contents)}`);
+      say(earlier ? `added to ${file}: ${JSON.stringify(added)}` : `wrote ${file}: ${JSON.stringify(added)}`);
     } catch (error) {
       say(`couldn't write ${file}: ${messageOf(error)}`);
     }
   }
+}
+
+/**
+ * A settings file's contents: undefined when there's no file, 'unreadable' when it isn't a JSON
+ * object (it is then left alone).
+ * @param {string} file
+ * @returns {Promise<Record<string, unknown> | undefined | 'unreadable'>}
+ */
+async function readJson(file) {
+  if (!(await exists(file))) return undefined;
+  try {
+    const parsed = JSON.parse(await readFile(file, 'utf8'));
+    return isRecord(parsed) ? parsed : 'unreadable';
+  } catch {
+    return 'unreadable';
+  }
+}
+
+/**
+ * The part of `wanted` that `earlier` lacks, as the keys to merge over it. A key that's there,
+ * whatever its value, is the person's and is left whole: only `providerInstances` is looked into,
+ * one level down, so an instance of theirs doesn't hide Codex being switched off.
+ * @param {Record<string, unknown>} earlier @param {Record<string, unknown>} wanted
+ * @returns {Record<string, unknown>}
+ */
+function missingFrom(earlier, wanted) {
+  /** @type {Record<string, unknown>} */
+  const added = {};
+  for (const [key, value] of Object.entries(wanted)) {
+    const there = earlier[key];
+    if (there === undefined) added[key] = value;
+    else if (key === 'providerInstances' && isRecord(there) && isRecord(value)) {
+      const instances = Object.fromEntries(Object.entries(value).filter(([id]) => there[id] === undefined));
+      if (Object.keys(instances).length > 0) added[key] = { ...there, ...instances };
+    }
+  }
+  return added;
 }
 
 /**
@@ -181,7 +235,7 @@ async function setUpT3(profile, folder, say) {
  */
 async function installedVersion(machine, key) {
   const reg = system32('reg.exe');
-  const { code, output } = await machine.run(reg, ['query', key, '/v', 'DisplayVersion']);
+  const { code, output } = await machine.run(reg, ['query', key, '/v', 'DisplayVersion'], { expected: registryMiss });
   if (code !== 0) return undefined;
   return /^\s+DisplayVersion\s+REG_SZ\s+(\S+)/im.exec(output)?.[1];
 }
@@ -202,4 +256,31 @@ async function waitForFirstLaunch(shim, patience, { machine, attended, say, name
   const opened = await exists(shim);
   say(opened ? `first launch seen (${shim})` : `hasn't been opened yet (no ${shim})`);
   return opened;
+}
+
+/**
+ * Opens T3 Code at the end of a run by starting its program, without waiting for it, with the
+ * PATH as it is now, so it finds the tools and the Claude Code this run put on it. A T3 that's
+ * already open just comes to the front: it runs only once.
+ * @param {'stable' | 'nightly'} channel The channel of the T3 that's installed.
+ * @param {import('./tools.js').Context} context
+ */
+export async function openT3(channel, { places, machine, downloads, log }) {
+  const entry = toolEntry(await loadManifest(downloads), 't3');
+  const where = entry?.channels[channel];
+  if (!entry || !where) return;
+  const say = (/** @type {string} */ line) => log.write(`${entry.name}: ${line}`);
+  const program = join(places.programs, entry.install.folder, where.program);
+  if (!(await exists(program))) {
+    say(`not opened at the end: ${program} isn't there`);
+    return;
+  }
+  ui.step(`Opening ${entry.name}`);
+  try {
+    await machine.launch(program, []);
+  } catch (error) {
+    say(`couldn't be opened at the end: ${messageOf(error)}`);
+    return;
+  }
+  say(`opened at the end (${program})`);
 }

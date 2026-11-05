@@ -3,7 +3,25 @@
   "page": "https://jumpstart.arcforge.uk/",
   "pastedLine": "irm https://jumpstart-install.arcforge.uk/install.ps1 | iex",
   "shareLogLine": "irm https://jumpstart-install.arcforge.uk/share-log.ps1 | iex",
-  "logGoesTo": "the person who sent you this page",
+  "logGoesTo": "Jacob",
+  "logEmail": "jacob.hamood@live.co.uk",
+  "setupPage": {
+    "workspaces": {
+      "heading": "Where your workspaces are.",
+      "text": "Your top workspace is in your **Documents** folder, on this laptop."
+    },
+    "whyT3Code": [
+      "T3 Code names your threads for you, saves a version of your work in one click, and keeps gaining features. It lists your workspaces, so you can start each conversation in the one the work belongs to."
+    ],
+    "privacy": [
+      "What Anthropic does with your conversations depends on your Claude plan.",
+      "**On Claude Free, Pro or Max**, Anthropic's consumer terms apply, and its **Help improve Claude** setting decides whether Anthropic may use your chats and coding sessions to improve Claude. With it on, Anthropic may keep that data for up to 5 years; with it off, it keeps to its 30-day data retention period. To check it or turn it off, open claude.ai's [data privacy controls](https://claude.ai/settings/data-privacy-controls).",
+      "**On Claude Team or Enterprise**, under contract with Anthropic, your conversations aren't used for training, nor is anything the agent reads for you. In Anthropic's words: \"By default, we will not use your inputs or outputs from our commercial products (e.g. Claude for Work, Anthropic API, Claude Gov, etc.) to train our models.\"",
+      "**On Team or Enterprise, they're deleted within 30 days.** Anthropic deletes them from its back-end storage systems within 30 days, unless its automated trust and safety systems flag one as breaking its [Usage Policy](https://www.anthropic.com/legal/aup). A flagged conversation is kept for up to 2 years.",
+      "**Feedback is the exception.** If you send Anthropic feedback, such as with a thumbs up or down on claude.ai, it keeps that whole conversation for up to 5 years and may use it to train its models.",
+      "Anthropic's own pages say more: [Is my data used for model training?](https://privacy.claude.com/en/articles/7996868-is-my-data-used-for-model-training), [How long do you store my organization's data?](https://privacy.claude.com/en/articles/7996866-how-long-do-you-store-my-organization-s-data) and [Updates to our consumer terms](https://www.anthropic.com/news/updates-to-our-consumer-terms)."
+    ]
+  },
   "workspaces": {
     "top": "Claude",
     "inGoogleDrive": false,
@@ -42,8 +60,9 @@
     },
     {
       "name": "Asana",
-      "what": "see your tasks and projects and, when you ask, create or update tasks",
-      "default": false
+      "what": "see your tasks and, when you ask, create or update them",
+      "default": false,
+      "note": "For Asana: at the top of Asana's page, choose your team's workspace. Unless your team works there, don't choose the one named after your work email's domain (the part after the @). Asana makes that one for everyone with an email address there."
     },
     {
       "name": "Google Docs",

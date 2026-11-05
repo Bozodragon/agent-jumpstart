@@ -99,11 +99,45 @@ test('Windows PowerShell parses all four with no errors and finds no method call
   assert.equal(out.trim(), '');
 });
 
-test("the bootstrap downloads with Windows' own curl.exe and its progress bar, and falls back to Invoke-WebRequest", async () => {
+test("the bootstrap shows one line per download, with its size and a percentage, instead of curl's progress bar, and falls back to Invoke-WebRequest", async () => {
   const text = code((await read('york.ps1')).toString('ascii'));
   // Invoke-WebRequest's own progress bar makes Windows PowerShell 5.1 download very slowly, so it stays off.
   assert.match(text, /\$ProgressPreference = 'SilentlyContinue'/);
   assert.match(text, /Join-Path \$env:SystemRoot 'System32\\curl\.exe'/);
-  assert.match(text, /& \$curl --fail --location --progress-bar --output \$Path \$Url/);
+  // curl's bar flashed #=#=# on the redirect, then jumped to 100%.
+  assert.doesNotMatch(text, /--progress-bar|\s-#(\s|$)/m, "curl's progress bar");
+  // curl's own progress meter (its stderr) is read line by line while it runs...
+  assert.match(text, /& \$curl --fail --location --output \$Path \$Url 2>&1 \| ForEach-Object/);
+  // ...and each download's line, naming it with its size and a percentage, is redrawn in place.
+  assert.match(text, /\$line = "\$label \(\$size\) \$percent%"/);
+  assert.match(text, /Write-Host -NoNewline "`r\$line"/);
+  // A redirect's reply is finished the moment it starts, so a finished line waits for curl to end.
+  assert.match(text, /Write-Host "`r\$line"/);
+  assert.match(text, /Save-Download \$nodeUrl \$nodeZip "Node\.js \$nodeVersion"/);
+  assert.match(text, /Save-Download \$programUrl \$programZip 'the installer'/);
   assert.match(text, /Invoke-WebRequest -UseBasicParsing -Uri \$Url -OutFile \$Path/);
+});
+
+test('both profiles name who the log goes to, with an email address', async () => {
+  for (const [id, who, email] of [['york', 'Jacob', 'jacob.hamood@york.ac.uk'], ['default', 'Jacob', 'jacob.hamood@live.co.uk']]) {
+    const profile = JSON.parse(await readFile(join(repo, 'profiles', `${id}.json`), 'utf8'));
+    assert.equal(profile.logGoesTo, who, id);
+    assert.equal(profile.logEmail, email, id);
+  }
+});
+
+test("share-log.ps1 reads which profile ran from the installer's settings.json, and names that profile's person and email, with a plain fallback", async () => {
+  const text = code((await read('share-log.ps1')).toString('ascii'));
+  assert.match(text, /Join-Path \$env:LOCALAPPDATA 'agent-jumpstart'/);
+  assert.match(text, /'settings\.json'/);
+  assert.match(text, /ConvertFrom-Json/);
+  assert.match(text, /\.profile\b/, 'the profile key of settings.json');
+  assert.match(text, /program\\profiles\\\$\w+\.json/, "the unpacked profile's own file");
+  assert.match(text, /\.logGoesTo\b/);
+  assert.match(text, /\.logEmail\b/);
+  // No one hard-coded: the person comes only from the profile.
+  assert.doesNotMatch(text, /Jacob|hamood/i);
+  // A run that stopped before settings.json, or an old install with no profile file, still gets a line that works.
+  assert.match(text, /person helping you/);
+  assert.match(text, /\bcatch\b/);
 });

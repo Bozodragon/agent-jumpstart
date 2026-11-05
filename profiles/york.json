@@ -5,6 +5,22 @@
   "shareLogLine": "irm https://jumpstart-install.arcforge.uk/share-log.ps1 | iex",
   "logGoesTo": "Jacob",
   "logEmail": "jacob.hamood@york.ac.uk",
+  "setupPage": {
+    "workspaces": {
+      "heading": "Why Google Drive?",
+      "text": "Your top workspace is in your Google Drive. Drive keeps your workspaces backed up and reachable from any device, and you can see and share their files like any others. If you chose Documents when the installer asked, your workspaces are on that laptop only."
+    },
+    "whyT3Code": [
+      "The full Claude app needs admin rights to install, which York's laptops don't give you. T3 Code doesn't. It also names your threads for you, saves a version of your work in one click, and keeps gaining features."
+    ],
+    "privacy": [
+      "York is on **Claude Enterprise**, under contract with Anthropic. Anthropic's [Commercial Terms](https://www.anthropic.com/legal/commercial-terms) apply, not its consumer terms.",
+      "**Your conversations aren't used for training**, nor is anything the agent reads for you. In Anthropic's words: \"By default, we will not use your inputs or outputs from our commercial products (e.g. Claude for Work, Anthropic API, Claude Gov, etc.) to train our models.\"",
+      "**They're deleted within 30 days.** Anthropic deletes them from its back-end storage systems within 30 days, unless its automated trust and safety systems flag one as breaking its [Usage Policy](https://www.anthropic.com/legal/aup). A flagged conversation is kept for up to 2 years.",
+      "**Feedback is the exception.** If you send Anthropic feedback, such as with a thumbs up or down on claude.ai, it keeps that whole conversation for up to 5 years and may use it to train its models.",
+      "Anthropic's own pages say more: [Is my data used for model training?](https://privacy.claude.com/en/articles/7996868-is-my-data-used-for-model-training) and [How long do you store my organization's data?](https://privacy.claude.com/en/articles/7996866-how-long-do-you-store-my-organization-s-data)."
+    ]
+  },
   "workspaces": {
     "top": "Claude",
     "inGoogleDrive": true,
@@ -20,7 +36,8 @@
     ]
   },
   "googleDrive": {
-    "install": "Open Software Centre from the Start menu, search for Google Drive, click Install, then open Google Drive from the Start menu and sign in with your university Google account."
+    "softwareCenter": "Google Drive",
+    "softwareCenterOffer": "Google Drive isn't on this laptop. With it, your workspaces are backed up and you can reach them from any device. York's Software Center can install it for you, with no admin rights needed."
   },
   "t3": {
     "defaultModel": "claude-opus-5-5",
@@ -45,8 +62,9 @@
     },
     {
       "name": "Asana",
-      "what": "see your tasks and projects and, when you ask, create or update tasks",
-      "default": false
+      "what": "see your tasks and, when you ask, create or update them",
+      "default": false,
+      "note": "For Asana: at the top of Asana's page, choose your team's workspace. Unless your team works there, don't choose york.ac.uk. Asana makes that one for everyone with a York email address."
     },
     {
       "name": "Google Docs",
