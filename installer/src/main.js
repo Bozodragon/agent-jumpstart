@@ -317,4 +317,8 @@ async function logUserPath(machine, log, when) {
   log.detail([`User PATH ${when}:`, ...entries.map((entry) => `  ${entry}`)].join('\n'));
 }
 
-process.exitCode = await main();
+// Exits here rather than letting Node wind down by itself. On Windows, a question asked after a
+// spinner can leave a read of the window pending (libuv's line-mode read isn't cancelled once the
+// spinner has turned raw mode off and the question has turned it on again in the same tick), and
+// Node waits for that read as it closes stdin, so the window wasn't given back until Enter (#85).
+process.exit(await main());
