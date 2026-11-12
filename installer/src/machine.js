@@ -28,6 +28,10 @@
 //                                         the program reads as it starts ("reads": [...]); the
 //                                         run's record then says which of them were there
 //                                         ("found": [...]), before it left anything.
+//                                         It may give a time it takes ("takes": ms): a real
+//                                         wait before the run returns, so a spinner over a fake
+//                                         run can be watched. Tests that don't watch one leave
+//                                         it out.
 //   <home>/fake-machine/machine-path.json written by a test: the machine-wide PATH, a list of
 //                                         folders. The real one is read from the registry.
 //   <home>/fake-machine/waiting.json      written by a test: time, which the fake only counts.
@@ -51,7 +55,9 @@
 // (for `runOnScreen`, the command and code only: its output goes to the person's window; for
 // `runOnScreenAndKeep`, the step that ran it logs what it printed), and every run's log holds
 // each `run` or `runHere` that failed (a code other than 0), with its output. Nothing else has
-// to log a program's command or output. A failure the caller expects (`run`'s `expected`, such as
+// to log a program's command or output, with one exception: the Claude Code step also logs what
+// Anthropic's install script printed when it exited 0 and left no claude.exe (see claude.js).
+// A failure the caller expects (`run`'s `expected`, such as
 // a registry value that isn't there) isn't one: only a debug run's log holds it, and the caller
 // logs what it means in plain words. A debug run's log also holds the PATH programs are
 // given, each time it changes.
@@ -132,7 +138,7 @@ export async function keepTrying({ machine, every, patience = machine.patience }
 
 /** @typedef {{ code: number, output: string }} Ran */
 
-/** @typedef {Partial<Ran> & { creates?: string[], writes?: Record<string, string>, reads?: string[] }} Reply What a fake run returns, leaves behind, and looks for as it starts. */
+/** @typedef {Partial<Ran> & { creates?: string[], writes?: Record<string, string>, reads?: string[], takes?: number }} Reply What a fake run returns, leaves behind, and looks for as it starts, and how many milliseconds it really takes before it returns. */
 
 /** @typedef {{ machinePath: string[], userPath: string[] }} PathSources The two PATHs, unexpanded. */
 
@@ -399,6 +405,7 @@ function fakeMachine(folder, home) {
       await mkdir(dirname(target), { recursive: true });
       await writeFile(target, contents);
     }
+    if (found.takes) await sleep(found.takes);
     return { code: found.code ?? 0, output: found.output ?? '' };
   }
 }
