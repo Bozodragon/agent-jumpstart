@@ -29,7 +29,7 @@ import { findPlaces } from './places.js';
 import { openMachine } from './machine.js';
 import { autoMemoryInUse, switchOffAutoMemory } from './memory.js';
 import { loadProfile, withFullSkills, withTeam } from './profile.js';
-import { answersFrom, askQuestions, askTeam, knownFrom } from './questions.js';
+import { answersFrom, askChange, askQuestions, askTeam, knownFrom } from './questions.js';
 import { installSkills } from './skills.js';
 import { findT3, installT3, openT3 } from './t3.js';
 import { End, messageOf, Stop } from './stop.js';
@@ -184,20 +184,29 @@ async function main() {
     // The setup page isn't opened: the person has just pasted its line into this window.
     ui.start(`Agent Jumpstart · ${offered.name}`);
 
-    // A re-run asks nothing an earlier run already wrote down.
+    // A re-run asks nothing an earlier run already wrote down, unless the person chooses to change it.
     const earlier = await readEarlierSettings(places.settings, offered.id, log);
     const asker = unattended ? answersFrom(answers) : ui.ask;
     /** @type {Set<string>} */
     const reused = new Set();
-    const ask = earlier ? knownFrom(earlier, asker, log, reused) : asker;
-    // The team first. From here on the run works from the profile with the team's entries merged in.
-    const team = await askTeam(offered, ask, log);
-    const profile = withTeam(offered, team);
+    /** The keys of the answers the person chose to change, which the settings no longer answer. @type {Set<string>} */
+    const changing = new Set();
+    const ask = earlier ? knownFrom(earlier, asker, log, reused, changing) : asker;
     /** @type {import('./tools.js').Context} */
     const context = { places, machine, downloads: options.downloads, keepDownloads: options.debug, log, attended: !unattended };
-    // What's already on the laptop decides what's asked. A list of versions that can't be read
-    // isn't a reason to stop yet: the first install stops on it, once the answers are saved.
+    // What's already on the laptop decides what's asked. Memory's sign is looked for before
+    // what to change, which offers Memory only when there's a sign of it or it was left on.
     const memoryInUse = await autoMemoryInUse(context);
+    // The team first, and on a re-run, what to change from last time. With a team saved, what
+    // to change comes first, so a ticked Team is asked next, in its usual place. From here on
+    // the run works from the profile with the team's entries merged in.
+    const teamSaved = earlier !== undefined && 'team' in earlier;
+    let team = teamSaved ? undefined : await askTeam(offered, ask, log);
+    if (earlier) for (const key of await askChange(offered, earlier, memoryInUse, asker, log)) changing.add(key);
+    if (teamSaved) team = await askTeam(offered, ask, log);
+    const profile = withTeam(offered, team);
+    // A list of versions that can't be read isn't a reason to stop yet: the first install stops
+    // on it, once the answers are saved.
     const foundT3 = await findT3(context).catch((error) => {
       if (!(error instanceof Stop)) throw error;
       log.write(`T3 Code: couldn't look for an earlier install: ${error.message}`);
@@ -231,6 +240,14 @@ async function main() {
     const installedFrom = /** @type {Record<string, string>} */ (
       Object.fromEntries(Object.entries(isRecord(earlier?.skillSources) ? earlier.skillSources : {}).filter(([, commit]) => typeof commit === 'string'))
     );
+    // A skills answer that has grown since last time can bring back skills left from an earlier,
+    // larger one, at an older commit, so the full set's source is added again whatever its commit.
+    const sizes = ['no', 'finished', 'beta'];
+    const fullSet = profile.fullSkills?.source;
+    if (fullSet && fullSet in installedFrom && sizes.includes(String(earlier?.fullSkills)) && sizes.indexOf(choices.fullSkills) > sizes.indexOf(String(earlier?.fullSkills))) {
+      log.write(`Skills: fullSkills has grown from "${earlier?.fullSkills}" to "${choices.fullSkills}", so ${fullSet} is added again`);
+      delete installedFrom[fullSet];
+    }
     const skills = await installSkills(withFullSkills(profile, choices.fullSkills), ours, installedFrom, context);
     /** @type {[string, string][]} */
     const skillsRows = skills.cli === undefined ? [] : [['Skills CLI', skills.cli]];
@@ -238,7 +255,7 @@ async function main() {
     record(skillsRows);
     note(ending, skills.rows, 'Skills');
     const skillsInstalled = [...new Set([...ours, ...skills.installed])];
-    const memoryResult = await switchOffAutoMemory(choices.switchOffMemory, context);
+    const memoryResult = await switchOffAutoMemory(choices.switchOffMemory, context, earlier?.autoMemory);
     const memory = memoryResult.row;
     record([['Memory', memory]]);
     // Written now, so a run that stops later still knows which skills are the installer's to

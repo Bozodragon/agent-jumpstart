@@ -136,6 +136,39 @@ export async function askTeam(profile, ask, log) {
 }
 
 /**
+ * On a re-run, which of last time's answers to ask again. Only answers the settings hold are
+ * offered: Team only under a profile with teams, and Memory only when a first run would ask it
+ * (`memoryInUse`) or last time it was left on. The top workspace and T3 Code's channel never
+ * are. Nothing ticked, the default, keeps everything. Settings never answer it, and it isn't saved.
+ * @param {import('./profile.js').Profile} profile @param {Record<string, unknown>} earlier
+ * @param {boolean} memoryInUse @param {Asker} ask the person or the answers file, not the settings
+ * @param {{ write(line: string): void }} log
+ * @returns {Promise<string[]>} the keys of the answers to ask again
+ */
+export async function askChange(profile, earlier, memoryInUse, ask, log) {
+  /** @type {[string, string, boolean][]} */
+  const offered = [
+    ['team', 'Team', Boolean(profile.teams?.length)],
+    ['workspaces', 'Workspaces', true],
+    ['connectors', 'Connectors', true],
+    ['extraTools', 'Extra tools', true],
+    ['github', 'GitHub', true],
+    ['fullSkills', 'Skills', true],
+    ['switchOffMemory', 'Memory', memoryInUse || earlier.switchOffMemory === false],
+  ];
+  const options = offered.filter(([key, , shown]) => shown && key in earlier).map(([value, label]) => ({ value, label }));
+  if (options.length === 0) return [];
+  const change = await ask.pick({
+    key: 'change',
+    message: "Anything to change from last time? Tick what to change, or press Enter to keep it all. Unticking something later doesn't remove it.",
+    options,
+    initial: [],
+  });
+  log.write(`Answer: change: ${JSON.stringify(change)}`);
+  return change;
+}
+
+/**
  * On a re-run, an earlier run's top workspace that's still there.
  * @param {Record<string, unknown> | undefined} earlier
  * @param {{ write(line: string): void }} log
@@ -285,7 +318,7 @@ async function theRest(profile, ask, log, found, { googleDriveFolder, workspaces
       initial: 'stable',
     }));
 
-  const github = await ask.confirm({ key: 'github', message: "Set up GitHub now? A later run won't ask this again.", initial: false });
+  const github = await ask.confirm({ key: 'github', message: 'Set up GitHub now? You can change this on a later run.', initial: false });
 
   const workspaces = await ask.pick({
     key: 'workspaces',
@@ -336,20 +369,37 @@ async function theRest(profile, ask, log, found, { googleDriveFolder, workspaces
 
 /**
  * On a re-run: answers from the settings file an earlier run wrote, so nothing already known is
- * asked again. Only an answer that's missing (a key added since), or no longer right (a folder
- * that's gone, a name the profile no longer offers), goes to `ask`, the person or the answers
- * file. The top workspace is the exception: askQuestions uses the settings' one itself while
- * it's there, so the question is put only when it's gone or was never written down, and the
- * settings never answer it.
+ * asked again. Only an answer the person chose to change, or one that's missing (a key added
+ * since) or no longer right (a folder that's gone, a name the profile no longer offers), goes to
+ * `ask`, the person or the answers file. The top workspace is the exception: askQuestions uses
+ * the settings' one itself while it's there, so the question is put only when it's gone or was
+ * never written down, and the settings never answer it.
  * @param {Record<string, unknown>} settings
  * @param {Asker} ask
  * @param {{ write(line: string): void }} log
  * @param {Set<string>} [reused] Filled with the key of each answer the settings gave.
+ * @param {Set<string>} [changing] The keys the person chose to change (see askChange), filled
+ *   in before their questions come. Each is put to `ask` with last time's answer as the default.
  * @returns {Asker}
  */
-export function knownFrom(settings, ask, log, reused = new Set()) {
+export function knownFrom(settings, ask, log, reused = new Set(), changing = new Set()) {
   const { topWorkspace, ...answerable } = settings;
   const known = answersFrom(answerable);
+  /**
+   * A question the person chose to change, asked with `initial`, last time's answer, or, when
+   * that's no longer right, the question's own default.
+   * @template Q, T
+   * @param {Q & { key: string }} q @param {() => Promise<unknown>} lastTime @param {(q: Q) => Promise<T>} put
+   * @returns {Promise<T>}
+   */
+  const again = async (q, lastTime, put) => {
+    log.write(`Settings: ${q.key} is to change, so it's asked again`);
+    const initial = await lastTime().catch((error) => {
+      if (!(error instanceof Stop)) throw error;
+      return /** @type {any} */ (q).initial;
+    });
+    return put({ ...q, initial });
+  };
   /**
    * @template T
    * @param {string} key @param {() => Promise<T>} fromSettings @param {() => Promise<T>} otherwise
@@ -370,11 +420,24 @@ export function knownFrom(settings, ask, log, reused = new Set()) {
     return otherwise();
   };
   return {
-    folder: (q) => either(q.key, () => known.folder(q), () => ask.folder(q)),
-    choose: (q) => either(q.key, () => known.choose(q), () => ask.choose(q)),
-    confirm: (q) => either(q.key, () => known.confirm(q), () => ask.confirm(q)),
-    pick: (q) => either(q.key, () => known.pick(q), () => ask.pick(q)),
+    folder: (q) => (changing.has(q.key) ? again(q, () => known.folder(q), (r) => ask.folder(r)) : either(q.key, () => known.folder(q), () => ask.folder(q))),
+    choose: (q) => (changing.has(q.key) ? again(q, () => known.choose(q), (r) => ask.choose(r)) : either(q.key, () => known.choose(q), () => ask.choose(q))),
+    confirm: (q) => (changing.has(q.key) ? again(q, () => known.confirm(q), (r) => ask.confirm(r)) : either(q.key, () => known.confirm(q), () => ask.confirm(q))),
+    // A pick's default is last time's ticks without anything the profile no longer offers.
+    pick: (q) => (changing.has(q.key) ? again(q, async () => lastTicks(settings[q.key], q.options, q.initial), (r) => ask.pick(r)) : either(q.key, () => known.pick(q), () => ask.pick(q))),
   };
+}
+
+/**
+ * A re-asked pick's default: last time's ticks that are still offered, or, when none were saved
+ * as a list, the question's own default.
+ * @template {string} T
+ * @param {unknown} saved @param {Option<T>[]} options @param {T[]} initial
+ * @returns {T[]}
+ */
+function lastTicks(saved, options, initial) {
+  if (!Array.isArray(saved)) return initial;
+  return saved.flatMap((value) => options.filter((option) => option.value === value).map((option) => option.value));
 }
 
 /**
