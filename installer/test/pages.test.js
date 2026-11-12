@@ -40,7 +40,7 @@ test('under --home each page the run sends the person to is opened on the fake m
   assert.ok(!log.text.includes(profile.page), log.text);
   assert.ok(log.text.includes(`Connectors page: ${profile.connectorsPage} (opened)`), log.text);
   // Beside each page, the way back to the window that's waiting for Enter.
-  const back = /come back to this window \(the blue PowerShell window\) and press Enter/g;
+  const back = /Once you're done in the browser, come back to the Agent Jumpstart window, where you pasted the line, and press Enter\./g;
   assert.equal(result.stdout.replace(/[│|]/g, ' ').replace(/\s+/g, ' ').match(back)?.length, 2, result.stdout);
 });
 

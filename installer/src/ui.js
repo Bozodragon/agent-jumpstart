@@ -1,14 +1,15 @@
 // What the person sees. The shape (a guide line, short steps, a closing
 // summary) follows the skills CLI's; the colours and symbols are our own.
 //
-// York's PowerShell window is the old Windows console (conhost), so everything here is made for
-// it first, and looks the same in Windows Terminal:
+// York's PowerShell window is Windows Terminal on Windows 11, but some laptops still open the old
+// Windows console (conhost), so everything here is made for the old console first, and looks the
+// same in Windows Terminal:
 // - Only characters its fonts draw: printable ASCII, single-line box drawing and the two dots
 //   (• ·). The prompt library picks its symbols once, as it loads, by guessing whether the window
 //   draws Unicode; the guess is made yes everywhere, so its guide lines are always box drawing,
 //   and the symbols the old console can't draw are swapped for ones it can as they're printed.
 // - Colour only on symbols and guide lines, never on the words, and never magenta or blue:
-//   PowerShell's window draws dark magenta in its own background blue, so the library's colours
+//   the old console draws dark magenta in its own background blue, so the library's colours
 //   are swapped for ones that read on that blue and on Windows Terminal's black alike.
 // - A spinner that doesn't flicker: one line updated in place once a second, never cleared.
 import { emitKeypressEvents } from 'node:readline';
@@ -18,6 +19,8 @@ import { Stop } from './stop.js';
 // The library guesses the window draws Unicode when it's inside Windows Terminal, which sets this.
 const windowsTerminal = 'WT_SESSION';
 const windowsTerminalSession = process.env[windowsTerminal];
+/** Whether the window the installer was started in is Windows Terminal, as found, before it's set below. */
+export const inWindowsTerminal = windowsTerminalSession !== undefined;
 process.env[windowsTerminal] ??= 'agent-jumpstart';
 const { confirm, intro, isCancel, log, multiselect, note, outro, select, text } = await import('@clack/prompts');
 // Put back, so the programs the installer runs see the window as it is.
@@ -231,7 +234,7 @@ export const bullet = '•';
  * Said beside every page the installer opens: the browser takes the focus, and the person has to
  * find their way back to the window that's waiting for them.
  */
-export const comeBack = "Once you're done in the browser, come back to this window (the blue PowerShell window) and press Enter.";
+export const comeBack = "Once you're done in the browser, come back to the Agent Jumpstart window, where you pasted the line, and press Enter.";
 
 /** @param {string} text @param {string} title */
 export function notice(text, title) {
