@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdir, readdir, writeFile } from 'node:fs/promises';
 import { basename, join } from 'node:path';
-import { fakeMachine, makeHome, readOnlyLog, readSettings, runWith } from './harness.js';
+import { fakeMachine, makeHome, readOnlyLog, readSettings, runWith, seedSettings } from './harness.js';
 
 /**
  * Everything in a home except the installer's own folder, which always holds a log, and the fake
@@ -27,19 +27,46 @@ test('a york run with nothing answered takes every default: the Drive folder it 
   assert.equal(result.code, 0, result.stdout + result.stderr);
   assert.deepEqual(await readSettings(where.home), {
     profile: 'york',
+    team: 'Another team',
     googleDriveFolder: join(where.home, 'My Drive'),
     workspacesLocation: join(where.home, 'My Drive'),
     channel: 'stable',
     github: false,
     workspaces: ['Thinking space', 'Personal assistant'],
-    connectors: ['Gmail', 'Google Drive', 'Google Calendar'],
-    extraTools: [],
+    connectors: ['Gmail', 'Google Drive', 'Google Calendar', 'Google Docs', 'Google Sheets'],
+    extraTools: ['apps-script'],
+    fullSkills: 'no',
     topWorkspace: join(where.home, 'My Drive', 'Claude'),
     skillsInstalled: [],
     switchOffMemory: true,
     autoMemory: 'off',
     email: null,
   });
+});
+
+test("a york re-run keeps the connector and extra-tool answers it saved, without adding York's new ticks", async (t) => {
+  const where = await makeHome(t);
+  const myDrive = join(where.home, 'My Drive');
+  await seedSettings(where.home, {
+    profile: 'york',
+    googleDriveFolder: myDrive,
+    workspacesLocation: myDrive,
+    topWorkspace: join(myDrive, 'Claude'),
+    channel: 'stable',
+    github: false,
+    workspaces: ['Thinking space', 'Personal assistant'],
+    connectors: ['Gmail'],
+    extraTools: [],
+    switchOffMemory: true,
+  });
+  await mkdir(join(myDrive, 'Claude'), { recursive: true });
+
+  const result = await runWith(where, 'york');
+
+  assert.equal(result.code, 0, result.stdout + result.stderr);
+  const settings = await readSettings(where.home);
+  assert.deepEqual(settings.connectors, ['Gmail']);
+  assert.deepEqual(settings.extraTools, []);
 });
 
 test('a york run answered from a file asks nothing and writes exactly those answers to the settings file', async (t) => {
@@ -61,8 +88,10 @@ test('a york run answered from a file asks nothing and writes exactly those answ
   assert.equal(result.code, 0, result.stdout + result.stderr);
   assert.deepEqual(await readSettings(where.home), {
     profile: 'york',
+    team: 'Another team',
     ...answers,
     workspacesLocation: otherDrive,
+    fullSkills: 'no',
     topWorkspace: join(otherDrive, 'Claude'),
     skillsInstalled: [],
     switchOffMemory: true,
@@ -88,6 +117,7 @@ test('a default run asks where workspaces should live, offering Documents, and n
     workspaces: ['Thinking space', 'Personal assistant'],
     connectors: ['Gmail', 'Google Drive', 'Google Calendar'],
     extraTools: [],
+    fullSkills: 'no',
     topWorkspace: join(where.home, 'Documents', 'Claude'),
     skillsInstalled: [],
     switchOffMemory: true,

@@ -32,7 +32,7 @@ async function seed(home, paths) {
  * @param {import('node:test').TestContext} t
  * @param {Record<string, unknown>} [answers]
  */
-async function aLaptopWhereEverythingWorks(t, answers = { channel: 'stable' }) {
+async function aLaptopWhereEverythingWorks(t, answers = { channel: 'stable', extraTools: [] }) {
   const where = await makeHome(t, answers);
   const profile = await readProfile('york');
   await supplyDownloads(where, ['skills']);
@@ -155,7 +155,7 @@ test("a step that didn't work is repeated at the end, with why, and named in the
 });
 
 test("a single step that didn't work is named in the closing line on its own", async (t) => {
-  const { where, machine, replies } = await aLaptopWhereEverythingWorks(t, { channel: 'stable', github: true });
+  const { where, machine, replies } = await aLaptopWhereEverythingWorks(t, { channel: 'stable', extraTools: [], github: true });
   const installer = await supplyT3(where.downloads, 'latest.yml', '0.1.2');
   // GitHub's sign-in doesn't finish; everything else works.
   await machine.setReplies({ ...replies, [`${installer} /S --force-run`]: { creates: [t3Leaves.program, t3Leaves.shim] }, 'gh.exe auth status': { code: 1 } });

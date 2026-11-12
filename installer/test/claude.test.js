@@ -1,6 +1,7 @@
-// Claude Code is installed by the installer, with Anthropic's own install script run in the
-// person's window, before T3 Code is installed and started: T3's first-run wizard, which would
-// have offered to install it, is skipped, and T3 reads PATH only as it starts.
+// Claude Code is installed by the installer, with Anthropic's own install script run hidden, its
+// output captured, under a spinner (the script shows no progress of its own), before T3 Code is
+// installed and started: T3's first-run wizard, which would have offered to install it, is
+// skipped, and T3 reads PATH only as it starts.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdir, writeFile } from 'node:fs/promises';
@@ -17,7 +18,7 @@ const installClaude = ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', '
 
 const signedIn = { output: JSON.stringify({ loggedIn: true, authMethod: 'claude.ai', email: 'jo.bloggs@york.ac.uk' }) };
 
-test("with no Claude Code, Anthropic's own installer runs in the person's window before T3 is installed, and Claude is then signed in as before", async (t) => {
+test("with no Claude Code, Anthropic's own installer runs hidden, not in the person's window, before T3 is installed, and Claude is then signed in as before", async (t) => {
   const where = await makeHome(t, { channel: 'stable' });
   const installer = await supplyT3(where.downloads, 'latest.yml', '0.1.3');
   const machine = fakeMachine(where.home);
@@ -36,13 +37,74 @@ test("with no Claude Code, Anthropic's own installer runs in the person's window
   const script = runs.findIndex((run) => run.file === powershell);
   assert.notEqual(script, -1, JSON.stringify(runs.map((run) => run.file)));
   assert.deepEqual(runs[script].args, installClaude);
-  assert.equal(runs[script].onScreen, true, "in the person's window, so they see its progress");
+  assert.equal(runs[script].onScreen, undefined, "not in the person's window: it shows no progress there");
   const t3 = runs.findIndex((run) => basename(run.file) === installer);
   const status = runs.findIndex((run) => basename(run.file) === 'claude.exe' && run.args.join(' ') === 'auth status');
   assert.ok(script < status && status < t3, 'Claude Code is installed and checked before T3 is installed and started');
   assert.ok(runs[t3].path.toLowerCase().split(';').includes(claudeFolder(where.home).toLowerCase()), 'and T3 starts with it on its PATH');
   assert.equal((await readSettings(where.home)).email, 'jo.bloggs@york.ac.uk');
   assert.doesNotMatch(result.stdout, /welcome screen/);
+});
+
+test("the install's spinner opens with its warning, and nothing promises progress below or says how the install ended outside a terminal", async (t) => {
+  const where = await makeHome(t, { channel: 'stable' });
+  const machine = fakeMachine(where.home);
+  await machine.setReplies({ 'powershell.exe': { creates: [claudeProgram] }, 'claude.exe --version': { output: '2.1.311 (Claude Code)\n' }, 'claude.exe auth status': signedIn });
+
+  const result = await runWith(where, 'york');
+
+  assert.equal(result.code, 0, result.stdout + result.stderr);
+  assert.match(result.stdout, /Installing Claude Code\. It's over 300 MB, so this can take several minutes/);
+  assert.doesNotMatch(result.stdout, /Its progress shows below/);
+  assert.doesNotMatch(result.stdout, /Claude Code installed|Claude Code not installed/);
+});
+
+test('a fake reply can be given a time to take, and the run waits that long for it', async (t) => {
+  const where = await makeHome(t, { channel: 'stable' });
+  const machine = fakeMachine(where.home);
+  await machine.setReplies({ 'powershell.exe': { creates: [claudeProgram], takes: 800 }, 'claude.exe --version': { output: '2.1.311 (Claude Code)\n' }, 'claude.exe auth status': signedIn });
+  const before = Date.now();
+
+  const result = await runWith(where, 'york');
+
+  assert.equal(result.code, 0, result.stdout + result.stderr);
+  // Starting node and the run's other steps take a while on their own; only a lower bound is steady.
+  assert.ok(Date.now() - before >= 800, `the run took ${Date.now() - before} ms`);
+});
+
+/** @param {string} text @param {string} part */
+const timesIn = (text, part) => text.split(part).length - 1;
+
+for (const { name, reply, debug, logged } of [
+  { name: 'after a non-zero exit', reply: { code: 1, output: 'Download failed: 403' }, debug: false, logged: true },
+  { name: 'after an exit code of 0 that leaves no claude.exe', reply: { output: 'Download failed: 403' }, debug: false, logged: true },
+  { name: 'after an exit code of 0 that leaves no claude.exe, in a debug run', reply: { output: 'Download failed: 403' }, debug: true, logged: true },
+  { name: 'after a success, in a debug run', reply: { output: 'Download failed: 403', creates: [claudeProgram] }, debug: true, logged: true },
+  { name: 'after a success in an ordinary run', reply: { output: 'Download failed: 403', creates: [claudeProgram] }, debug: false, logged: false },
+]) {
+  test(`Anthropic's installer's output is ${logged ? 'in' : 'not in'} the log ${name}${logged ? ', once' : ''}`, async (t) => {
+    const where = await makeHome(t, { channel: 'stable' });
+    await fakeMachine(where.home).setReplies({ 'powershell.exe': reply, 'claude.exe --version': { output: '2.1.311 (Claude Code)\n' }, 'claude.exe auth status': signedIn });
+
+    const result = await runWith(where, 'york', debug ? ['--debug'] : []);
+
+    assert.equal(result.code, 0, result.stdout + result.stderr);
+    const { text } = await readOnlyLog(where.home);
+    assert.equal(timesIn(text, 'Download failed: 403'), logged ? 1 : 0, text);
+    // Quiet runs hold it as Claude Code's own lines; a failed run holds it the way any program's is.
+    if (logged && !debug && reply.code === undefined) assert.match(text, /Claude Code: installer said: Download failed: 403/);
+    if (!debug && reply.code === undefined) assert.doesNotMatch(text, /Running:|Ran:/);
+  });
+}
+
+test('an ordinary run logs no Running: or Ran: line for a Claude Code installer that exited 0 and left nothing', async (t) => {
+  const where = await makeHome(t, { channel: 'stable' });
+  await fakeMachine(where.home).setReplies({ 'powershell.exe': { output: 'odd' } });
+
+  const result = await runWith(where, 'york');
+
+  assert.equal(result.code, 0, result.stdout + result.stderr);
+  assert.doesNotMatch((await readOnlyLog(where.home)).text, /Running:|Ran:/);
 });
 
 test("if Anthropic's installer doesn't leave Claude Code in place, the checklist says so, the run carries on, and its folder is on the PATH for later", async (t) => {

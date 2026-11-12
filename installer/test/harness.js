@@ -1,5 +1,5 @@
 // The one test seam: the real installer, run end to end in a temporary home with the
-// three overrides, so tests see only what it leaves behind.
+// test overrides, so tests see only what it leaves behind.
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -24,7 +24,7 @@ export async function readProfile(name) {
  * @typedef {'signed-in' | 'signed-out' | 'missing' | 'signed-in, no My Drive yet' | 'installed, never opened'} GoogleDriveState
  */
 
-/** @typedef {{ code?: number, output?: string, creates?: string[], writes?: Record<string, string>, reads?: string[] }} Reply What a faked program run returns, leaves behind, and looks for as it starts (its record says which of `reads` it `found`). */
+/** @typedef {{ code?: number, output?: string, creates?: string[], writes?: Record<string, string>, reads?: string[], takes?: number }} Reply What a faked program run returns, leaves behind, and looks for as it starts (its record says which of `reads` it `found`), and how many milliseconds it really takes before it returns (`takes`, to watch a spinner over a fake run; only claude.test.js uses it, in its test of `takes` itself, over Claude Code's install). */
 
 /**
  * A temporary home with an answers file and an empty downloads folder,
@@ -89,13 +89,21 @@ export async function seedSettings(home, settings) {
 }
 
 /**
- * Runs the real installer with the three test overrides.
+ * Runs the real installer with the test overrides. It starts with `WT_SESSION` unset unless
+ * `windowsTerminal` says otherwise, whatever window the tests themselves run in. It starts with no
+ * console of its own (detached), so the title it sets for its window can't reach the console the
+ * tests run in.
  * @param {string[]} args
+ * @param {{ windowsTerminal?: boolean }} [options] `windowsTerminal`: start with `WT_SESSION` set (true) or unset (false, the default)
  * @returns {Promise<{ code: number, stdout: string, stderr: string }>}
  */
-export function run(args) {
+export function run(args, { windowsTerminal = false } = {}) {
   return new Promise((resolve) => {
-    const options = { env: { ...process.env, NO_COLOR: '1' }, timeout: 30_000 };
+    /** @type {NodeJS.ProcessEnv} */
+    const env = { ...process.env, NO_COLOR: '1' };
+    if (windowsTerminal) env.WT_SESSION = 'a-test-window';
+    else delete env.WT_SESSION;
+    const options = { env, timeout: 30_000, detached: true, windowsHide: true };
     execFile(process.execPath, [program, ...args], options, (error, stdout, stderr) => {
       resolve({ code: error ? Number(error.code ?? 1) : 0, stdout, stderr });
     });
@@ -105,9 +113,23 @@ export function run(args) {
 /**
  * @param {{ home: string, downloads: string, answersFile: string }} where @param {string} profile
  * @param {string[]} [extra] more flags, such as `--debug`
+ * @param {{ windowsTerminal?: boolean }} [options] as for `run`
  */
-export function runWith(where, profile, extra = []) {
-  return run(['--profile', profile, ...extra, '--home', where.home, '--answers', where.answersFile, '--downloads', where.downloads]);
+export function runWith(where, profile, extra = [], options = {}) {
+  return run(['--profile', profile, ...extra, '--home', where.home, '--answers', where.answersFile, '--downloads', where.downloads], options);
+}
+
+/**
+ * Writes fixture profiles, by id, to a folder beside the home, for a run to take instead of the
+ * repo's. Spread what it returns into `runWith`'s flags.
+ * @param {{ home: string }} where @param {Record<string, object>} profiles
+ * @returns {Promise<string[]>} the `--profiles` flag and its folder
+ */
+export async function fixtureProfiles(where, profiles) {
+  const folder = join(where.home, '..', 'profiles');
+  await mkdir(folder, { recursive: true });
+  for (const [id, profile] of Object.entries(profiles)) await writeFile(join(folder, `${id}.json`), JSON.stringify(profile, null, 2));
+  return ['--profiles', folder];
 }
 
 /** @param {string} home */
@@ -218,7 +240,9 @@ export function fakeMachine(home) {
      * Each program it was asked to run, with the PATH it was started with (`path`, entries joined
      * with `;`), rebuilt at that moment from the machine PATH, the user PATH and the installer's own.
      * A reply's `reads` adds `found`: which of those files were there when the program started.
-     * @returns {Promise<{ file: string, args: string[], path: string, onScreen?: boolean, leftRunning?: boolean, found?: string[] }[]>}
+     * `env` is the environment variables a run was given beyond PATH, for that run only (the
+     * record has none for a run given none).
+     * @returns {Promise<{ file: string, args: string[], path: string, env?: Record<string, string>, onScreen?: boolean, leftRunning?: boolean, found?: string[] }[]>}
      */
     runs: () => readJson('runs.json', []),
     /** @returns {Promise<string[]>} the addresses it was asked to open in the browser, in order */
@@ -365,6 +389,22 @@ export async function readOnlyLog(home) {
   const logs = await readdir(join(stateFolder(home), 'logs'));
   assert.equal(logs.length, 1);
   return { name: logs[0], text: await readFile(join(stateFolder(home), 'logs', logs[0]), 'utf8') };
+}
+
+/** Every question a run can put, keyed as the answers file keys them. */
+const questions = ['team', 'topWorkspace', 'googleDriveFolder', 'workspacesLocation', 'channel', 'github', 'workspaces', 'connectors', 'extraTools', 'fullSkills', 'switchOffMemory'];
+
+/**
+ * An answers file that gives these answers and stops the run if any other question is put to
+ * it: every other answer is wrong, so a run that gets past the questions asked only these, and
+ * those in its `change` and in `asked`, which it leaves to their defaults.
+ * @param {string} answersFile @param {Record<string, unknown> & { change?: string[] }} answers
+ * @param {{ asked?: string[] }} [options]
+ */
+export async function answerOnly(answersFile, answers, { asked = [] } = {}) {
+  const left = (/** @type {string} */ key) => key in answers || [...(answers.change ?? []), ...asked].includes(key);
+  const refused = Object.fromEntries(questions.filter((key) => !left(key)).map((key) => [key, 'a question was asked']));
+  await writeFile(answersFile, JSON.stringify({ ...refused, ...answers }));
 }
 
 /** @param {string} path */

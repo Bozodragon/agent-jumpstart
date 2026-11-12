@@ -5,13 +5,16 @@
 //
 // --debug comes from the debug pasted line (york-debug.ps1).
 //
-// Three overrides let a test run it end to end with no network and no prompts:
+// Four overrides are for tests. Three let a test run it end to end with no network and no prompts:
 //   --home <folder>       use this as the user's profile folder (local AppData sits inside it);
 //                         everything that would change the rest of the machine, opening a page
 //                         in the browser among it, is faked inside it (machine.js)
 //   --answers <file>      answer every question from this JSON file; nothing is asked and
 //                         nothing waits for Enter, because nobody is at the screen
 //   --downloads <folder>  take downloads from this folder instead of the internet
+//
+// A fourth, for tests only, which the bootstrap never passes:
+//   --profiles <folder>   take profiles from this folder instead of the repo's
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { basename, dirname } from 'node:path';
 import { parseArgs } from 'node:util';
@@ -25,16 +28,17 @@ import { loadManifest, toolEntry } from './manifest.js';
 import { findPlaces } from './places.js';
 import { openMachine } from './machine.js';
 import { autoMemoryInUse, switchOffAutoMemory } from './memory.js';
-import { loadProfile } from './profile.js';
-import { answersFrom, askQuestions, knownFrom } from './questions.js';
+import { fullSkillsSizes, loadProfile, withFullSkills, withTeam } from './profile.js';
+import { answersFrom, askChange, askQuestions, askTeam, knownFrom, teamTicksToAdd } from './questions.js';
 import { installSkills } from './skills.js';
 import { findT3, installT3, openT3 } from './t3.js';
 import { End, messageOf, Stop } from './stop.js';
 import { installTools, isRecord } from './tools.js';
 import * as ui from './ui.js';
+import { setWindowTitle } from './window.js';
 import { addToT3, createWorkspaces } from './workspaces.js';
 
-/** @returns {{ profile: string, debug: boolean, home?: string, answers?: string, downloads?: string }} */
+/** @returns {{ profile: string, debug: boolean, home?: string, answers?: string, downloads?: string, profiles?: string }} */
 function readOptions() {
   const { values } = parseArgs({
     options: {
@@ -43,6 +47,7 @@ function readOptions() {
       home: { type: 'string' },
       answers: { type: 'string' },
       downloads: { type: 'string' },
+      profiles: { type: 'string' },
     },
     strict: true,
   });
@@ -102,6 +107,7 @@ async function reusedRows(earlier, choices, reused, downloads) {
   const list = (names) => (names.length === 0 ? 'None' : ui.inWords(names));
   /** @type {[string, string][]} */
   const rows = [];
+  if (reused.has('team') && choices.team !== undefined) rows.push(['Team', choices.team]);
   if (choices.topWorkspace === earlier.topWorkspace || reused.has('googleDriveFolder') || reused.has('workspacesLocation')) {
     rows.push(['Top workspace', choices.topWorkspace]);
   }
@@ -118,6 +124,11 @@ async function reusedRows(earlier, choices, reused, downloads) {
     });
     rows.push(['Extra tools', list(names)]);
   }
+  if (reused.has('fullSkills')) {
+    /** @type {Record<import('./profile.js').FullSkills, string>} */
+    const said = { no: 'Just the usual ones', finished: "Matt Pocock's finished skills", beta: "Matt Pocock's finished and unfinished skills" };
+    rows.push(['Skills', said[choices.fullSkills]]);
+  }
   if (reused.has('switchOffMemory')) rows.push(["Claude's memory", choices.switchOffMemory ? 'Switch it off' : 'Leave it on']);
   return rows;
 }
@@ -129,6 +140,8 @@ async function writeSettings(path, settings) {
 }
 
 async function main() {
+  // First, so the window is titled even on a run that stops at flags it can't read.
+  setWindowTitle();
   let options;
   try {
     options = readOptions();
@@ -143,8 +156,10 @@ async function main() {
   log.write(`Profile: ${options.profile}`);
   log.write(`Debug: ${options.debug ? 'on' : 'off'}`);
   log.write(`Home: ${places.home}`);
+  log.write(`Window: ${ui.inWindowsTerminal ? 'Windows Terminal' : 'not Windows Terminal, most likely the old console'}`);
   if (options.answers) log.write(`Answers from: ${options.answers}`);
   if (options.downloads) log.write(`Downloads from: ${options.downloads}`);
+  if (options.profiles) log.write(`Profiles from: ${options.profiles}`);
   const machine = openMachine(places, log);
   if (options.debug) await logUserPath(machine, log, 'before');
   /**
@@ -164,30 +179,52 @@ async function main() {
   };
 
   try {
-    const profile = await loadProfile(options.profile);
+    const offered = await loadProfile(options.profile, options.profiles);
     const answers = options.answers === undefined ? undefined : await readAnswers(options.answers);
     const unattended = answers !== undefined;
 
     // The setup page isn't opened: the person has just pasted its line into this window.
-    ui.start(`Agent Jumpstart · ${profile.name}`);
+    ui.start(`Agent Jumpstart · ${offered.name}`);
 
-    // A re-run asks nothing an earlier run already wrote down.
-    const earlier = await readEarlierSettings(places.settings, profile.id, log);
+    // A re-run asks nothing an earlier run already wrote down, unless the person chooses to change it.
+    const earlier = await readEarlierSettings(places.settings, offered.id, log);
     const asker = unattended ? answersFrom(answers) : ui.ask;
+    /** @type {Set<string>} */
+    const reused = new Set();
+    /**
+     * The keys of the answers to ask again, which the settings no longer answer, each with the
+     * ticks a team adds to a pick's default.
+     * @type {Map<string, string[]>}
+     */
+    const changing = new Map();
+    const ask = earlier ? knownFrom(earlier, asker, log, reused, changing) : asker;
     /** @type {import('./tools.js').Context} */
     const context = { places, machine, downloads: options.downloads, keepDownloads: options.debug, log, attended: !unattended };
-    // What's already on the laptop decides what's asked. A list of versions that can't be read
-    // isn't a reason to stop yet: the first install stops on it, once the answers are saved.
+    // What's already on the laptop decides what's asked. Memory's sign is looked for before
+    // what to change, which offers Memory only when there's a sign of it or it was left on.
     const memoryInUse = await autoMemoryInUse(context);
+    // The team first, and on a re-run, what to change from last time. With a team saved, what
+    // to change comes first, so a ticked Team is asked next, in its usual place. From here on
+    // the run works from the profile with the team's entries merged in.
+    const teamSaved = earlier !== undefined && 'team' in earlier;
+    let team = teamSaved ? undefined : await askTeam(offered, ask, log);
+    if (earlier) for (const key of await askChange(offered, earlier, memoryInUse, asker, log)) changing.set(key, []);
+    if (teamSaved) team = await askTeam(offered, ask, log);
+    const profile = withTeam(offered, team);
+    // A team joined or changed asks again each pick it ticks something new in, with its ticks added.
+    if (earlier) for (const [key, ticks] of teamTicksToAdd(profile, earlier, team, log)) changing.set(key, ticks);
+    // A list of versions that can't be read isn't a reason to stop yet: the first install stops
+    // on it, once the answers are saved.
     const foundT3 = await findT3(context).catch((error) => {
       if (!(error instanceof Stop)) throw error;
       log.write(`T3 Code: couldn't look for an earlier install: ${error.message}`);
       return undefined;
     });
     const found = { earlier, memoryInUse, t3Channel: foundT3?.channel };
-    /** @type {Set<string>} */
-    const reused = new Set();
-    const choices = await askQuestions(profile, places, earlier ? knownFrom(earlier, asker, log, reused) : asker, log, found, { machine, attended: !unattended });
+    const choices = {
+      ...(team === undefined ? {} : { team }),
+      ...(await askQuestions(profile, places, ask, log, found, { machine, attended: !unattended })),
+    };
     if (earlier) {
       const rows = await reusedRows(earlier, choices, reused, options.downloads);
       if (rows.length > 0) ui.summary(rows, 'Using your answers from last time');
@@ -211,14 +248,23 @@ async function main() {
     const installedFrom = /** @type {Record<string, string>} */ (
       Object.fromEntries(Object.entries(isRecord(earlier?.skillSources) ? earlier.skillSources : {}).filter(([, commit]) => typeof commit === 'string'))
     );
-    const skills = await installSkills(profile, ours, installedFrom, context);
+    // A skills answer that has grown since last time can bring back skills left from an earlier,
+    // larger one, at an older commit, so the full set's source is added again whatever its commit.
+    /** @type {readonly string[]} */
+    const sizes = fullSkillsSizes;
+    const fullSet = profile.fullSkills?.source;
+    if (fullSet && fullSet in installedFrom && sizes.includes(String(earlier?.fullSkills)) && sizes.indexOf(choices.fullSkills) > sizes.indexOf(String(earlier?.fullSkills))) {
+      log.write(`Skills: fullSkills has grown from "${earlier?.fullSkills}" to "${choices.fullSkills}", so ${fullSet} is added again`);
+      delete installedFrom[fullSet];
+    }
+    const skills = await installSkills(withFullSkills(profile, choices.fullSkills), ours, installedFrom, context);
     /** @type {[string, string][]} */
     const skillsRows = skills.cli === undefined ? [] : [['Skills CLI', skills.cli]];
     skillsRows.push(['Skills', skills.line]);
     record(skillsRows);
     note(ending, skills.rows, 'Skills');
     const skillsInstalled = [...new Set([...ours, ...skills.installed])];
-    const memoryResult = await switchOffAutoMemory(choices.switchOffMemory, context);
+    const memoryResult = await switchOffAutoMemory(choices.switchOffMemory, context, earlier?.autoMemory);
     const memory = memoryResult.row;
     record([['Memory', memory]]);
     // Written now, so a run that stops later still knows which skills are the installer's to

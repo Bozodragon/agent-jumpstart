@@ -57,10 +57,17 @@ export async function autoMemoryInUse({ places, machine, log }) {
 /**
  * @param {boolean} wanted Whether to switch it off (always, unless the person was asked and said No).
  * @param {MemoryContext} context
+ * @param {unknown} [before] What an earlier run recorded (the settings file's `autoMemory`). Once
+ *   it's `off`, a No leaves the switches off: they aren't switched back on, so `off` stays recorded,
+ *   or Jumpstart would stop switching memory off in new workspaces while the switches are still off.
  * @returns {Promise<{ row: string, autoMemory: 'off' | 'left on' }>} The checklist's Memory line,
  *   and what the settings file records for Jumpstart.
  */
-export async function switchOffAutoMemory(wanted, { places, machine, log }) {
+export async function switchOffAutoMemory(wanted, { places, machine, log }, before) {
+  if (!wanted && before === 'off') {
+    log.write("Automatic memory: left on, as the person chose, but an earlier run switched it off and it isn't switched back on; neither switch was touched");
+    return { row: "Still off: the Installer doesn't switch it back on", autoMemory: 'off' };
+  }
   if (!wanted) {
     log.write('Automatic memory: left on, as the person chose; neither switch was touched');
     return { row: 'Left on, as you had it', autoMemory: 'left on' };

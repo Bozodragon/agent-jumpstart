@@ -35,6 +35,24 @@
       }
     ]
   },
+  "teams": [
+    {
+      "name": "Systems, Data and Operations",
+      "connectors": [
+        {
+          "name": "Asana"
+        }
+      ]
+    },
+    {
+      "name": "Marketing",
+      "connectors": [
+        {
+          "name": "Asana"
+        }
+      ]
+    }
+  ],
   "googleDrive": {
     "softwareCenter": "Google Drive",
     "softwareCenterOffer": "Google Drive isn't on this laptop. With it, your workspaces are backed up and you can reach them from any device. York's Software Center can install it for you, with no admin rights needed."
@@ -69,12 +87,12 @@
     {
       "name": "Google Docs",
       "what": "read and edit your docs when you ask",
-      "default": false
+      "default": true
     },
     {
       "name": "Google Sheets",
       "what": "read and edit your spreadsheets when you ask",
-      "default": false
+      "default": true
     },
     {
       "name": "Google Slides",
@@ -91,7 +109,7 @@
     {
       "id": "apps-script",
       "question": "Would you like the agent to be able to publish and manage Apps Script projects for you?",
-      "default": false,
+      "default": true,
       "signIn": "A browser window will open. Choose your York Google account and allow what clasp asks for. Come back here when the page says \"Logged in!\".",
       "settingsPage": "https://script.google.com/home/usersettings",
       "settings": "On the Apps Script settings page, check your York account is the one shown at the top right. Then click Google Apps Script API and switch it on. Only you can change this setting."
@@ -134,5 +152,31 @@
         "jumpstart"
       ]
     }
-  ]
+  ],
+  "fullSkills": {
+    "source": "mattpocock/skills",
+    "finished": [
+      "code-review",
+      "codebase-design",
+      "diagnosing-bugs",
+      "implement",
+      "implement-spec",
+      "improve-codebase-architecture",
+      "pr",
+      "retro",
+      "tdd",
+      "triage",
+      "writing-for-agents"
+    ],
+    "beta": [
+      "chief-of-staff",
+      "claude-handoff",
+      "loop-me",
+      "setup-ts-deep-modules",
+      "software-factory",
+      "writing-beats",
+      "writing-fragments",
+      "writing-shape"
+    ]
+  }
 }

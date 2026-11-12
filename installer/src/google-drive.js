@@ -105,7 +105,7 @@ export async function readyGoogleDrive(profile, places, ask, drive, context) {
         '',
         'Open Google Drive from the Start menu and sign in with your work Google account.',
         '',
-        "Once it's signed in, come back to this window (the blue PowerShell window) and press Enter.",
+        ui.comeBack,
       ].join('\n'),
       'Get Google Drive ready',
     );
