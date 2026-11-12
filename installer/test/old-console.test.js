@@ -7,7 +7,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
-import { fakeMachine, makeHome, runWith } from './harness.js';
+import { checklistSays, fakeMachine, makeHome, runWith } from './harness.js';
 
 const drawable = new Set([
   '\n',
@@ -46,6 +46,8 @@ test('everything a run prints, from its first line through notices, the checklis
   const stoppedRun = await runWith(stopped, 'default');
   const signInRun = await runWith(signingIn, 'york');
   const noSuchTeamRun = await runWith(noSuchTeam, 'york');
+  // A re-run of the first, which says what it reuses from last time, its team and skills choice among them.
+  const reRun = await runWith(full, 'york');
 
   assert.equal(fullRun.code, 0, fullRun.stdout + fullRun.stderr);
   assert.match(fullRun.stdout, /Checklist/);
@@ -55,7 +57,10 @@ test('everything a run prints, from its first line through notices, the checklis
   assert.match(signInRun.stdout, /Paste once, then press Enter\./);
   assert.equal(noSuchTeamRun.code, 1, noSuchTeamRun.stdout + noSuchTeamRun.stderr);
   assert.match(noSuchTeamRun.stdout, /"Systems, Data and Operations", "Marketing", "Another team"/);
-  for (const { stdout, stderr } of [fullRun, stoppedRun, signInRun, noSuchTeamRun]) {
+  assert.equal(reRun.code, 0, reRun.stdout + reRun.stderr);
+  checklistSays(reRun.stdout, 'Team', 'Another team');
+  checklistSays(reRun.stdout, 'Skills', 'Just the usual ones');
+  for (const { stdout, stderr } of [fullRun, stoppedRun, signInRun, noSuchTeamRun, reRun]) {
     assert.deepEqual(undrawable(stdout + stderr), [], stdout + stderr);
   }
 });
