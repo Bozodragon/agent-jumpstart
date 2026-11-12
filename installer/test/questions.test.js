@@ -27,6 +27,7 @@ test('a york run with nothing answered takes every default: the Drive folder it 
   assert.equal(result.code, 0, result.stdout + result.stderr);
   assert.deepEqual(await readSettings(where.home), {
     profile: 'york',
+    team: 'Another team',
     googleDriveFolder: join(where.home, 'My Drive'),
     workspacesLocation: join(where.home, 'My Drive'),
     channel: 'stable',
@@ -34,6 +35,7 @@ test('a york run with nothing answered takes every default: the Drive folder it 
     workspaces: ['Thinking space', 'Personal assistant'],
     connectors: ['Gmail', 'Google Drive', 'Google Calendar', 'Google Docs', 'Google Sheets'],
     extraTools: ['apps-script'],
+    fullSkills: 'no',
     topWorkspace: join(where.home, 'My Drive', 'Claude'),
     skillsInstalled: [],
     switchOffMemory: true,
@@ -86,8 +88,10 @@ test('a york run answered from a file asks nothing and writes exactly those answ
   assert.equal(result.code, 0, result.stdout + result.stderr);
   assert.deepEqual(await readSettings(where.home), {
     profile: 'york',
+    team: 'Another team',
     ...answers,
     workspacesLocation: otherDrive,
+    fullSkills: 'no',
     topWorkspace: join(otherDrive, 'Claude'),
     skillsInstalled: [],
     switchOffMemory: true,
@@ -113,6 +117,7 @@ test('a default run asks where workspaces should live, offering Documents, and n
     workspaces: ['Thinking space', 'Personal assistant'],
     connectors: ['Gmail', 'Google Drive', 'Google Calendar'],
     extraTools: [],
+    fullSkills: 'no',
     topWorkspace: join(where.home, 'Documents', 'Claude'),
     skillsInstalled: [],
     switchOffMemory: true,

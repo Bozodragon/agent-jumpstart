@@ -39,9 +39,13 @@ test('everything a run prints, from its first line through notices, the checklis
     'claude.exe auth login': { output: "Opening browser to sign in...\nIf the browser didn't open, visit: https://claude.com/cai/oauth/authorize?code=true\nPaste code here if prompted > Login successful.\n" },
   });
 
+  // York's team names, as a stop on a team it doesn't offer prints them.
+  const noSuchTeam = await makeHome(t, { team: 'Finance' });
+
   const fullRun = await runWith(full, 'york');
   const stoppedRun = await runWith(stopped, 'default');
   const signInRun = await runWith(signingIn, 'york');
+  const noSuchTeamRun = await runWith(noSuchTeam, 'york');
 
   assert.equal(fullRun.code, 0, fullRun.stdout + fullRun.stderr);
   assert.match(fullRun.stdout, /Checklist/);
@@ -49,7 +53,9 @@ test('everything a run prints, from its first line through notices, the checklis
   assert.equal(stoppedRun.code, 1, stoppedRun.stdout + stoppedRun.stderr);
   assert.equal(signInRun.code, 0, signInRun.stdout + signInRun.stderr);
   assert.match(signInRun.stdout, /Paste once, then press Enter\./);
-  for (const { stdout, stderr } of [fullRun, stoppedRun, signInRun]) {
+  assert.equal(noSuchTeamRun.code, 1, noSuchTeamRun.stdout + noSuchTeamRun.stderr);
+  assert.match(noSuchTeamRun.stdout, /"Systems, Data and Operations", "Marketing", "Another team"/);
+  for (const { stdout, stderr } of [fullRun, stoppedRun, signInRun, noSuchTeamRun]) {
     assert.deepEqual(undrawable(stdout + stderr), [], stdout + stderr);
   }
 });

@@ -35,6 +35,24 @@
       }
     ]
   },
+  "teams": [
+    {
+      "name": "Systems, Data and Operations",
+      "connectors": [
+        {
+          "name": "Asana"
+        }
+      ]
+    },
+    {
+      "name": "Marketing",
+      "connectors": [
+        {
+          "name": "Asana"
+        }
+      ]
+    }
+  ],
   "googleDrive": {
     "softwareCenter": "Google Drive",
     "softwareCenterOffer": "Google Drive isn't on this laptop. With it, your workspaces are backed up and you can reach them from any device. York's Software Center can install it for you, with no admin rights needed."
@@ -134,5 +152,31 @@
         "jumpstart"
       ]
     }
-  ]
+  ],
+  "fullSkills": {
+    "source": "mattpocock/skills",
+    "finished": [
+      "code-review",
+      "codebase-design",
+      "diagnosing-bugs",
+      "implement",
+      "implement-spec",
+      "improve-codebase-architecture",
+      "pr",
+      "retro",
+      "tdd",
+      "triage",
+      "writing-for-agents"
+    ],
+    "beta": [
+      "chief-of-staff",
+      "claude-handoff",
+      "loop-me",
+      "setup-ts-deep-modules",
+      "software-factory",
+      "writing-beats",
+      "writing-fragments",
+      "writing-shape"
+    ]
+  }
 }

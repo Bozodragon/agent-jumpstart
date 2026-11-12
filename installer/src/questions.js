@@ -3,6 +3,7 @@
 import { stat } from 'node:fs/promises';
 import { dirname, isAbsolute, join } from 'node:path';
 import { describeGoogleDrive, findGoogleDrive, isFolder, readyGoogleDrive } from './google-drive.js';
+import { anotherTeam } from './profile.js';
 import { Stop } from './stop.js';
 import { existingTopWorkspaces, topWorkspaceIn } from './workspaces.js';
 
@@ -10,6 +11,8 @@ import { existingTopWorkspaces, topWorkspaceIn } from './workspaces.js';
  * What the person chose. These are the settings file's keys, which Jumpstart
  * and a re-run read, and the keys an answers file uses.
  * @typedef {object} Answers
+ * @property {string} [team] The chosen team's name, or `Another team`. Only under a profile that
+ *   lists teams. Saved for a later release: Jumpstart and the setup page don't read it yet.
  * @property {string | null} googleDriveFolder The confirmed My Drive folder, or null when the profile doesn't use Drive.
  * @property {string} workspacesLocation The folder the top workspace is in.
  * @property {string} topWorkspace The top workspace: a new one, named by the profile, in Google
@@ -20,9 +23,13 @@ import { existingTopWorkspaces, topWorkspaceIn } from './workspaces.js';
  * @property {string[]} workspaces The names of the ticked workspaces.
  * @property {string[]} connectors The names of the ticked connectors.
  * @property {string[]} extraTools The ids of the ticked extra tools.
+ * @property {FullSkills} fullSkills Which of Matt Pocock's full set of skills for writing code to
+ *   install as well as the profile's usual ones: none, his finished ones, or those and his unfinished ones.
  * @property {boolean} switchOffMemory Whether to switch off Claude's automatic memory. Asked only
  *   of someone who has been using it, with No as the default; otherwise true.
  */
+
+/** @typedef {'no' | 'finished' | 'beta'} FullSkills */
 
 /**
  * What the installer found before asking, which decides what is asked.
@@ -106,6 +113,26 @@ const anotherFolder = 'another';
  */
 export async function askQuestions(profile, places, ask, log, found, reach) {
   return theRest(profile, ask, log, found, await whereWorkspacesLive(profile, places, ask, log, found, reach));
+}
+
+/**
+ * Under a profile that lists teams, the first question: which team the person is in. Another
+ * team, last, is the default, so an answers file without `team` sets up what the profile does.
+ * Under a profile without teams it isn't asked, and gives no answer.
+ * @param {import('./profile.js').Profile} profile @param {Asker} ask
+ * @param {{ write(line: string): void }} log
+ * @returns {Promise<string | undefined>}
+ */
+export async function askTeam(profile, ask, log) {
+  if (!profile.teams?.length) return undefined;
+  const team = await ask.choose({
+    key: 'team',
+    message: 'Which team are you in?',
+    options: [...profile.teams.map(({ name }) => ({ value: name, label: name })), { value: anotherTeam, label: anotherTeam }],
+    initial: anotherTeam,
+  });
+  log.write(`Answer: team: ${JSON.stringify(team)}`);
+  return team;
 }
 
 /**
@@ -279,6 +306,17 @@ async function theRest(profile, ask, log, found, { googleDriveFolder, workspaces
     initial: profile.extraTools.filter((tool) => tool.default).map(({ id }) => id),
   });
 
+  const fullSkills = await ask.choose({
+    key: 'fullSkills',
+    message: "Would you also like Matt Pocock's full set of skills for writing code?",
+    options: /** @type {Option<FullSkills>[]} */ ([
+      { value: 'no', label: 'No, just the usual ones' },
+      { value: 'finished', label: 'Yes, his finished skills' },
+      { value: 'beta', label: 'Yes, and his unfinished ones as a beta' },
+    ]),
+    initial: 'no',
+  });
+
   // Someone who has been using it is asked, and keeps it unless they say otherwise. So is anyone
   // who answered before, so that answer is kept even once the signs of use have gone.
   const switchOffMemory =
@@ -291,7 +329,7 @@ async function theRest(profile, ask, log, found, { googleDriveFolder, workspaces
       : true;
 
   /** @type {Answers} */
-  const answers = { googleDriveFolder, workspacesLocation, topWorkspace, channel, github, workspaces, connectors, extraTools, switchOffMemory };
+  const answers = { googleDriveFolder, workspacesLocation, topWorkspace, channel, github, workspaces, connectors, extraTools, fullSkills, switchOffMemory };
   for (const [key, value] of Object.entries(answers)) log.write(`Answer: ${key}: ${JSON.stringify(value)}`);
   return answers;
 }

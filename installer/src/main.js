@@ -12,6 +12,9 @@
 //   --answers <file>      answer every question from this JSON file; nothing is asked and
 //                         nothing waits for Enter, because nobody is at the screen
 //   --downloads <folder>  take downloads from this folder instead of the internet
+//
+// A fourth, for tests only, which the bootstrap never passes:
+//   --profiles <folder>   take profiles from this folder instead of the repo's
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { basename, dirname } from 'node:path';
 import { parseArgs } from 'node:util';
@@ -25,8 +28,8 @@ import { loadManifest, toolEntry } from './manifest.js';
 import { findPlaces } from './places.js';
 import { openMachine } from './machine.js';
 import { autoMemoryInUse, switchOffAutoMemory } from './memory.js';
-import { loadProfile } from './profile.js';
-import { answersFrom, askQuestions, knownFrom } from './questions.js';
+import { loadProfile, withFullSkills, withTeam } from './profile.js';
+import { answersFrom, askQuestions, askTeam, knownFrom } from './questions.js';
 import { installSkills } from './skills.js';
 import { findT3, installT3, openT3 } from './t3.js';
 import { End, messageOf, Stop } from './stop.js';
@@ -35,7 +38,7 @@ import * as ui from './ui.js';
 import { setWindowTitle } from './window.js';
 import { addToT3, createWorkspaces } from './workspaces.js';
 
-/** @returns {{ profile: string, debug: boolean, home?: string, answers?: string, downloads?: string }} */
+/** @returns {{ profile: string, debug: boolean, home?: string, answers?: string, downloads?: string, profiles?: string }} */
 function readOptions() {
   const { values } = parseArgs({
     options: {
@@ -44,6 +47,7 @@ function readOptions() {
       home: { type: 'string' },
       answers: { type: 'string' },
       downloads: { type: 'string' },
+      profiles: { type: 'string' },
     },
     strict: true,
   });
@@ -103,6 +107,7 @@ async function reusedRows(earlier, choices, reused, downloads) {
   const list = (names) => (names.length === 0 ? 'None' : ui.inWords(names));
   /** @type {[string, string][]} */
   const rows = [];
+  if (reused.has('team') && choices.team !== undefined) rows.push(['Team', choices.team]);
   if (choices.topWorkspace === earlier.topWorkspace || reused.has('googleDriveFolder') || reused.has('workspacesLocation')) {
     rows.push(['Top workspace', choices.topWorkspace]);
   }
@@ -118,6 +123,10 @@ async function reusedRows(earlier, choices, reused, downloads) {
       return named.length > 0 ? named : [id];
     });
     rows.push(['Extra tools', list(names)]);
+  }
+  if (reused.has('fullSkills')) {
+    const said = { no: 'Just the usual ones', finished: "Matt Pocock's finished skills", beta: "Matt Pocock's finished and unfinished skills" };
+    rows.push(['Skills', said[choices.fullSkills]]);
   }
   if (reused.has('switchOffMemory')) rows.push(["Claude's memory", choices.switchOffMemory ? 'Switch it off' : 'Leave it on']);
   return rows;
@@ -148,6 +157,7 @@ async function main() {
   log.write(`Window: ${ui.inWindowsTerminal ? 'Windows Terminal' : 'not Windows Terminal, most likely the old console'}`);
   if (options.answers) log.write(`Answers from: ${options.answers}`);
   if (options.downloads) log.write(`Downloads from: ${options.downloads}`);
+  if (options.profiles) log.write(`Profiles from: ${options.profiles}`);
   const machine = openMachine(places, log);
   if (options.debug) await logUserPath(machine, log, 'before');
   /**
@@ -167,16 +177,22 @@ async function main() {
   };
 
   try {
-    const profile = await loadProfile(options.profile);
+    const offered = await loadProfile(options.profile, options.profiles);
     const answers = options.answers === undefined ? undefined : await readAnswers(options.answers);
     const unattended = answers !== undefined;
 
     // The setup page isn't opened: the person has just pasted its line into this window.
-    ui.start(`Agent Jumpstart · ${profile.name}`);
+    ui.start(`Agent Jumpstart · ${offered.name}`);
 
     // A re-run asks nothing an earlier run already wrote down.
-    const earlier = await readEarlierSettings(places.settings, profile.id, log);
+    const earlier = await readEarlierSettings(places.settings, offered.id, log);
     const asker = unattended ? answersFrom(answers) : ui.ask;
+    /** @type {Set<string>} */
+    const reused = new Set();
+    const ask = earlier ? knownFrom(earlier, asker, log, reused) : asker;
+    // The team first. From here on the run works from the profile with the team's entries merged in.
+    const team = await askTeam(offered, ask, log);
+    const profile = withTeam(offered, team);
     /** @type {import('./tools.js').Context} */
     const context = { places, machine, downloads: options.downloads, keepDownloads: options.debug, log, attended: !unattended };
     // What's already on the laptop decides what's asked. A list of versions that can't be read
@@ -188,9 +204,10 @@ async function main() {
       return undefined;
     });
     const found = { earlier, memoryInUse, t3Channel: foundT3?.channel };
-    /** @type {Set<string>} */
-    const reused = new Set();
-    const choices = await askQuestions(profile, places, earlier ? knownFrom(earlier, asker, log, reused) : asker, log, found, { machine, attended: !unattended });
+    const choices = {
+      ...(team === undefined ? {} : { team }),
+      ...(await askQuestions(profile, places, ask, log, found, { machine, attended: !unattended })),
+    };
     if (earlier) {
       const rows = await reusedRows(earlier, choices, reused, options.downloads);
       if (rows.length > 0) ui.summary(rows, 'Using your answers from last time');
@@ -214,7 +231,7 @@ async function main() {
     const installedFrom = /** @type {Record<string, string>} */ (
       Object.fromEntries(Object.entries(isRecord(earlier?.skillSources) ? earlier.skillSources : {}).filter(([, commit]) => typeof commit === 'string'))
     );
-    const skills = await installSkills(profile, ours, installedFrom, context);
+    const skills = await installSkills(withFullSkills(profile, choices.fullSkills), ours, installedFrom, context);
     /** @type {[string, string][]} */
     const skillsRows = skills.cli === undefined ? [] : [['Skills CLI', skills.cli]];
     skillsRows.push(['Skills', skills.line]);
