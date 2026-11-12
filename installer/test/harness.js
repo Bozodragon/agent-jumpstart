@@ -24,7 +24,7 @@ export async function readProfile(name) {
  * @typedef {'signed-in' | 'signed-out' | 'missing' | 'signed-in, no My Drive yet' | 'installed, never opened'} GoogleDriveState
  */
 
-/** @typedef {{ code?: number, output?: string, creates?: string[], writes?: Record<string, string>, reads?: string[] }} Reply What a faked program run returns, leaves behind, and looks for as it starts (its record says which of `reads` it `found`). */
+/** @typedef {{ code?: number, output?: string, creates?: string[], writes?: Record<string, string>, reads?: string[], takes?: number }} Reply What a faked program run returns, leaves behind, and looks for as it starts (its record says which of `reads` it `found`), and how many milliseconds it really takes before it returns (`takes`, to watch a spinner over a fake run; only the test of `takes` itself uses it). */
 
 /**
  * A temporary home with an answers file and an empty downloads folder,
@@ -89,13 +89,21 @@ export async function seedSettings(home, settings) {
 }
 
 /**
- * Runs the real installer with the test overrides.
+ * Runs the real installer with the test overrides. It starts with `WT_SESSION` unset unless
+ * `windowsTerminal` says otherwise, whatever window the tests themselves run in. It starts with no
+ * console of its own (detached), so the title it sets for its window can't reach the console the
+ * tests run in.
  * @param {string[]} args
+ * @param {{ windowsTerminal?: boolean }} [options] `windowsTerminal`: start with `WT_SESSION` set (true) or unset (false, the default)
  * @returns {Promise<{ code: number, stdout: string, stderr: string }>}
  */
-export function run(args) {
+export function run(args, { windowsTerminal = false } = {}) {
   return new Promise((resolve) => {
-    const options = { env: { ...process.env, NO_COLOR: '1' }, timeout: 30_000 };
+    /** @type {NodeJS.ProcessEnv} */
+    const env = { ...process.env, NO_COLOR: '1' };
+    if (windowsTerminal) env.WT_SESSION = 'a-test-window';
+    else delete env.WT_SESSION;
+    const options = { env, timeout: 30_000, detached: true, windowsHide: true };
     execFile(process.execPath, [program, ...args], options, (error, stdout, stderr) => {
       resolve({ code: error ? Number(error.code ?? 1) : 0, stdout, stderr });
     });
@@ -105,9 +113,10 @@ export function run(args) {
 /**
  * @param {{ home: string, downloads: string, answersFile: string }} where @param {string} profile
  * @param {string[]} [extra] more flags, such as `--debug`
+ * @param {{ windowsTerminal?: boolean }} [options] as for `run`
  */
-export function runWith(where, profile, extra = []) {
-  return run(['--profile', profile, ...extra, '--home', where.home, '--answers', where.answersFile, '--downloads', where.downloads]);
+export function runWith(where, profile, extra = [], options = {}) {
+  return run(['--profile', profile, ...extra, '--home', where.home, '--answers', where.answersFile, '--downloads', where.downloads], options);
 }
 
 /**

@@ -87,12 +87,12 @@
     {
       "name": "Google Docs",
       "what": "read and edit your docs when you ask",
-      "default": false
+      "default": true
     },
     {
       "name": "Google Sheets",
       "what": "read and edit your spreadsheets when you ask",
-      "default": false
+      "default": true
     },
     {
       "name": "Google Slides",
@@ -109,7 +109,7 @@
     {
       "id": "apps-script",
       "question": "Would you like the agent to be able to publish and manage Apps Script projects for you?",
-      "default": false,
+      "default": true,
       "signIn": "A browser window will open. Choose your York Google account and allow what clasp asks for. Come back here when the page says \"Logged in!\".",
       "settingsPage": "https://script.google.com/home/usersettings",
       "settings": "On the Apps Script settings page, check your York account is the one shown at the top right. Then click Google Apps Script API and switch it on. Only you can change this setting."

@@ -1,6 +1,6 @@
-// York's PowerShell window is the old Windows console (conhost), whose fonts draw far fewer
-// characters than Windows Terminal's: the prompt library's diamonds, circles and spinner frames
-// come out as boxes there. Everything the Installer prints is kept to what it can draw: printable
+// York's PowerShell window is Windows Terminal on Windows 11, but one test laptop had the old
+// Windows console (conhost), whose fonts draw far fewer characters than Windows Terminal's: the
+// prompt library's diamonds, circles and spinner frames come out as boxes there. Everything the Installer prints is kept to what it can draw: printable
 // ASCII, the single-line box drawing its guide lines and boxes are made of, and the two dots.
 // Prompts, the spinner and colours need a person at a real terminal, so they're checked by hand.
 import { test } from 'node:test';

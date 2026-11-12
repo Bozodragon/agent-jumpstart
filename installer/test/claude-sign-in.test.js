@@ -120,7 +120,7 @@ test("Skip for now finishes the install, with an ending that says how to fix it,
 test("Skip for now, when other steps didn't work too, ends with the sign-in's own line, then one line naming the others", async (t) => {
   // This laptop's downloads folder has none of the other tools, so their installs don't work, and
   // T3 Code, never opened, can't list the workspaces yet.
-  const { where } = await aLaptopSignedOut(t, { status: [signedOut], login: [failedLogin], answers: { claudeSignIn: ['skip'] } });
+  const { where } = await aLaptopSignedOut(t, { status: [signedOut], login: [failedLogin], answers: { claudeSignIn: ['skip'], extraTools: [] } });
 
   const result = await runWith(where, 'york');
 

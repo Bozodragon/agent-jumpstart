@@ -1,7 +1,8 @@
 // Claude Code, before T3 Code is installed and started. T3's first-run wizard, which would have
 // offered to install it, is skipped (see t3.js), so the installer installs it with Anthropic's
-// own install script, run in the person's window so they see its progress. The script puts
-// claude.exe in the profile folder's .local\bin and never adds that folder to PATH, so the
+// own install script. The script shows no progress of its own, so it runs hidden with its output
+// captured, like every other install, under a spinner that says it can take several minutes. It
+// puts claude.exe in the profile folder's .local\bin and never adds that folder to PATH, so the
 // installer does, first, whether or not Claude Code is there yet: T3 reads PATH only as it
 // starts. Then it asks Claude Code whether it's signed in. If it isn't, Claude Code's own
 // sign-in runs in the person's window, reading its pasted code from the window, while what it
@@ -59,11 +60,24 @@ export async function setUpClaude({ places, machine, downloads, log, attended },
 
   let state = await look();
   if (!state.present) {
-    // Its own installer shows its progress in this window, so there's no spinner over it.
-    ui.step(`Installing ${entry.name} with Anthropic's own installer. Its progress shows below; it takes a minute or two.`);
-    const code = await machine.runOnScreen(anthropicsInstaller.file, anthropicsInstaller.args);
+    // Whether claude.exe is there afterwards is checked inside the spinner, which shows nothing
+    // else while it runs, so "Checking Claude Code" starts only once this spinner has ended.
+    const { ran, there } = await ui.busy(
+      `Installing ${entry.name}. It's over 300 MB, so this can take several minutes`,
+      async () => {
+        const ran = await machine.run(anthropicsInstaller.file, anthropicsInstaller.args);
+        return { ran, there: await exists(program) };
+      },
+      ({ there }) =>
+        there
+          ? { text: `${entry.name} installed`, ok: true }
+          : { text: `${entry.name} not installed: its installer didn't finish`, ok: false },
+    );
+    // The machine has logged what the script printed after a non-zero exit, and in a debug run.
+    // An exit code of 0 that left no claude.exe would otherwise leave no trace of it.
+    if (ran.code === 0 && !there && !log.debug) for (const line of plainLines(ran.output)) say(`installer said: ${line}`);
     state = await look();
-    say(state.present ? `installed by its installer (code ${code})` : `its installer finished with code ${code}, and ${program} isn't there`);
+    say(state.present ? `installed by its installer (code ${ran.code})` : `its installer finished with code ${ran.code}, and ${program} isn't there`);
   }
 
   /** @type {string | undefined} */
