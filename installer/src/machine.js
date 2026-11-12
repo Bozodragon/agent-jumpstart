@@ -60,6 +60,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { access, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { basename, dirname, join, relative, resolve } from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
+import { setWindowTitle } from './window.js';
 
 /**
  * @typedef {object} Machine
@@ -511,13 +512,18 @@ function realMachine(loggedRun) {
     },
     pathSources,
     start: runProgram,
+    // The real machine's two in-window runners set the window's title again once the program
+    // returns, since a program may have retitled the window while it ran.
     startOnScreen(file, args, env) {
       const how = startable(file, args);
       if ('refused' in how) return Promise.resolve(-1);
       return new Promise((resolve) => {
         const child = spawn(how.file, how.args, { ...how.options, env, stdio: 'inherit' });
         child.once('error', () => resolve(-1));
-        child.once('close', (code) => resolve(code ?? -1));
+        child.once('close', (code) => {
+          setWindowTitle();
+          resolve(code ?? -1);
+        });
       });
     },
     startOnScreenAndKeep(file, args, env) {
@@ -538,7 +544,10 @@ function realMachine(loggedRun) {
           });
         }
         child.once('error', (error) => resolve({ code: -1, output: error.message }));
-        child.once('close', (code) => resolve({ code: code ?? -1, output }));
+        child.once('close', (code) => {
+          setWindowTitle();
+          resolve({ code: code ?? -1, output });
+        });
       });
     },
     startAndLeave(file, args, env) {
