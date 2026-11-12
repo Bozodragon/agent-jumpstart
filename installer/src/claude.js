@@ -5,8 +5,9 @@
 // puts claude.exe in the profile folder's .local\bin and never adds that folder to PATH, so the
 // installer does, first, whether or not Claude Code is there yet: T3 reads PATH only as it
 // starts. Then it asks Claude Code whether it's signed in. If it isn't, Claude Code's own
-// sign-in runs in the person's window, reading its pasted code from the window, while what it
-// prints is kept for the log. A sign-in that fails can be tried again, as often as it fails, or
+// sign-in runs in the person's window, reading a pasted code from the window (nothing shows in
+// the window as it's pasted, which the notice says), while what it prints is kept for the log. The sign-in runs with BROWSER=explorer.exe, for that run only, so
+// Claude opens its page in the default browser by itself. A sign-in that fails can be tried again, as often as it fails, or
 // skipped for now, and the ending then says how to finish. The signed-in email is what
 // Jumpstart reads.
 //
@@ -85,19 +86,18 @@ export async function setUpClaude({ places, machine, downloads, log, attended },
   if (state.present && state.runs && !state.signedIn) {
     ui.notice(
       [
-        `${entry.name} signs you in next, in your browser:`,
+        `${entry.name} signs you in next, in your browser.`,
         '',
-        `  ${ui.bullet} A browser window opens at Claude's sign-in page. Sign in there.`,
-        `  ${ui.bullet} Then come back here. This window carries on by itself.`,
-        `  ${ui.bullet} If no window opens, copy the link below into your browser.`,
-        `  ${ui.bullet} Only if the page shows a code: copy it, paste it here and press Enter.`,
+        `  ${ui.bullet} A browser window opens at Claude's sign-in page. Sign in there, then come back here: this window carries on by itself.`,
+        `  ${ui.bullet} If no window opens, copy the link below into your browser: select it with the mouse, then right-click to copy it.`,
+        `  ${ui.bullet} If the page shows a code, copy it, come back here and right-click to paste it. Nothing appears when you paste. Paste once, then press Enter.`,
       ].join('\n'),
       `Sign in to ${entry.name}`,
     );
     // One rejected code ends Claude's sign-in, so a failed one is offered again, as often as it
     // fails. Each try is a fresh `claude auth login`, with a new link and code.
     for (;;) {
-      const { code, output } = await machine.runOnScreenAndKeep(program, ['auth', 'login']);
+      const { code, output } = await machine.runOnScreenAndKeep(program, ['auth', 'login'], { env: { BROWSER: 'explorer.exe' } });
       for (const line of withoutWhatWasTyped(output)) say(`sign-in said: ${line}`);
       say(`sign-in finished with code ${code}`);
       state = await look();
@@ -158,7 +158,7 @@ function reasonFrom(output) {
 /**
  * Claude's sign-in lines, for the log, cut short after its paste prompt ("Paste code here if
  * prompted >"): the code the person pastes there could be used to sign in as them. Claude doesn't
- * print the code (the window shows it as it's typed, without it passing through the installer),
+ * print the code (nothing shows as it's pasted, and it doesn't pass through the installer),
  * but if it ever did, it would be there, so nothing after the prompt on its line is kept but
  * Claude's own "Login successful." or "Login failed: ...", which follows it there when the
  * browser hands the sign-in back by itself.
