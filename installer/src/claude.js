@@ -6,8 +6,9 @@
 // installer does, first, whether or not Claude Code is there yet: T3 reads PATH only as it
 // starts. Then it asks Claude Code whether it's signed in. If it isn't, Claude Code's own
 // sign-in runs in the person's window, reading a pasted code from the window (nothing shows in
-// the window as it's pasted, which the notice says), while what it prints is kept for the log. The sign-in runs with BROWSER=explorer.exe, for that run only, so
-// Claude opens its page in the default browser by itself. A sign-in that fails can be tried again, as often as it fails, or
+// the window as it's pasted, which the notice says), while what it prints is kept for the log.
+// The sign-in runs with BROWSER=explorer.exe, for that run only, so Claude opens its page in the
+// default browser by itself. A sign-in that fails can be tried again, as often as it fails, or
 // skipped for now, and the ending then says how to finish. The signed-in email is what
 // Jumpstart reads.
 //
