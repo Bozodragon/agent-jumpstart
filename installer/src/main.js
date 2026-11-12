@@ -5,7 +5,7 @@
 //
 // --debug comes from the debug pasted line (york-debug.ps1).
 //
-// Three overrides let a test run it end to end with no network and no prompts:
+// Four overrides are for tests. Three let a test run it end to end with no network and no prompts:
 //   --home <folder>       use this as the user's profile folder (local AppData sits inside it);
 //                         everything that would change the rest of the machine, opening a page
 //                         in the browser among it, is faked inside it (machine.js)
@@ -28,7 +28,7 @@ import { loadManifest, toolEntry } from './manifest.js';
 import { findPlaces } from './places.js';
 import { openMachine } from './machine.js';
 import { autoMemoryInUse, switchOffAutoMemory } from './memory.js';
-import { loadProfile, withFullSkills, withTeam } from './profile.js';
+import { fullSkillsSizes, loadProfile, withFullSkills, withTeam } from './profile.js';
 import { answersFrom, askChange, askQuestions, askTeam, knownFrom, teamTicksToAdd } from './questions.js';
 import { installSkills } from './skills.js';
 import { findT3, installT3, openT3 } from './t3.js';
@@ -125,6 +125,7 @@ async function reusedRows(earlier, choices, reused, downloads) {
     rows.push(['Extra tools', list(names)]);
   }
   if (reused.has('fullSkills')) {
+    /** @type {Record<import('./profile.js').FullSkills, string>} */
     const said = { no: 'Just the usual ones', finished: "Matt Pocock's finished skills", beta: "Matt Pocock's finished and unfinished skills" };
     rows.push(['Skills', said[choices.fullSkills]]);
   }
@@ -139,6 +140,8 @@ async function writeSettings(path, settings) {
 }
 
 async function main() {
+  // First, so the window is titled even on a run that stops at flags it can't read.
+  setWindowTitle();
   let options;
   try {
     options = readOptions();
@@ -147,7 +150,6 @@ async function main() {
     return 2;
   }
 
-  setWindowTitle();
   const places = findPlaces(options.home);
   const log = openLog(places.logs, { debug: options.debug });
   log.write(`Installer started with Node ${process.version}`);
@@ -248,7 +250,8 @@ async function main() {
     );
     // A skills answer that has grown since last time can bring back skills left from an earlier,
     // larger one, at an older commit, so the full set's source is added again whatever its commit.
-    const sizes = ['no', 'finished', 'beta'];
+    /** @type {readonly string[]} */
+    const sizes = fullSkillsSizes;
     const fullSet = profile.fullSkills?.source;
     if (fullSet && fullSet in installedFrom && sizes.includes(String(earlier?.fullSkills)) && sizes.indexOf(choices.fullSkills) > sizes.indexOf(String(earlier?.fullSkills))) {
       log.write(`Skills: fullSkills has grown from "${earlier?.fullSkills}" to "${choices.fullSkills}", so ${fullSet} is added again`);
