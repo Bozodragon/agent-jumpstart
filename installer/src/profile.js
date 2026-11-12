@@ -47,6 +47,8 @@ const profilesFolder = fileURLToPath(new URL('../../profiles/', import.meta.url)
  *   team isn't listed here: the Installer adds it, last, and it brings nothing.
  * @property {TeamTicks} [teamTicks] Only on the profile the rest of a run works from (see
  *   `withTeam`): what the chosen team ticked or added.
+ * @property {FullSkillSet} [fullSkills] A full set of skills the person can choose to add to
+ *   `skills`, kept apart from it: the setup page build and the tests read `skills` as always installed.
  */
 
 /** @typedef {{ source: string, names?: string[] }} SkillSource */
@@ -68,6 +70,16 @@ const profilesFolder = fileURLToPath(new URL('../../profiles/', import.meta.url)
  * The names of the connectors and the ids of the extra tools a team ticked, its own additions
  * among them, which the merged profile can't otherwise tell from the profile's own defaults.
  * @typedef {{ connectors: string[], extraTools: string[] }} TeamTicks
+ */
+
+/**
+ * Matt Pocock's full set of skills for writing code, offered as a choice. Both lists are skills
+ * from `source`; the `beta` list is added only with the `finished` one, when the person chooses his
+ * unfinished skills too. His one-offs (skills for a single setup job) aren't listed.
+ * @typedef {object} FullSkillSet
+ * @property {string} source Where the skills come from, as in `skills`.
+ * @property {string[]} finished His finished skills.
+ * @property {string[]} beta His unfinished skills.
  */
 
 /**
@@ -137,6 +149,25 @@ export function withTeam(profile, name) {
     extraTools: (team.extraTools ?? []).map((tool) => tool.id),
   };
   return { ...profile, connectors, extraTools, skills, teamTicks };
+}
+
+/**
+ * The profile with the full skill set the person chose merged into its skills: into the entry
+ * for the set's source, so that source is still added, looked up and recorded once, or as a new
+ * entry if the profile doesn't list that source. `no` leaves the profile as it is.
+ * @param {Profile} profile
+ * @param {'no' | 'finished' | 'beta'} chosen
+ * @returns {Profile}
+ */
+export function withFullSkills(profile, chosen) {
+  const set = profile.fullSkills;
+  if (chosen === 'no' || !set) return profile;
+  const added = [...set.finished, ...(chosen === 'beta' ? set.beta : [])];
+  const skills = profile.skills ?? [];
+  const entry = skills.find(({ source }) => source === set.source);
+  if (!entry) return { ...profile, skills: [...skills, { source: set.source, names: added }] };
+  const names = [...new Set([...skillNames(entry), ...added])];
+  return { ...profile, skills: skills.map((each) => (each === entry ? { ...entry, names } : each)) };
 }
 
 /** @param {string} folder @returns {Promise<string[]>} */

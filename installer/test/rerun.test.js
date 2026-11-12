@@ -23,7 +23,7 @@ async function seed(home, files) {
  */
 async function refuseEveryQuestion(answersFile) {
   const asked = 'a question was asked';
-  const keys = ['team', 'topWorkspace', 'googleDriveFolder', 'workspacesLocation', 'channel', 'github', 'workspaces', 'connectors', 'extraTools', 'switchOffMemory'];
+  const keys = ['team', 'topWorkspace', 'googleDriveFolder', 'workspacesLocation', 'channel', 'github', 'workspaces', 'connectors', 'extraTools', 'fullSkills', 'switchOffMemory'];
   await writeFile(answersFile, JSON.stringify(Object.fromEntries(keys.map((key) => [key, asked]))));
 }
 
@@ -41,6 +41,7 @@ test('a second run with a settings file present asks none of the four questions 
     workspaces: ['Personal assistant'],
     connectors: ['Gmail', 'Asana'],
     extraTools: ['apps-script'],
+    fullSkills: 'no',
     email: 'jo.bloggs@york.ac.uk',
   };
   await seedSettings(where.home, earlier);
@@ -73,6 +74,7 @@ test('a re-run says what it reuses from last time: the top workspace and each ea
     workspaces: ['Thinking space', 'Personal assistant'],
     connectors: ['Gmail', 'Asana'],
     extraTools: ['apps-script'],
+    fullSkills: 'finished',
     switchOffMemory: true,
   });
   await refuseEveryQuestion(where.answersFile);
@@ -87,6 +89,7 @@ test('a re-run says what it reuses from last time: the top workspace and each ea
   checklistSays(result.stdout, 'Workspaces', 'Thinking space and Personal assistant');
   checklistSays(result.stdout, 'Connectors', 'Gmail and Asana');
   checklistSays(result.stdout, 'Extra tools', 'clasp');
+  checklistSays(result.stdout, 'Skills', "Matt Pocock's finished skills");
   checklistSays(result.stdout, "Claude's memory", 'Switch it off');
 });
 
@@ -183,6 +186,7 @@ test('a re-run of a home set up earlier updates what is out of date, re-adds PAT
     workspaces: ['Personal assistant'],
     connectors: ['Gmail', 'Google Calendar'],
     extraTools: ['apps-script'],
+    fullSkills: 'no',
     email,
     topWorkspace: top,
     skillsInstalled: skills,
