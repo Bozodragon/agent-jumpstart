@@ -29,7 +29,7 @@ import { findPlaces } from './places.js';
 import { openMachine } from './machine.js';
 import { autoMemoryInUse, switchOffAutoMemory } from './memory.js';
 import { loadProfile, withFullSkills, withTeam } from './profile.js';
-import { answersFrom, askChange, askQuestions, askTeam, knownFrom } from './questions.js';
+import { answersFrom, askChange, askQuestions, askTeam, knownFrom, teamTicksToAdd } from './questions.js';
 import { installSkills } from './skills.js';
 import { findT3, installT3, openT3 } from './t3.js';
 import { End, messageOf, Stop } from './stop.js';
@@ -189,8 +189,12 @@ async function main() {
     const asker = unattended ? answersFrom(answers) : ui.ask;
     /** @type {Set<string>} */
     const reused = new Set();
-    /** The keys of the answers the person chose to change, which the settings no longer answer. @type {Set<string>} */
-    const changing = new Set();
+    /**
+     * The keys of the answers to ask again, which the settings no longer answer, each with the
+     * ticks a team adds to a pick's default.
+     * @type {Map<string, string[]>}
+     */
+    const changing = new Map();
     const ask = earlier ? knownFrom(earlier, asker, log, reused, changing) : asker;
     /** @type {import('./tools.js').Context} */
     const context = { places, machine, downloads: options.downloads, keepDownloads: options.debug, log, attended: !unattended };
@@ -202,9 +206,11 @@ async function main() {
     // the run works from the profile with the team's entries merged in.
     const teamSaved = earlier !== undefined && 'team' in earlier;
     let team = teamSaved ? undefined : await askTeam(offered, ask, log);
-    if (earlier) for (const key of await askChange(offered, earlier, memoryInUse, asker, log)) changing.add(key);
+    if (earlier) for (const key of await askChange(offered, earlier, memoryInUse, asker, log)) changing.set(key, []);
     if (teamSaved) team = await askTeam(offered, ask, log);
     const profile = withTeam(offered, team);
+    // A team joined or changed asks again each pick it ticks something new in, with its ticks added.
+    if (earlier) for (const [key, ticks] of teamTicksToAdd(profile, earlier, team, log)) changing.set(key, ticks);
     // A list of versions that can't be read isn't a reason to stop yet: the first install stops
     // on it, once the answers are saved.
     const foundT3 = await findT3(context).catch((error) => {

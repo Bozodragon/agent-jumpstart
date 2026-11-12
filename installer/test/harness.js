@@ -391,6 +391,22 @@ export async function readOnlyLog(home) {
   return { name: logs[0], text: await readFile(join(stateFolder(home), 'logs', logs[0]), 'utf8') };
 }
 
+/** Every question a run can put, keyed as the answers file keys them. */
+const questions = ['team', 'topWorkspace', 'googleDriveFolder', 'workspacesLocation', 'channel', 'github', 'workspaces', 'connectors', 'extraTools', 'fullSkills', 'switchOffMemory'];
+
+/**
+ * An answers file that gives these answers and stops the run if any other question is put to
+ * it: every other answer is wrong, so a run that gets past the questions asked only these, and
+ * those in its `change` and in `asked`, which it leaves to their defaults.
+ * @param {string} answersFile @param {Record<string, unknown> & { change?: string[] }} answers
+ * @param {{ asked?: string[] }} [options]
+ */
+export async function answerOnly(answersFile, answers, { asked = [] } = {}) {
+  const left = (/** @type {string} */ key) => key in answers || [...(answers.change ?? []), ...asked].includes(key);
+  const refused = Object.fromEntries(questions.filter((key) => !left(key)).map((key) => [key, 'a question was asked']));
+  await writeFile(answersFile, JSON.stringify({ ...refused, ...answers }));
+}
+
 /** @param {string} path */
 export const exists = (path) => access(path).then(() => true, () => false);
 

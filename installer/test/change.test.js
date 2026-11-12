@@ -4,22 +4,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { checklistSays, fakeMachine, gitOnMachinePath, makeHome, readOnlyLog, readProfile, readSettings, runWith, seedSettings, skillsCli, supplyDownloads } from './harness.js';
-
-/** Every question a run can put, keyed as the answers file keys them. */
-const questions = ['team', 'topWorkspace', 'googleDriveFolder', 'workspacesLocation', 'channel', 'github', 'workspaces', 'connectors', 'extraTools', 'fullSkills', 'switchOffMemory'];
-
-/**
- * An answers file that gives these answers and stops the run if any other question is put to
- * it: every other answer is wrong, so a run that gets past the questions asked only these, and
- * those in its `change`, which it leaves to their defaults.
- * @param {string} answersFile @param {Record<string, unknown> & { change?: string[] }} answers
- */
-async function answerOnly(answersFile, answers) {
-  const left = (/** @type {string} */ key) => key in answers || (answers.change ?? []).includes(key);
-  const refused = Object.fromEntries(questions.filter((key) => !left(key)).map((key) => [key, 'a question was asked']));
-  await writeFile(answersFile, JSON.stringify({ ...refused, ...answers }));
-}
+import { answerOnly, checklistSays, fakeMachine, gitOnMachinePath, makeHome, readOnlyLog, readProfile, readSettings, runWith, seedSettings, skillsCli, supplyDownloads } from './harness.js';
 
 /**
  * York settings as a run of this release leaves them, with the top workspace there.
@@ -88,7 +73,8 @@ test("each answer in change is asked again, and one the answers file doesn't giv
 test('under york with a team saved, ticking Team asks the team question once, after the change question', async (t) => {
   const where = await makeHome(t);
   await seedYork(where.home);
-  await answerOnly(where.answersFile, { change: ['team'], team: 'Marketing' });
+  // Marketing ticks Asana, which last time's connectors don't have, so they're asked again too.
+  await answerOnly(where.answersFile, { change: ['team'], team: 'Marketing' }, { asked: ['connectors'] });
 
   const result = await runWith(where, 'york');
 
