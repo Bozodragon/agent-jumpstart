@@ -29,7 +29,7 @@ import { existingTopWorkspaces, topWorkspaceIn } from './workspaces.js';
  *   of someone who has been using it, with No as the default; otherwise true.
  */
 
-/** @typedef {'no' | 'finished' | 'beta'} FullSkills */
+/** @typedef {import('./profile.js').FullSkills} FullSkills */
 
 /**
  * What the installer found before asking, which decides what is asked.
@@ -408,7 +408,9 @@ async function theRest(profile, ask, log, found, { googleDriveFolder, workspaces
  * @param {Map<string, string[]>} [changing] The keys of the answers to ask again, filled in before
  *   their questions come: those the person chose to change (see askChange), and the picks a team
  *   joined or changed brings ticks to (see teamTicksToAdd), each with those ticks. Each is put to
- *   `ask` with last time's answer as the default, and for a pick, the ticks added to it.
+ *   `ask` with last time's answer as the default, and for a pick, the ticks added to it. A pick
+ *   whose saved answer is no longer right is asked the same way, by itself; a choose or confirm
+ *   whose saved answer is no longer right is asked with the question's own default.
  * @returns {Asker}
  */
 export function knownFrom(settings, ask, log, reused = new Set(), changing = new Map()) {
@@ -452,14 +454,20 @@ export function knownFrom(settings, ask, log, reused = new Set(), changing = new
     folder: (q) => (changing.has(q.key) ? again(q, () => known.folder(q), (r) => ask.folder(r)) : either(q.key, () => known.folder(q), () => ask.folder(q))),
     choose: (q) => (changing.has(q.key) ? again(q, () => known.choose(q), (r) => ask.choose(r)) : either(q.key, () => known.choose(q), () => ask.choose(q))),
     confirm: (q) => (changing.has(q.key) ? again(q, () => known.confirm(q), (r) => ask.confirm(r)) : either(q.key, () => known.confirm(q), () => ask.confirm(q))),
-    // A pick's default is last time's ticks without anything the profile no longer offers, and with a team's.
-    pick: (q) => (changing.has(q.key) ? again(q, async () => lastTicks(settings[q.key], q.options, q.initial, changing.get(q.key)), (r) => ask.pick(r)) : either(q.key, () => known.pick(q), () => ask.pick(q))),
+    // A re-asked pick's default is last time's ticks without anything the profile no longer
+    // offers, and with a team's, whether the person chose to change it or it came back by itself.
+    pick: (q) => {
+      const lastTime = () => lastTicks(settings[q.key], q.options, q.initial, changing.get(q.key));
+      return changing.has(q.key) ? again(q, async () => lastTime(), (r) => ask.pick(r)) : either(q.key, () => known.pick(q), () => ask.pick({ ...q, initial: lastTime() }));
+    },
   };
 }
 
 /**
  * A re-asked pick's default: last time's ticks that are still offered, then any of `added` it
- * doesn't have, or, when none were saved as a list, the question's own default.
+ * doesn't have. When none were saved as a list, the question's own default: that's a pick with
+ * nothing saved, a question added since, which a re-run asks as a first run does, or one whose
+ * saved answer isn't a list at all, which is no longer right.
  * @template {string} T
  * @param {unknown} saved @param {Option<T>[]} options @param {T[]} initial @param {string[]} [added]
  * @returns {T[]}

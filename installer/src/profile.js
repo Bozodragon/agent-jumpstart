@@ -83,6 +83,14 @@ const profilesFolder = fileURLToPath(new URL('../../profiles/', import.meta.url)
  */
 
 /**
+ * How much of the full set a person can choose, smallest first: none of it, the finished
+ * skills, or those and the unfinished ones. The answer and the settings file's `fullSkills`.
+ */
+export const fullSkillsSizes = /** @type {const} */ (['no', 'finished', 'beta']);
+
+/** @typedef {typeof fullSkillsSizes[number]} FullSkills */
+
+/**
  * Something extra the person can tick. The manifest entries whose `when` is its id are
  * installed only when it's ticked.
  * @typedef {object} ExtraTool
@@ -156,7 +164,7 @@ export function withTeam(profile, name) {
  * for the set's source, so that source is still added, looked up and recorded once, or as a new
  * entry if the profile doesn't list that source. `no` leaves the profile as it is.
  * @param {Profile} profile
- * @param {'no' | 'finished' | 'beta'} chosen
+ * @param {FullSkills} chosen
  * @returns {Profile}
  */
 export function withFullSkills(profile, chosen) {

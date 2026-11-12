@@ -4,7 +4,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { basename, join } from 'node:path';
-import { checklistSays, fakeMachine, gitOnMachinePath, makeHome, readOnlyLog, readProfile, readSettings, runWith, seedSettings, skillsCli, supplyDownloads } from './harness.js';
+import { checklistSays, fakeMachine, gitOnMachinePath, makeHome, readProfile, readSettings, runWith, seedSettings, skillsCli, supplyDownloads } from './harness.js';
 
 /** His finished skills for writing code, as the ticket lists them. */
 const finished = [
@@ -140,15 +140,25 @@ test('a value that is not offered stops the run, naming the options', async (t) 
   assert.match(result.stdout + result.stderr, /The answers file's "fullSkills" is wrong: it should be one of "no", "finished", "beta"\./);
 });
 
-test('the question comes after the extra tools and before memory', async (t) => {
-  const where = await homeWithSkillsCli(t, { fullSkills: 'finished', switchOffMemory: true });
+for (const profile of ['york', 'default']) {
+  // A wrong answer stops the run at the first question that reads it, so of two wrong answers,
+  // the one named was asked first. Memory is asked only of someone who has been using it.
+  test(`under ${profile}, the question comes after the extra tools and before memory`, async (t) => {
+    /** @param {Record<string, unknown>} answers */
+    const stopsAt = async (answers) => {
+      const where = await makeHome(t, answers);
+      const memory = join(where.home, '.claude', 'projects', 'C--work', 'memory');
+      await mkdir(memory, { recursive: true });
+      await writeFile(join(memory, 'MEMORY.md'), 'remembered');
+      const result = await runWith(where, profile);
+      assert.equal(result.code, 1, result.stdout + result.stderr);
+      return result.stdout.match(/The answers file's "(\w+)" is wrong/)?.[1];
+    };
 
-  const result = await runWith(where, 'york');
-
-  assert.equal(result.code, 0, result.stdout + result.stderr);
-  const answered = [...(await readOnlyLog(where.home)).text.matchAll(/Answer: (\w+):/g)].map((match) => match[1]);
-  assert.deepEqual(answered.slice(answered.indexOf('extraTools')), ['extraTools', 'fullSkills', 'switchOffMemory']);
-});
+    assert.equal(await stopsAt({ extraTools: ['nothing offered'], fullSkills: 'all of them' }), 'extraTools');
+    assert.equal(await stopsAt({ fullSkills: 'all of them', switchOffMemory: 'maybe' }), 'fullSkills');
+  });
+}
 
 test('a re-run whose settings have no fullSkills asks it once, and a re-run with it saved reuses it, showing Skills', async (t) => {
   const where = await homeWithSkillsCli(t, { fullSkills: 'finished' });

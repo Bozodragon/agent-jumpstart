@@ -18,6 +18,9 @@ test("a york run with no team answered takes Another team, saves it, and keeps Y
   const ticked = profile.connectors.filter((/** @type {any} */ connector) => connector.default).map((/** @type {any} */ connector) => connector.name);
   assert.deepEqual(settings.connectors, ticked);
   assert.ok(!settings.connectors.includes('Asana'));
+  const tools = profile.extraTools.filter((/** @type {any} */ tool) => tool.default).map((/** @type {any} */ tool) => tool.id);
+  assert.deepEqual(settings.extraTools, tools);
+  assert.ok(tools.length > 0, "York ticks an extra tool of its own, so there's something to keep");
 });
 
 for (const team of ['Marketing', 'Systems, Data and Operations']) {
