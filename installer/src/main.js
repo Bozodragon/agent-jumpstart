@@ -25,7 +25,7 @@ import { loadManifest, toolEntry } from './manifest.js';
 import { findPlaces } from './places.js';
 import { openMachine } from './machine.js';
 import { autoMemoryInUse, switchOffAutoMemory } from './memory.js';
-import { loadProfile } from './profile.js';
+import { loadProfile, withFullSkills } from './profile.js';
 import { answersFrom, askQuestions, knownFrom } from './questions.js';
 import { installSkills } from './skills.js';
 import { findT3, installT3, openT3 } from './t3.js';
@@ -117,6 +117,10 @@ async function reusedRows(earlier, choices, reused, downloads) {
       return named.length > 0 ? named : [id];
     });
     rows.push(['Extra tools', list(names)]);
+  }
+  if (reused.has('fullSkills')) {
+    const said = { no: 'Just the usual ones', finished: "Matt Pocock's finished skills", beta: "Matt Pocock's finished and unfinished skills" };
+    rows.push(['Skills', said[choices.fullSkills]]);
   }
   if (reused.has('switchOffMemory')) rows.push(["Claude's memory", choices.switchOffMemory ? 'Switch it off' : 'Leave it on']);
   return rows;
@@ -211,7 +215,7 @@ async function main() {
     const installedFrom = /** @type {Record<string, string>} */ (
       Object.fromEntries(Object.entries(isRecord(earlier?.skillSources) ? earlier.skillSources : {}).filter(([, commit]) => typeof commit === 'string'))
     );
-    const skills = await installSkills(profile, ours, installedFrom, context);
+    const skills = await installSkills(withFullSkills(profile, choices.fullSkills), ours, installedFrom, context);
     /** @type {[string, string][]} */
     const skillsRows = skills.cli === undefined ? [] : [['Skills CLI', skills.cli]];
     skillsRows.push(['Skills', skills.line]);

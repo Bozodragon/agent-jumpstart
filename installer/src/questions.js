@@ -20,9 +20,13 @@ import { existingTopWorkspaces, topWorkspaceIn } from './workspaces.js';
  * @property {string[]} workspaces The names of the ticked workspaces.
  * @property {string[]} connectors The names of the ticked connectors.
  * @property {string[]} extraTools The ids of the ticked extra tools.
+ * @property {FullSkills} fullSkills Which of Matt Pocock's full set of skills for writing code to
+ *   install as well as the profile's usual ones: none, his finished ones, or those and his unfinished ones.
  * @property {boolean} switchOffMemory Whether to switch off Claude's automatic memory. Asked only
  *   of someone who has been using it, with No as the default; otherwise true.
  */
+
+/** @typedef {'no' | 'finished' | 'beta'} FullSkills */
 
 /**
  * What the installer found before asking, which decides what is asked.
@@ -279,6 +283,17 @@ async function theRest(profile, ask, log, found, { googleDriveFolder, workspaces
     initial: profile.extraTools.filter((tool) => tool.default).map(({ id }) => id),
   });
 
+  const fullSkills = await ask.choose({
+    key: 'fullSkills',
+    message: "Would you also like Matt Pocock's full set of skills for writing code?",
+    options: /** @type {Option<FullSkills>[]} */ ([
+      { value: 'no', label: 'No, just the usual ones' },
+      { value: 'finished', label: 'Yes, his finished skills' },
+      { value: 'beta', label: 'Yes, and his unfinished ones as a beta' },
+    ]),
+    initial: 'no',
+  });
+
   // Someone who has been using it is asked, and keeps it unless they say otherwise. So is anyone
   // who answered before, so that answer is kept even once the signs of use have gone.
   const switchOffMemory =
@@ -291,7 +306,7 @@ async function theRest(profile, ask, log, found, { googleDriveFolder, workspaces
       : true;
 
   /** @type {Answers} */
-  const answers = { googleDriveFolder, workspacesLocation, topWorkspace, channel, github, workspaces, connectors, extraTools, switchOffMemory };
+  const answers = { googleDriveFolder, workspacesLocation, topWorkspace, channel, github, workspaces, connectors, extraTools, fullSkills, switchOffMemory };
   for (const [key, value] of Object.entries(answers)) log.write(`Answer: ${key}: ${JSON.stringify(value)}`);
   return answers;
 }

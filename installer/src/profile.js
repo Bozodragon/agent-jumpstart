@@ -42,6 +42,18 @@ const profilesFolder = fileURLToPath(new URL('../../profiles/', import.meta.url)
  * @property {ExtraTool[]} extraTools
  * @property {{ source: string, names?: string[] }[]} skills Installed with the skills CLI. A source
  *   given without names is the path to one skill (`owner/repo/path/to/skill`), named by its last part.
+ * @property {FullSkillSet} [fullSkills] A full set of skills the person can choose to add to
+ *   `skills`, kept apart from it: the setup page build and the tests read `skills` as always installed.
+ */
+
+/**
+ * Matt Pocock's full set of skills for writing code, offered as a choice. Both lists are skills
+ * from `source`; the `beta` list is added only with the `finished` one, when the person chooses his
+ * unfinished skills too. His one-offs (skills for a single setup job) aren't listed.
+ * @typedef {object} FullSkillSet
+ * @property {string} source Where the skills come from, as in `skills`.
+ * @property {string[]} finished His finished skills.
+ * @property {string[]} beta His unfinished skills.
  */
 
 /**
@@ -72,6 +84,25 @@ const profilesFolder = fileURLToPath(new URL('../../profiles/', import.meta.url)
  */
 export function skillNames({ source, names }) {
   return names ?? [source.split('/').at(-1) ?? source];
+}
+
+/**
+ * The profile with the full skill set the person chose merged into its skills: into the entry
+ * for the set's source, so that source is still added, looked up and recorded once, or as a new
+ * entry if the profile doesn't list that source. `no` leaves the profile as it is.
+ * @param {Profile} profile
+ * @param {'no' | 'finished' | 'beta'} chosen
+ * @returns {Profile}
+ */
+export function withFullSkills(profile, chosen) {
+  const set = profile.fullSkills;
+  if (chosen === 'no' || !set) return profile;
+  const added = [...set.finished, ...(chosen === 'beta' ? set.beta : [])];
+  const skills = profile.skills ?? [];
+  const entry = skills.find(({ source }) => source === set.source);
+  if (!entry) return { ...profile, skills: [...skills, { source: set.source, names: added }] };
+  const names = [...new Set([...skillNames(entry), ...added])];
+  return { ...profile, skills: skills.map((each) => (each === entry ? { ...entry, names } : each)) };
 }
 
 /** @returns {Promise<string[]>} */

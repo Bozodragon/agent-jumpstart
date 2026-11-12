@@ -134,5 +134,31 @@
         "jumpstart"
       ]
     }
-  ]
+  ],
+  "fullSkills": {
+    "source": "mattpocock/skills",
+    "finished": [
+      "code-review",
+      "codebase-design",
+      "diagnosing-bugs",
+      "implement",
+      "implement-spec",
+      "improve-codebase-architecture",
+      "pr",
+      "retro",
+      "tdd",
+      "triage",
+      "writing-for-agents"
+    ],
+    "beta": [
+      "chief-of-staff",
+      "claude-handoff",
+      "loop-me",
+      "setup-ts-deep-modules",
+      "software-factory",
+      "writing-beats",
+      "writing-fragments",
+      "writing-shape"
+    ]
+  }
 }
