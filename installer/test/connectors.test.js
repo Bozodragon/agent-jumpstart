@@ -29,7 +29,7 @@ test('the walkthrough names each chosen connector beside the profile\'s connecto
   assert.ok(flowing.includes("This opens claude.ai's Customize page, on Connectors."), result.stdout);
   // Each chosen connector by name, with what it lets the agent do.
   assert.ok(flowing.includes('Gmail: search and read your email, and write drafts for you to check and send'), result.stdout);
-  for (const name of ['Gmail', 'Google Drive', 'Google Calendar']) {
+  for (const name of ['Gmail', 'Google Drive', 'Google Calendar', 'Google Docs', 'Google Sheets']) {
     const { what } = profile.connectors.find((/** @type {{ name: string }} */ connector) => connector.name === name);
     assert.ok(flowing.includes(`${name}: ${what}`), `${name} should be named on screen with what it does`);
   }
@@ -38,7 +38,7 @@ test('the walkthrough names each chosen connector beside the profile\'s connecto
   const log = await readOnlyLog(where.home);
   assert.ok(log.text.includes(`Connectors page: ${profile.connectorsPage} (opened)`), log.text);
   assert.ok((await fakeMachine(where.home).pagesOpened()).includes(profile.connectorsPage));
-  assert.ok(log.text.includes('Checklist: Connectors: You said you connected Gmail, Google Drive and Google Calendar'), log.text);
+  assert.ok(log.text.includes('Checklist: Connectors: You said you connected Gmail, Google Drive, Google Calendar, Google Docs and Google Sheets'), log.text);
 });
 
 test('with no connectors chosen the walkthrough is skipped and the checklist says none were chosen', async (t) => {
