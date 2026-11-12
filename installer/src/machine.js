@@ -6,7 +6,10 @@
 //   <home>/fake-machine/environment.json  the user environment variables, as HKCU\Environment
 //                                         holds them; the user PATH is `Path`, joined with `;`
 //   <home>/fake-machine/runs.json         every program it was asked to run: [{ file, args, path }],
-//                                         `path` being the PATH it was started with, and
+//                                         `path` being the PATH it was started with,
+//                                         `env` the environment variables it was given beyond
+//                                         PATH, for that run only (none are recorded for a run
+//                                         given none), and
 //                                         `onScreen: true` for one run in the person's window
 //                                         (one whose output is kept also prints its reply's
 //                                         output, as the program would have),
@@ -86,10 +89,10 @@ import { setWindowTitle } from './window.js';
  * @property {(file: string, args: string[]) => Promise<Ran>} runHere Like `run`, but always runs
  *   the program for real, even on the fake machine. Only for programs that change nothing but
  *   the installer's own folders, such as tar.exe unpacking a download into its scratch folder.
- * @property {(file: string, args: string[]) => Promise<number>} runOnScreen Runs a program in the
- *   person's window, so they see what it prints and can answer it, and waits for it. Returns its
- *   exit code, or -1 if it couldn't start.
- * @property {(file: string, args: string[]) => Promise<Ran>} runOnScreenAndKeep Like `runOnScreen`,
+ * @property {(file: string, args: string[], how?: WindowOptions) => Promise<number>} runOnScreen Runs
+ *   a program in the person's window, so they see what it prints and can answer it, and waits for
+ *   it. Returns its exit code, or -1 if it couldn't start.
+ * @property {(file: string, args: string[], how?: WindowOptions) => Promise<Ran>} runOnScreenAndKeep Like `runOnScreen`,
  *   but what the program prints also comes back, for the caller to log. What the person types
  *   still goes straight from the window to the program; only what the program prints passes
  *   through the installer, on its way to the window. Only for a program that needs the window
@@ -131,6 +134,13 @@ export async function keepTrying({ machine, every, patience = machine.patience }
 /** @typedef {(file: string, args: string[], how?: RunOptions) => Promise<Ran>} Runner */
 
 /**
+ * @typedef {object} WindowOptions
+ * @property {Record<string, string>} [env] Environment variables for this one run, added to the
+ *   environment the machine builds (the rebuilt PATH among it). The person's own environment
+ *   variables never gain them.
+ */
+
+/**
  * @typedef {object} RunOptions
  * @property {(ran: Ran) => boolean} [expected] Whether a run that failed failed as expected: a
  *   miss the caller looks for, such as a registry value that isn't there or T3 Code still
@@ -150,8 +160,10 @@ export async function keepTrying({ machine, every, patience = machine.patience }
  * @property {Omit<Machine, 'run' | 'runHere' | 'runOnScreen' | 'runOnScreenAndKeep' | 'launch'>} machine
  * @property {() => Promise<PathSources>} pathSources
  * @property {(file: string, args: string[], env: NodeJS.ProcessEnv) => Promise<Ran>} start
- * @property {(file: string, args: string[], env: NodeJS.ProcessEnv) => Promise<number>} startOnScreen
- * @property {(file: string, args: string[], env: NodeJS.ProcessEnv) => Promise<Ran>} startOnScreenAndKeep
+ * @property {(file: string, args: string[], env: NodeJS.ProcessEnv, extra?: Record<string, string>) => Promise<number>} startOnScreen
+ *   `env` is the whole environment to start it with; `extra` is the part of it that a run was
+ *   given of its own, which the fake machine records.
+ * @property {(file: string, args: string[], env: NodeJS.ProcessEnv, extra?: Record<string, string>) => Promise<Ran>} startOnScreenAndKeep
  * @property {(file: string, args: string[], env: NodeJS.ProcessEnv) => Promise<void>} startAndLeave
  */
 
@@ -180,9 +192,9 @@ export function openMachine(places, log) {
   // A program in the person's window writes straight to it: catching its output would take the
   // real terminal away from it (gh auth login needs one), so only the command and code are logged.
   /** @param {Machine['runOnScreen']} run @returns {Machine['runOnScreen']} */
-  const loggedOnScreen = (run) => async (file, args) => {
-    log.detail(`Running in the person's window: ${commandLine(file, args)}`);
-    const code = await run(file, args);
+  const loggedOnScreen = (run) => async (file, args, how) => {
+    log.detail(`Running in the person's window: ${commandLine(file, args)}${withEnv(how)}`);
+    const code = await run(file, args, how);
     log.detail(`Ran: ${basename(file)} (code ${code})`);
     log.detail("  (its output went to the person's window, not the log)");
     return code;
@@ -190,9 +202,9 @@ export function openMachine(places, log) {
   // What it prints is kept, but logged by the step that ran it, which knows what to leave out
   // (anything the person typed that the program might have shown).
   /** @param {Machine['runOnScreenAndKeep']} run @returns {Machine['runOnScreenAndKeep']} */
-  const loggedOnScreenAndKept = (run) => async (file, args) => {
-    log.detail(`Running in the person's window, keeping what it prints: ${commandLine(file, args)}`);
-    const ran = await run(file, args);
+  const loggedOnScreenAndKept = (run) => async (file, args, how) => {
+    log.detail(`Running in the person's window, keeping what it prints: ${commandLine(file, args)}${withEnv(how)}`);
+    const ran = await run(file, args, how);
     log.detail(`Ran: ${basename(file)} (code ${ran.code})`);
     log.detail("  (what it printed went to the person's window, and is logged by the step that ran it)");
     return ran;
@@ -217,8 +229,10 @@ export function openMachine(places, log) {
     ...machine,
     run: logged(async (file, args) => start(file, args, await environment())),
     runHere: logged(async (file, args) => runProgram(file, args, await environment())),
-    runOnScreen: loggedOnScreen(async (file, args) => startOnScreen(file, args, await environment())),
-    runOnScreenAndKeep: loggedOnScreenAndKept(async (file, args) => startOnScreenAndKeep(file, args, await environment())),
+    runOnScreen: loggedOnScreen(async (file, args, how) => startOnScreen(file, args, { ...(await environment()), ...how?.env }, how?.env)),
+    runOnScreenAndKeep: loggedOnScreenAndKept(async (file, args, how) =>
+      startOnScreenAndKeep(file, args, { ...(await environment()), ...how?.env }, how?.env),
+    ),
     async launch(file, args) {
       log.detail(`Starting, without waiting for it: ${commandLine(file, args)}`);
       await startAndLeave(file, args, await environment());
@@ -229,6 +243,9 @@ export function openMachine(places, log) {
 
 /** @param {string} arg */
 const quoted = (arg) => (/[\s"]/.test(arg) ? `"${arg}"` : arg);
+
+/** What a run was given of its own environment, for the log line that starts it. @param {WindowOptions} [how] */
+const withEnv = (how) => (how?.env && Object.keys(how.env).length > 0 ? ` (with ${Object.entries(how.env).map(([name, value]) => `${name}=${value}`).join(' ')})` : '');
 
 /** A program and its arguments as one line, for the log. @param {string} file @param {string[]} args */
 const commandLine = (file, args) => [file, ...args].map(quoted).join(' ');
@@ -355,10 +372,10 @@ function fakeMachine(folder, home) {
     },
     pathSources,
     start: (file, args, env) => reply(file, args, { file, args, path: env.Path ?? '' }),
-    startOnScreen: async (file, args, env) => (await reply(file, args, { file, args, path: env.Path ?? '', onScreen: true })).code,
+    startOnScreen: async (file, args, env, extra) => (await reply(file, args, { file, args, path: env.Path ?? '', ...recordOf(extra), onScreen: true })).code,
     // The reply's output is what the program prints, so it's printed, as it would be in the window.
-    async startOnScreenAndKeep(file, args, env) {
-      const ran = await reply(file, args, { file, args, path: env.Path ?? '', onScreen: true });
+    async startOnScreenAndKeep(file, args, env, extra) {
+      const ran = await reply(file, args, { file, args, path: env.Path ?? '', ...recordOf(extra), onScreen: true });
       process.stdout.write(ran.output);
       return ran;
     },
@@ -370,7 +387,7 @@ function fakeMachine(folder, home) {
 
   /**
    * @param {string} file @param {string[]} args
-   * @param {{ file: string, args: string[], path: string, onScreen?: boolean, leftRunning?: boolean, found?: string[] }} record
+   * @param {{ file: string, args: string[], path: string, env?: Record<string, string>, onScreen?: boolean, leftRunning?: boolean, found?: string[] }} record
    * @returns {Promise<Ran>}
    */
   async function reply(file, args, record) {
@@ -410,6 +427,9 @@ function fakeMachine(folder, home) {
     return { code: found.code ?? 0, output: found.output ?? '' };
   }
 }
+
+/** The record's `env`: the environment a run was given beyond PATH, left out when it was given none. @param {Record<string, string>} [extra] */
+const recordOf = (extra) => (extra && Object.keys(extra).length > 0 ? { env: extra } : {});
 
 /**
  * A path the fake machine may make something at: relative to the home, and inside it.
@@ -538,9 +558,9 @@ function realMachine(loggedRun) {
       if ('refused' in how) return Promise.resolve({ code: -1, output: how.refused });
       return new Promise((resolve) => {
         let output = '';
-        // The window stays the program's input, so its prompt reads what the person types (and
-        // the window shows it as they type, not the program); what it prints is passed on to the
-        // window as it comes, and kept. Decoded as it comes, so a character split between two
+        // The window stays the program's input, so its prompt reads what the person types (a
+        // paste shows nothing in the window, and nothing passes through the installer); what it
+        // prints is passed on to the window as it comes, and kept. Decoded as it comes, so a character split between two
         // chunks isn't broken.
         const child = spawn(how.file, how.args, { ...how.options, env, stdio: ['inherit', 'pipe', 'pipe'] });
         for (const [from, to] of /** @type {const} */ ([[child.stdout, process.stdout], [child.stderr, process.stderr]])) {

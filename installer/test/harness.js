@@ -240,7 +240,9 @@ export function fakeMachine(home) {
      * Each program it was asked to run, with the PATH it was started with (`path`, entries joined
      * with `;`), rebuilt at that moment from the machine PATH, the user PATH and the installer's own.
      * A reply's `reads` adds `found`: which of those files were there when the program started.
-     * @returns {Promise<{ file: string, args: string[], path: string, onScreen?: boolean, leftRunning?: boolean, found?: string[] }[]>}
+     * `env` is the environment variables a run was given beyond PATH, for that run only (the
+     * record has none for a run given none).
+     * @returns {Promise<{ file: string, args: string[], path: string, env?: Record<string, string>, onScreen?: boolean, leftRunning?: boolean, found?: string[] }[]>}
      */
     runs: () => readJson('runs.json', []),
     /** @returns {Promise<string[]>} the addresses it was asked to open in the browser, in order */
