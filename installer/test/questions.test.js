@@ -27,6 +27,7 @@ test('a york run with nothing answered takes every default: the Drive folder it 
   assert.equal(result.code, 0, result.stdout + result.stderr);
   assert.deepEqual(await readSettings(where.home), {
     profile: 'york',
+    team: 'Another team',
     googleDriveFolder: join(where.home, 'My Drive'),
     workspacesLocation: join(where.home, 'My Drive'),
     channel: 'stable',
@@ -86,6 +87,7 @@ test('a york run answered from a file asks nothing and writes exactly those answ
   assert.equal(result.code, 0, result.stdout + result.stderr);
   assert.deepEqual(await readSettings(where.home), {
     profile: 'york',
+    team: 'Another team',
     ...answers,
     workspacesLocation: otherDrive,
     topWorkspace: join(otherDrive, 'Claude'),
