@@ -54,7 +54,8 @@ test('a re-run with everything saved and no change answer asks nothing else and 
 
 test("each answer in change is asked again, and one the answers file doesn't give keeps last time's", async (t) => {
   const where = await makeHome(t);
-  await seedYork(where.home);
+  // York ticks both workspaces by itself, so only last time's answer leaves one out.
+  await seedYork(where.home, { workspaces: ['Personal assistant'] });
   await answerOnly(where.answersFile, { change: ['github', 'workspaces'], github: true });
 
   const result = await runWith(where, 'york');
@@ -62,12 +63,28 @@ test("each answer in change is asked again, and one the answers file doesn't giv
   assert.equal(result.code, 0, result.stdout + result.stderr);
   const settings = await readSettings(where.home);
   assert.equal(settings.github, true, 'asked again, and answered');
-  assert.deepEqual(settings.workspaces, ['Thinking space', 'Personal assistant'], "asked again, with last time's as the default");
+  assert.deepEqual(settings.workspaces, ['Personal assistant'], "asked again, with last time's as the default");
   const log = await readOnlyLog(where.home);
   for (const key of ['github', 'workspaces']) {
     assert.ok(log.text.includes(`Settings: ${key} is to change, so it's asked again`), log.text);
     assert.ok(!log.text.includes(`Known from settings: ${key}:`), log.text);
   }
+});
+
+test("a choose and a confirm asked again with no answer given keep last time's, not the question's own default", async (t) => {
+  const where = await makeHome(t);
+  // The team question's own default is Another team, and GitHub's is No.
+  await seedYork(where.home, { team: 'Marketing', github: true });
+  await answerOnly(where.answersFile, { change: ['team', 'github'] });
+
+  const result = await runWith(where, 'york');
+
+  assert.equal(result.code, 0, result.stdout + result.stderr);
+  const settings = await readSettings(where.home);
+  assert.equal(settings.team, 'Marketing');
+  assert.equal(settings.github, true);
+  const log = await readOnlyLog(where.home);
+  for (const key of ['team', 'github']) assert.ok(log.text.includes(`Settings: ${key} is to change, so it's asked again`), log.text);
 });
 
 test('under york with a team saved, ticking Team asks the team question once, after the change question', async (t) => {
@@ -152,6 +169,19 @@ test('re-asking a pick whose saved answer names something no longer offered defa
 
   assert.equal(result.code, 0, result.stdout + result.stderr);
   assert.deepEqual((await readSettings(where.home)).workspaces, ['Personal assistant']);
+});
+
+test("a pick that comes back by itself, naming something no longer offered, defaults to the rest of last time's, not the profile's ticks", async (t) => {
+  const where = await makeHome(t);
+  // York ticks both workspaces by itself.
+  await seedYork(where.home, { workspaces: ['Recruitment', 'Personal assistant'] });
+  await answerOnly(where.answersFile, {}, { asked: ['workspaces'] });
+
+  const result = await runWith(where, 'york');
+
+  assert.equal(result.code, 0, result.stdout + result.stderr);
+  assert.deepEqual((await readSettings(where.home)).workspaces, ['Personal assistant']);
+  assert.ok((await readOnlyLog(where.home)).text.includes("Settings: workspaces is no longer right"));
 });
 
 test("a re-asked pick defaults to last time's ticks, never to the profile's own", async (t) => {
