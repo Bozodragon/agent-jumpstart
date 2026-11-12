@@ -169,6 +169,33 @@ export async function askChange(profile, earlier, memoryInUse, ask, log) {
 }
 
 /**
+ * On a re-run that answers the team for the first time or changes it, the picks the team ticks
+ * something in that last time's answers don't have, each with the team's ticks to add to last
+ * time's. Choosing last time's team again, or a team that ticks nothing (Another team), brings
+ * nothing. A pick the person chose to change as well is still asked once, with the ticks added.
+ * @param {import('./profile.js').Profile} profile the profile with the team merged in (see withTeam)
+ * @param {Record<string, unknown>} earlier @param {string | undefined} team
+ * @param {{ write(line: string): void }} log
+ * @returns {[string, string[]][]}
+ */
+export function teamTicksToAdd(profile, earlier, team, log) {
+  if (!profile.teamTicks || team === earlier.team) return [];
+  /** @type {[string, string[]][]} */
+  const picks = [];
+  for (const key of /** @type {const} */ (['connectors', 'extraTools'])) {
+    const ticks = profile.teamTicks[key];
+    const saved = earlier[key];
+    // A pick with no list saved is asked anyway, with the team's ticks in its usual default.
+    if (!Array.isArray(saved)) continue;
+    const missing = ticks.filter((tick) => !saved.includes(tick));
+    if (missing.length === 0) continue;
+    log.write(`Settings: the ${team} team ticks ${missing.join(', ')}, which last time's ${key} doesn't have`);
+    picks.push([key, ticks]);
+  }
+  return picks;
+}
+
+/**
  * On a re-run, an earlier run's top workspace that's still there.
  * @param {Record<string, unknown> | undefined} earlier
  * @param {{ write(line: string): void }} log
@@ -378,11 +405,13 @@ async function theRest(profile, ask, log, found, { googleDriveFolder, workspaces
  * @param {Asker} ask
  * @param {{ write(line: string): void }} log
  * @param {Set<string>} [reused] Filled with the key of each answer the settings gave.
- * @param {Set<string>} [changing] The keys the person chose to change (see askChange), filled
- *   in before their questions come. Each is put to `ask` with last time's answer as the default.
+ * @param {Map<string, string[]>} [changing] The keys of the answers to ask again, filled in before
+ *   their questions come: those the person chose to change (see askChange), and the picks a team
+ *   joined or changed brings ticks to (see teamTicksToAdd), each with those ticks. Each is put to
+ *   `ask` with last time's answer as the default, and for a pick, the ticks added to it.
  * @returns {Asker}
  */
-export function knownFrom(settings, ask, log, reused = new Set(), changing = new Set()) {
+export function knownFrom(settings, ask, log, reused = new Set(), changing = new Map()) {
   const { topWorkspace, ...answerable } = settings;
   const known = answersFrom(answerable);
   /**
@@ -423,21 +452,21 @@ export function knownFrom(settings, ask, log, reused = new Set(), changing = new
     folder: (q) => (changing.has(q.key) ? again(q, () => known.folder(q), (r) => ask.folder(r)) : either(q.key, () => known.folder(q), () => ask.folder(q))),
     choose: (q) => (changing.has(q.key) ? again(q, () => known.choose(q), (r) => ask.choose(r)) : either(q.key, () => known.choose(q), () => ask.choose(q))),
     confirm: (q) => (changing.has(q.key) ? again(q, () => known.confirm(q), (r) => ask.confirm(r)) : either(q.key, () => known.confirm(q), () => ask.confirm(q))),
-    // A pick's default is last time's ticks without anything the profile no longer offers.
-    pick: (q) => (changing.has(q.key) ? again(q, async () => lastTicks(settings[q.key], q.options, q.initial), (r) => ask.pick(r)) : either(q.key, () => known.pick(q), () => ask.pick(q))),
+    // A pick's default is last time's ticks without anything the profile no longer offers, and with a team's.
+    pick: (q) => (changing.has(q.key) ? again(q, async () => lastTicks(settings[q.key], q.options, q.initial, changing.get(q.key)), (r) => ask.pick(r)) : either(q.key, () => known.pick(q), () => ask.pick(q))),
   };
 }
 
 /**
- * A re-asked pick's default: last time's ticks that are still offered, or, when none were saved
- * as a list, the question's own default.
+ * A re-asked pick's default: last time's ticks that are still offered, then any of `added` it
+ * doesn't have, or, when none were saved as a list, the question's own default.
  * @template {string} T
- * @param {unknown} saved @param {Option<T>[]} options @param {T[]} initial
+ * @param {unknown} saved @param {Option<T>[]} options @param {T[]} initial @param {string[]} [added]
  * @returns {T[]}
  */
-function lastTicks(saved, options, initial) {
+function lastTicks(saved, options, initial, added = []) {
   if (!Array.isArray(saved)) return initial;
-  return saved.flatMap((value) => options.filter((option) => option.value === value).map((option) => option.value));
+  return [...new Set([...saved, ...added])].flatMap((value) => options.filter((option) => option.value === value).map((option) => option.value));
 }
 
 /**
