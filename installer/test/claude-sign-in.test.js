@@ -1,4 +1,5 @@
-// Claude Code's sign-in never leaves anyone stuck: the notice says what really happens, a failed
+// Claude Code's sign-in never leaves anyone stuck: the notice says what really happens (the
+// browser opens by itself, and a code is pasted once, with nothing showing as it's pasted), a failed
 // sign-in shows Claude's own reason and offers Try again (as often as it fails) or Skip for now,
 // a skip carries on to an ending that says how to fix it, and the log keeps Claude's own lines.
 import { test } from 'node:test';
@@ -61,14 +62,33 @@ test('before the sign-in starts, the notice says what really happens, word for w
   assert.equal(result.code, 0, result.stdout + result.stderr);
   const text = flowing(result.stdout);
   const notice = [
-    "A browser window opens at Claude's sign-in page. Sign in there.",
-    'Then come back here. This window carries on by itself.',
-    'If no window opens, copy the link below into your browser.',
-    'Only if the page shows a code: copy it, paste it here and press Enter.',
+    'Sign in to Claude Code',
+    'Claude Code signs you in next, in your browser.',
+    "• A browser window opens at Claude's sign-in page. Sign in there, then come back here: this window carries on by itself.",
+    '• If no window opens, copy the link below into your browser: select it with the mouse, then right-click to copy it.',
+    '• If the page shows a code, copy it, come back here and right-click to paste it. Nothing appears when you paste. Paste once, then press Enter.',
   ];
-  for (const line of notice) assert.ok(text.includes(line), `${line}\n\n${result.stdout}`);
-  assert.ok(text.indexOf(notice[3]) < text.indexOf(claudesLines[0]), 'the notice comes before Claude prints anything');
+  // The box's wrapping can break a line anywhere, so the text is compared as it flows. The
+  // bullet's symbol is a • on the old console too, but the box can't be told where to break.
+  for (const line of notice) assert.ok(text.includes(line), `${line}
+
+${result.stdout}`);
+  assert.ok(text.indexOf(notice[4]) < text.indexOf(claudesLines[0]), 'the notice comes before Claude prints anything');
   assert.doesNotMatch(text, /Press Enter to choose your Claude account/);
+  assert.doesNotMatch(text, /Only if the page shows a code|as you type|as it's typed/);
+});
+
+test("Claude's sign-in is run with BROWSER=explorer.exe, no other run is given BROWSER, and the person's environment variables don't gain it", async (t) => {
+  const { where, machine, logins } = await aLaptopSignedOut(t, { status: [signedOut, signedIn], login: [goodLogin] });
+
+  const result = await runWith(where, 'york');
+
+  assert.equal(result.code, 0, result.stdout + result.stderr);
+  assert.deepEqual((await logins()).map((run) => run.env), [{ BROWSER: 'explorer.exe' }]);
+  const others = (await machine.runs()).filter((run) => !(basename(run.file) === 'claude.exe' && run.args.join(' ') === 'auth login'));
+  assert.ok(others.length > 5, 'the other runs are there to be checked');
+  assert.deepEqual(others.filter((run) => run.env !== undefined), [], 'no other run is given an environment of its own');
+  assert.equal((await machine.environment()).BROWSER, undefined, "the person's environment variables don't gain BROWSER");
 });
 
 test("a sign-in that fails shows Claude's reason and offers Try again, which signs in afresh and carries on as normal", async (t) => {
@@ -135,7 +155,7 @@ test("Skip for now, when other steps didn't work too, ends with the sign-in's ow
 
 for (const mode of ['an ordinary', 'a debug']) {
   test(`${mode} run's log keeps Claude's own sign-in lines, and never the code pasted at its prompt`, async (t) => {
-    // Were the code ever printed back after the prompt, as the window shows it while it's typed.
+    // Claude doesn't print the code back (nothing shows as it's pasted), but were it ever to, it would be after the prompt.
     const code = 'a1B2c3D4e5F6g7H8#state-9z8y7x';
     const echoed = { code: 1, output: `${claudesLines.join('\n')}\n${prompt}${code}\n${loginFailed}\n` };
     const { where } = await aLaptopSignedOut(t, { status: [signedOut], login: [echoed], answers: { claudeSignIn: ['skip'] } });
