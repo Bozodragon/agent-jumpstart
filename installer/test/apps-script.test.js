@@ -41,6 +41,19 @@ test('with the Apps Script extra tool unticked, clasp appears only as a skipped 
   assert.ok(log.text.includes('Checklist: clasp: Skipped (not chosen)'), log.text);
 });
 
+test("York ticks Apps Script by itself: with no extraTools answer, clasp is installed", async (t) => {
+  const where = await makeHome(t);
+  const { clasp } = await supplyClasp(where);
+  const machine = fakeMachine(where.home);
+
+  const result = await runWith(where, 'york');
+
+  assert.equal(result.code, 0, result.stdout + result.stderr);
+  checklistSays(result.stdout, 'clasp', clasp.version);
+  const runs = await machine.runs();
+  assert.ok(runs.some((run) => basename(run.file) === 'npm.cmd' && run.args[0] === 'install'), JSON.stringify(runs.map((run) => run.file)));
+});
+
 test('with Apps Script ticked, clasp installs per user at the pinned version, outside the Node folder, through npm.cmd', async (t) => {
   const where = await makeHome(t, { extraTools: ['apps-script'] });
   const { clasp, file } = await supplyClasp(where);

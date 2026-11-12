@@ -78,6 +78,7 @@ const timesIn = (text, part) => text.split(part).length - 1;
 for (const { name, reply, debug, logged } of [
   { name: 'after a non-zero exit', reply: { code: 1, output: 'Download failed: 403' }, debug: false, logged: true },
   { name: 'after an exit code of 0 that leaves no claude.exe', reply: { output: 'Download failed: 403' }, debug: false, logged: true },
+  { name: 'after an exit code of 0 that leaves no claude.exe, in a debug run', reply: { output: 'Download failed: 403' }, debug: true, logged: true },
   { name: 'after a success, in a debug run', reply: { output: 'Download failed: 403', creates: [claudeProgram] }, debug: true, logged: true },
   { name: 'after a success in an ordinary run', reply: { output: 'Download failed: 403', creates: [claudeProgram] }, debug: false, logged: false },
 ]) {
