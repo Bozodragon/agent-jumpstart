@@ -26,15 +26,20 @@ test('everything a run prints, from its first line through notices, the checklis
   // connectors walkthrough, and, with nothing to install from, a checklist of what failed.
   const full = await makeHome(t, { github: true, extraTools: ['apps-script'], connectors: ['Gmail', 'Asana', 'Google Calendar'] });
   const stopped = await makeHome(t, { channel: 'beta' });
+  // York's team names, as a stop on a team it doesn't offer prints them.
+  const noSuchTeam = await makeHome(t, { team: 'Finance' });
 
   const fullRun = await runWith(full, 'york');
   const stoppedRun = await runWith(stopped, 'default');
+  const noSuchTeamRun = await runWith(noSuchTeam, 'york');
 
   assert.equal(fullRun.code, 0, fullRun.stdout + fullRun.stderr);
   assert.match(fullRun.stdout, /Checklist/);
   assert.match(fullRun.stdout, /Not installed/);
   assert.equal(stoppedRun.code, 1, stoppedRun.stdout + stoppedRun.stderr);
-  for (const { stdout, stderr } of [fullRun, stoppedRun]) {
+  assert.equal(noSuchTeamRun.code, 1, noSuchTeamRun.stdout + noSuchTeamRun.stderr);
+  assert.match(noSuchTeamRun.stdout, /"Systems, Data and Operations", "Marketing", "Another team"/);
+  for (const { stdout, stderr } of [fullRun, stoppedRun, noSuchTeamRun]) {
     assert.deepEqual(undrawable(stdout + stderr), [], stdout + stderr);
   }
 });

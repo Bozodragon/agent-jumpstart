@@ -1,5 +1,5 @@
 // The one test seam: the real installer, run end to end in a temporary home with the
-// three overrides, so tests see only what it leaves behind.
+// test overrides, so tests see only what it leaves behind.
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -89,7 +89,7 @@ export async function seedSettings(home, settings) {
 }
 
 /**
- * Runs the real installer with the three test overrides.
+ * Runs the real installer with the test overrides.
  * @param {string[]} args
  * @returns {Promise<{ code: number, stdout: string, stderr: string }>}
  */
@@ -108,6 +108,19 @@ export function run(args) {
  */
 export function runWith(where, profile, extra = []) {
   return run(['--profile', profile, ...extra, '--home', where.home, '--answers', where.answersFile, '--downloads', where.downloads]);
+}
+
+/**
+ * Writes fixture profiles, by id, to a folder beside the home, for a run to take instead of the
+ * repo's. Spread what it returns into `runWith`'s flags.
+ * @param {{ home: string }} where @param {Record<string, object>} profiles
+ * @returns {Promise<string[]>} the `--profiles` flag and its folder
+ */
+export async function fixtureProfiles(where, profiles) {
+  const folder = join(where.home, '..', 'profiles');
+  await mkdir(folder, { recursive: true });
+  for (const [id, profile] of Object.entries(profiles)) await writeFile(join(folder, `${id}.json`), JSON.stringify(profile, null, 2));
+  return ['--profiles', folder];
 }
 
 /** @param {string} home */
