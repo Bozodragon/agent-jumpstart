@@ -21,7 +21,7 @@
 //
 // A fourth, for tests only, which the bootstrap never passes:
 //   --profiles <folder>   take profiles from this folder instead of the repo's
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { basename, dirname } from 'node:path';
 import { parseArgs } from 'node:util';
 import { openLog } from './log.js';
@@ -43,7 +43,7 @@ import { End, messageOf, Stop } from './stop.js';
 import { installTools, isRecord } from './tools.js';
 import { openTerminal } from './terminal.js';
 import { inWords } from './text.js';
-import { openInstallerPage } from './installer-page.js';
+import { openInstallerPage, writeWhole } from './installer-page.js';
 import { setWindowTitle } from './window.js';
 import { addToT3, createWorkspaces } from './workspaces.js';
 
@@ -196,8 +196,16 @@ async function main() {
   const machine = openMachine(places, log, frontEnd.screen);
   // Nothing happens until a page is there to show it. With none, the run stops before it has run
   // or changed anything, and the Bootstrap, seeing it end with no page, runs it in the window.
-  if (page && !(await machine.waitFor(page.whenConnected(), noPageWithin))) {
-    const why = `No page connected within ${noPageWithin / 1000} seconds, so the Installer stops, for the Bootstrap to run it in the window with --terminal`;
+  /** Why no page can be counted on, if none can: the Bootstrap knows of one only from the connected file. @type {string | undefined} */
+  let noPageBecause;
+  const shown = page?.connected.then(
+    () => undefined,
+    (error) => `A page connected, but ${basename(places.pageConnected)} couldn't be written (${messageOf(error)})`,
+  );
+  if (shown && !(await machine.waitFor(shown, noPageWithin))) noPageBecause = `No page connected within ${noPageWithin / 1000} seconds`;
+  else noPageBecause = await shown;
+  if (page && noPageBecause) {
+    const why = `${noPageBecause}, so the Installer stops, for the Bootstrap to run it in the window with --terminal`;
     log.write(why);
     process.stdout.write(`${why}.\n`);
     await frontEnd.close();
@@ -423,7 +431,22 @@ async function main() {
  * @returns {Promise<{ frontEnd: import('./front-end.js').FrontEnd, page?: Awaited<ReturnType<typeof openInstallerPage>> } | { frontEnd?: undefined, page?: undefined, why: string }>}
  */
 async function openFrontEnd(options, places) {
-  if (options.answers !== undefined || options.terminal) return { frontEnd: await openTerminal() };
+  if (options.answers !== undefined) return { frontEnd: await openTerminal() };
+  if (options.terminal) {
+    // Someone at the window holds the lock too, with no page's address, so a second paste of the
+    // line leaves this run be (and says so) rather than replacing the program under it.
+    const terminal = await openTerminal();
+    await writeWhole(places.pageAddress, `\n${process.pid}\n`);
+    return {
+      frontEnd: {
+        ...terminal,
+        async close() {
+          await terminal.close();
+          await rm(places.pageAddress, { force: true });
+        },
+      },
+    };
+  }
   try {
     const page = await openInstallerPage({ addressFile: places.pageAddress, connectedFile: places.pageConnected });
     // For whoever started it by hand: the Bootstrap opens the address from the file.

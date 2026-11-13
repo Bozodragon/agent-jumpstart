@@ -368,6 +368,7 @@ test('a run with --terminal, or with an answers file, stays in the window with t
   child.kill();
   await new Promise((resolve) => child.once('close', resolve));
   assert.doesNotMatch(stdout, /Installer page/);
-  assert.equal(await exists(addressFile(terminal.home)), false);
+  // Its lock (killed here, so left behind) holds no page's address.
+  assert.equal((await readFile(addressFile(terminal.home), 'utf8').catch(() => '')).split(/\r?\n/)[0], '');
   assert.match((await readOnlyLog(terminal.home)).text, /Window: not Windows Terminal/);
 });

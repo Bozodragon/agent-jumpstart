@@ -435,7 +435,7 @@ function fakeMachine(folder, home, screen) {
       },
     },
     pathSources,
-    start: (file, args, env) => reply(file, args, { file, args, path: env.Path ?? '', input: 'pipe' }),
+    start: (file, args, env) => reply(file, args, { file, args, path: env.Path ?? '', input: inputOf(waitedFor) }),
     startOnScreen: async (file, args, env, extra) =>
       (await reply(file, args, { file, args, path: env.Path ?? '', ...recordOf(extra), onScreen: true, input: inputOf(screen.stdio(false)) })).code,
     // The reply's output is what the program prints, so it's shown on the screen, as it would be.
@@ -501,6 +501,13 @@ function fakeMachine(folder, home, screen) {
  * @type {import('node:child_process').StdioOptions}
  */
 const leftRunning = ['pipe', 'ignore', 'ignore'];
+
+/**
+ * How a program run and waited for is connected: everything a pipe of the Installer's, its
+ * input never the hidden console (see `leftRunning`).
+ * @type {import('node:child_process').StdioOptions}
+ */
+const waitedFor = ['pipe', 'pipe', 'pipe'];
 
 /**
  * What a program's input is, from how it's started: `pipe`, or `inherit` (the Installer's own).
@@ -711,8 +718,7 @@ function runProgram(file, args, env = process.env) {
   if ('refused' in how) return Promise.resolve({ code: -1, output: how.refused });
   return new Promise((resolve) => {
     let output = '';
-    // Its input a pipe of the Installer's, never the hidden console's (see `leftRunning`).
-    const child = spawn(how.file, how.args, { ...how.options, env, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] });
+    const child = spawn(how.file, how.args, { ...how.options, env, windowsHide: true, stdio: waitedFor });
     child.stdout?.on('data', (chunk) => (output += chunk));
     child.stderr?.on('data', (chunk) => (output += chunk));
     child.once('error', (error) => resolve({ code: -1, output: error.message }));

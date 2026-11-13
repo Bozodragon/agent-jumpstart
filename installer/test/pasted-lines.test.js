@@ -112,16 +112,26 @@ test("before it changes anything, the Bootstrap looks for a running Installer's 
   const places = findPlaces(join(repo, 'a-home'));
   assert.match(text, new RegExp(`\\$addressFile = Join-Path \\$root '${basename(places.pageAddress).replace('.', '\\.')}'`));
   const body = running(text);
-  const lockCheck = body.indexOf('if (Test-Path -LiteralPath $addressFile) {');
+  const lockCheck = body.indexOf('if (Test-RunningInstaller) { return }');
   assert.ok(lockCheck >= 0, 'the lock is looked for');
   const firstChange = body.search(/New-Item|Remove-Item|Move-Item|Save-Download|Expand-Zip|Start-Process/);
   assert.ok(lockCheck < firstChange, `the lock is looked for before anything changes: ${body.slice(firstChange, firstChange + 80)}`);
-  const check = body.slice(lockCheck, firstChange);
+  // And again just before each thing that would break a running Installer, which a paste made
+  // while another was still downloading might otherwise do.
+  for (const change of [/Move-Item -LiteralPath \$nodeDir/, /Remove-Item -LiteralPath \$programDir/, /Remove-Item -LiteralPath \$addressFile, \$connectedFile/]) {
+    const at = body.search(change);
+    const before = body.slice(0, at).trimEnd().split('\n');
+    assert.ok(at > 0 && before.slice(-6).some((line) => line.includes('if (Test-RunningInstaller) { return }')), `the lock is looked for again just before ${change}`);
+  }
+  const [, check] = /function Test-RunningInstaller \{\n([\s\S]*?)\n {2}\}\n/.exec(text) ?? [];
+  assert.ok(check, 'the lock check');
   // The lock's second line is the Installer's process: a lock left by one that has stopped is no lock.
   assert.match(check, /\$lock = @\(Get-Content -LiteralPath \$addressFile/);
   assert.match(check, /Get-Process -Id \$lock\[1\]/);
-  assert.match(check, /\$running\.Path -eq \$nodeExe/);
-  assert.match(check, /Open-InstallerPage \$lock\[0\]\s+return\s/);
+  // Its path, where it can be read; 32-bit PowerShell can't read a 64-bit program's, so then its name.
+  assert.match(check, /\$running\.Path -eq \$nodeExe -or \(-not \$running\.Path -and \$running\.ProcessName -eq 'node'\)/);
+  // A page to open again, or none for an Installer in a window of its own (--terminal).
+  assert.match(check, /if \(\$lock\[0\]\) \{\s+Write-Host [^\n]+\s+Open-InstallerPage \$lock\[0\]\s+\} else \{\s+Write-Host '[^']*another window[^']*'/);
 });
 
 test('the Bootstrap starts the Installer hidden with Start-Process, neither detached nor through a hidden powershell.exe', async () => {

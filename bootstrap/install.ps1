@@ -86,6 +86,33 @@ function Start-AgentJumpstart {
     }
   }
 
+  # Whether an Installer is running, which nothing here may change under. Its address file is
+  # its lock: its page's address (none for one in a window of its own, with --terminal), then
+  # its process id. A lock left by an Installer that has stopped is no lock. A running one's
+  # page is opened again, and the person is told; the caller then does nothing else.
+  function Test-RunningInstaller {
+    if (-not (Test-Path -LiteralPath $addressFile)) { return $false }
+    $lock = @(Get-Content -LiteralPath $addressFile -ErrorAction SilentlyContinue)
+    $running = $null
+    try {
+      if ($lock.Count -ge 2) { $running = Get-Process -Id $lock[1] -ErrorAction SilentlyContinue }
+    } catch {
+      $running = $null
+    }
+    # Its path where it can be read; 32-bit PowerShell can't read a 64-bit program's, so then its name.
+    if (-not ($running -and ($running.Path -eq $nodeExe -or (-not $running.Path -and $running.ProcessName -eq 'node')))) {
+      if ($DebugOn) { Write-Host "Debug: $addressFile was left by an Installer that has stopped" }
+      return $false
+    }
+    if ($lock[0]) {
+      Write-Host 'The Installer is already running, so its page is opening again.'
+      Open-InstallerPage $lock[0]
+    } else {
+      Write-Host 'The installer is already running in another window. Carry on there.'
+    }
+    return $true
+  }
+
   function Get-NodeVersion {
     if (-not (Test-Path -LiteralPath $nodeExe)) { return 'none' }
     try {
@@ -191,24 +218,9 @@ function Start-AgentJumpstart {
     Write-Host "Debug: downloads are kept in $downloads"
   }
 
-  # A running Installer first, before anything is changed. Its address file is its lock: the
-  # page's address, then its process id. While that process runs, its page is opened again and
-  # nothing else is done. A lock left by an Installer that has stopped is no lock.
-  if (Test-Path -LiteralPath $addressFile) {
-    $lock = @(Get-Content -LiteralPath $addressFile -ErrorAction SilentlyContinue)
-    $running = $null
-    try {
-      if ($lock.Count -ge 2) { $running = Get-Process -Id $lock[1] -ErrorAction SilentlyContinue }
-    } catch {
-      $running = $null
-    }
-    if ($running -and $running.Path -eq $nodeExe) {
-      Write-Host 'The Installer is already running, so its page is opening again.'
-      Open-InstallerPage $lock[0]
-      return
-    }
-    if ($DebugOn) { Write-Host "Debug: $addressFile was left by an Installer that has stopped" }
-  }
+  # A running Installer first, before anything is changed; and again before each change that
+  # would break one, in case one started meanwhile (from a paste made while this one downloaded).
+  if (Test-RunningInstaller) { return }
 
   try {
     New-Item -ItemType Directory -Force -Path $downloads | Out-Null
@@ -230,6 +242,7 @@ function Start-AgentJumpstart {
       Write-Host 'Unpacking Node.js...'
       Expand-Zip $nodeZip $unpacking
       # Set the installer's old Node.js aside in one move, so one still in use is left whole.
+      if (Test-RunningInstaller) { return }
       if (Test-Path -LiteralPath $replaced) { Remove-Item -LiteralPath $replaced -Recurse -Force }
       if (Test-Path -LiteralPath $nodeDir) {
         try {
@@ -246,6 +259,7 @@ function Start-AgentJumpstart {
 
     $programZip = Join-Path $downloads 'installer.zip'
     Save-Download $programUrl $programZip 'the installer'
+    if (Test-RunningInstaller) { return }
     Expand-Zip $programZip $unpacking
     if (Test-Path -LiteralPath $programDir) { Remove-Item -LiteralPath $programDir -Recurse -Force }
     Move-Item -LiteralPath $unpacking -Destination $programDir
@@ -264,6 +278,7 @@ function Start-AgentJumpstart {
   # run's. Start-Process joins its arguments with spaces, so the program's path is quoted.
   $arguments = @("`"$main`"", '--profile', $ProfileId)
   if ($DebugOn) { $arguments += '--debug' }
+  if (Test-RunningInstaller) { return }
   Remove-Item -LiteralPath $addressFile, $connectedFile -Force -ErrorAction SilentlyContinue
   $installer = $null
   try {

@@ -3,9 +3,10 @@
 // input. The Bootstrap's own side is checked in pasted-lines.test.js.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { spawn } from 'node:child_process';
 import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
-import { claudeProgram, exists, fakeMachine, makeHome, readOnlyLog, repo, run, runWith, stateFolder, supplyT3, t3Leaves } from './harness.js';
+import { claudeProgram, exists, fakeMachine, makeHome, program, readOnlyLog, repo, run, runWith, stateFolder, supplyT3, t3Leaves } from './harness.js';
 import { addressFile, answerEverything, connectedFile, runOnPage } from './page-harness.js';
 
 /** @param {string} path @returns {Promise<string[] | undefined>} its lines, or nothing if it isn't there */
@@ -47,6 +48,54 @@ test('with no page connecting, the Installer stops itself after about 20 seconds
   assert.equal(await exists(connectedFile(where.home)), false);
   assert.equal(await exists(join(stateFolder(where.home), 'settings.json')), false);
   assert.deepEqual(await fakeMachine(where.home).runs(), [], 'nothing was run');
+});
+
+test("a page counts as connected only once the connected file is written: one that can't be is told to the log, and the run stops as with no page, before running anything", async (t) => {
+  const where = await makeHome(t);
+  // A folder where the file goes, so it can't be written.
+  await mkdir(connectedFile(where.home), { recursive: true });
+
+  const run = await runOnPage(where, 'york');
+  t.after(run.kill);
+  const page = run.connect();
+  const result = await run.ended;
+  page.close();
+
+  assert.equal(result.code, 3, result.stdout + result.stderr);
+  const log = await readOnlyLog(where.home);
+  assert.match(log.text, /A page connected, but page-connected\.txt couldn't be written \(.+\), so the Installer stops, for the Bootstrap to run it in the window/);
+  assert.equal(await exists(addressFile(where.home)), false, 'the lock is gone');
+  assert.deepEqual(await fakeMachine(where.home).runs(), [], 'nothing was run');
+});
+
+test("an Installer run in the window with --terminal holds the lock too, with no page's address, so a second paste leaves it be; an answers-file run holds none", async (t) => {
+  const where = await makeHome(t);
+  /** @type {NodeJS.ProcessEnv} */
+  const env = { ...process.env, NO_COLOR: '1' };
+  delete env.WT_SESSION;
+  const child = spawn(process.execPath, [program, '--profile', 'york', '--terminal', '--home', where.home, '--downloads', where.downloads], {
+    env,
+    stdio: ['pipe', 'pipe', 'pipe'],
+    windowsHide: true,
+  });
+  t.after(() => child.kill());
+  let stdout = '';
+  await new Promise((resolve, reject) => {
+    const giveUp = setTimeout(() => reject(new Error(`no question in the window:\n${stdout}`)), 20_000);
+    child.stdout.setEncoding('utf8').on('data', (chunk) => {
+      stdout += chunk;
+      if (stdout.includes('Which team are you in?')) resolve(clearTimeout(giveUp));
+    });
+  });
+  const lock = await readFile(addressFile(where.home), 'utf8').catch(() => undefined);
+  child.kill();
+  await new Promise((resolve) => child.once('close', resolve));
+  const filed = await makeHome(t, { channel: 'stable' });
+  const fromFile = await runWith(filed, 'york');
+
+  assert.deepEqual(lock?.split(/\r?\n/), ['', String(child.pid), '']);
+  assert.equal(fromFile.code, 0, fromFile.stderr);
+  assert.equal(await exists(addressFile(filed.home)), false, 'an answers-file run, with nobody at the screen, holds no lock');
 });
 
 const signedOut = { code: 1, output: JSON.stringify({ loggedIn: false, authMethod: 'none' }) };

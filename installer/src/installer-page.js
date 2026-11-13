@@ -42,7 +42,7 @@ const progressEvery = 200;
  * test) never reads it empty or half-written.
  * @param {string} path @param {string} text
  */
-async function writeWhole(path, text) {
+export async function writeWhole(path, text) {
   await mkdir(dirname(path), { recursive: true });
   const writing = `${path}.${process.pid}.partial`;
   await writeFile(writing, text);
@@ -54,10 +54,10 @@ async function writeWhole(path, text) {
  * where the Bootstrap finds it, with this process's id on the line after. That file is the lock
  * that says an Installer is running, and it's removed again as the front end closes. Once a page
  * first connects, its address is written to `connectedFile`, which tells the Bootstrap it can
- * close the window.
+ * close the window. `connected` resolves once it's written, and rejects if it can't be.
  * @param {{ addressFile: string, connectedFile: string, page?: string }} options `page`: the built
  *   page's folder, for tests
- * @returns {Promise<import('./front-end.js').FrontEnd & { address: string, whenConnected: () => Promise<void> }>}
+ * @returns {Promise<import('./front-end.js').FrontEnd & { address: string, connected: Promise<void> }>}
  */
 export async function openInstallerPage({ addressFile, connectedFile, page }) {
   /** @type {Map<number, OpenQuestion>} */
@@ -89,12 +89,17 @@ export async function openInstallerPage({ addressFile, connectedFile, page }) {
     },
   });
   await writeWhole(addressFile, `${server.address}\n${process.pid}\n`);
-  // For the first page only: the Bootstrap waits for it once. A file that can't be written leaves
-  // the Bootstrap to fall back to the window, which is all it would do without one.
+  // For the first page only: the Bootstrap waits for it once, and knows a page has connected only
+  // from it, so a page counts as connected only once it's written.
   let connectedWritten = Promise.resolve();
-  server.whenConnected().then(() => {
-    connectedWritten = writeWhole(connectedFile, `${server.address}\n`).catch(() => {});
+  /** @type {Promise<void>} */
+  const connected = new Promise((resolve, reject) => {
+    server.whenConnected().then(() => {
+      connectedWritten = writeWhole(connectedFile, `${server.address}\n`).then(resolve, reject);
+    });
   });
+  // Whoever waits for it hears how it failed; nothing else need.
+  connected.catch(() => {});
 
   /**
    * Sends a question and waits for its first answer that `check` accepts.
@@ -139,7 +144,7 @@ export async function openInstallerPage({ addressFile, connectedFile, page }) {
 
   return {
     address: server.address,
-    whenConnected: server.whenConnected,
+    connected,
     start(title) {
       server.send({ type: 'start', title });
     },
