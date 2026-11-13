@@ -64,7 +64,7 @@ export async function runOnPage(where, profile, extra = [], { internet } = {}) {
   /** @type {string | undefined} */
   let address;
   while (address === undefined) {
-    address = await readFile(addressFile(where.home), 'utf8').then((text) => text.trim(), () => undefined);
+    address = await readFile(addressFile(where.home), 'utf8').then((text) => text.trim() || undefined, () => undefined);
     if (address === undefined) {
       if (gone) throw new Error(`the run ended without writing the page's address:\n${stdout}\n${stderr}`);
       await new Promise((resolve) => setTimeout(resolve, 25));

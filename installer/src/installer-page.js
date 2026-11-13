@@ -18,7 +18,7 @@
 //   refused  { question, answer, reason }   a folder that won't do; the question is still open
 //   output   { text }                       what a program on screen printed
 //   finish   { text }                       the run's last words
-import { rm, mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, rename, rm, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { openPageServer } from './page-server.js';
 
@@ -55,8 +55,12 @@ export async function openInstallerPage({ addressFile, page }) {
       // The first answer to a question wins; any other page has moved on by the time it's in.
       if (typeof question !== 'number' || !asked || asked.checking) return { status: 409, body: { ok: false, reason: 'That question has already been answered.' } };
       asked.checking = true;
-      const checked = await asked.check(answer);
-      asked.checking = false;
+      let checked;
+      try {
+        checked = await asked.check(answer);
+      } finally {
+        asked.checking = false;
+      }
       if ('refused' in checked) {
         server.send({ type: 'refused', question, answer, reason: checked.refused });
         return { status: 422, body: { ok: false, reason: checked.refused } };
@@ -67,8 +71,12 @@ export async function openInstallerPage({ addressFile, page }) {
       return { status: 200, body: { ok: true } };
     },
   });
+  // Written under another name and renamed, so whoever looks for it (the Bootstrap, a test)
+  // never reads it empty or half-written.
   await mkdir(dirname(addressFile), { recursive: true });
-  await writeFile(addressFile, `${server.address}\n`);
+  const writing = `${addressFile}.${process.pid}.partial`;
+  await writeFile(writing, `${server.address}\n`);
+  await rename(writing, addressFile);
 
   /**
    * Sends a question and waits for its first answer that `check` accepts.
