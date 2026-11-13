@@ -9,14 +9,21 @@ $AgentJumpstart = @{ Profile = 'york'; Debug = $false }
 # checksum and unpacks it to %LOCALAPPDATA%\agent-jumpstart\node, a folder of the
 # installer's own that is never on PATH, so a Node.js the person already has (in
 # %LOCALAPPDATA%\Programs\nodejs or anywhere else) is never moved, replaced or shadowed.
-# It then fetches the installer program from the same Portall item as this file and runs
-# it with that Node.js. The program does everything else.
+# It then fetches the installer program from the same Portall item as this file and starts
+# it with that Node.js, hidden, and opens the Installer page the program serves. Once a page
+# has connected, it closes this window. The program does everything else.
+#
+# If an Installer is already running (its page's address file, holding its process id, is
+# the lock), it only opens that page again: before anything else, so a second paste never
+# replaces the program folder under a running Installer. If no page connects (the program
+# stops by itself after about 20 seconds without one), it runs the program in this window
+# with --terminal instead, and says why.
 #
 # It runs through iex on Windows PowerShell 5.1, perhaps in Constrained Language Mode, so:
-# plain ASCII with no byte-order mark; no exit (it would close the person's window); no
-# Add-Type, New-Object or .NET method calls; -UseBasicParsing on every web request. The
-# Node.js version and checksums must match manifest.json. installer/test/pasted-lines.test.js
-# checks all of this.
+# plain ASCII with no byte-order mark; one exit only, which closes the person's window once
+# the page has connected; no Add-Type, New-Object or .NET method calls; -UseBasicParsing on
+# every web request. The Node.js version and checksums must match manifest.json.
+# installer/test/pasted-lines.test.js checks all of this.
 
 function Start-AgentJumpstart {
   param([string]$ProfileId, [bool]$DebugOn)
@@ -46,6 +53,65 @@ function Start-AgentJumpstart {
   $nodeDir = Join-Path $root 'node'
   $nodeExe = Join-Path $nodeDir 'node.exe'
   $programDir = Join-Path $root 'program'
+  $main = Join-Path $programDir 'installer\src\main.js'
+  # Written by the program (installer/src/places.js): the page's address, then its process id,
+  # while it runs; and, once a page has connected, the address that page connected to.
+  $addressFile = Join-Path $root 'page-address.txt'
+  $connectedFile = Join-Path $root 'page-connected.txt'
+
+  # The Installer page opens as an app window, with no address bar or tabs, of the person's
+  # own Chrome, or else Edge, in their own profile, found where each one's installer registers
+  # it (App Paths, for this person or for the whole laptop). With neither, it opens as a tab of
+  # the default browser. Opened from this window, which is in front, it comes to the front.
+  function Open-InstallerPage([string]$Address) {
+    foreach ($name in @('chrome.exe', 'msedge.exe')) {
+      foreach ($hive in @('HKCU:', 'HKLM:')) {
+        $browser = (Get-ItemProperty -LiteralPath "$hive\SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\$name" -ErrorAction SilentlyContinue).'(default)'
+        if ($browser) { $browser = $browser -replace '"', '' }
+        if ($browser -and (Test-Path -LiteralPath $browser)) {
+          try {
+            Start-Process -FilePath $browser -ArgumentList "--app=$Address"
+            if ($DebugOn) { Write-Host "Debug: the Installer page opened in $browser" }
+            return
+          } catch {
+            if ($DebugOn) { Write-Host "Debug: $browser didn't start ($($_.Exception.Message))" }
+          }
+        }
+      }
+    }
+    try {
+      Start-Process -FilePath $Address
+    } catch {
+      Write-Host "Open this address in your browser: $Address"
+    }
+  }
+
+  # Whether an Installer is running, which nothing here may change under. Its address file is
+  # its lock: its page's address (none for one in a window of its own, with --terminal), then
+  # its process id. A lock left by an Installer that has stopped is no lock. A running one's
+  # page is opened again, and the person is told; the caller then does nothing else.
+  function Test-RunningInstaller {
+    if (-not (Test-Path -LiteralPath $addressFile)) { return $false }
+    $lock = @(Get-Content -LiteralPath $addressFile -ErrorAction SilentlyContinue)
+    $running = $null
+    try {
+      if ($lock.Count -ge 2) { $running = Get-Process -Id $lock[1] -ErrorAction SilentlyContinue }
+    } catch {
+      $running = $null
+    }
+    # Its path where it can be read; 32-bit PowerShell can't read a 64-bit program's, so then its name.
+    if (-not ($running -and ($running.Path -eq $nodeExe -or (-not $running.Path -and $running.ProcessName -eq 'node')))) {
+      if ($DebugOn) { Write-Host "Debug: $addressFile was left by an Installer that has stopped" }
+      return $false
+    }
+    if ($lock[0]) {
+      Write-Host 'The Installer is already running, so its page is opening again.'
+      Open-InstallerPage $lock[0]
+    } else {
+      Write-Host 'The installer is already running in another window. Carry on there.'
+    }
+    return $true
+  }
 
   function Get-NodeVersion {
     if (-not (Test-Path -LiteralPath $nodeExe)) { return 'none' }
@@ -152,6 +218,10 @@ function Start-AgentJumpstart {
     Write-Host "Debug: downloads are kept in $downloads"
   }
 
+  # A running Installer first, before anything is changed; and again before each change that
+  # would break one, in case one started meanwhile (from a paste made while this one downloaded).
+  if (Test-RunningInstaller) { return }
+
   try {
     New-Item -ItemType Directory -Force -Path $downloads | Out-Null
 
@@ -172,12 +242,13 @@ function Start-AgentJumpstart {
       Write-Host 'Unpacking Node.js...'
       Expand-Zip $nodeZip $unpacking
       # Set the installer's old Node.js aside in one move, so one still in use is left whole.
+      if (Test-RunningInstaller) { return }
       if (Test-Path -LiteralPath $replaced) { Remove-Item -LiteralPath $replaced -Recurse -Force }
       if (Test-Path -LiteralPath $nodeDir) {
         try {
           Move-Item -LiteralPath $nodeDir -Destination $replaced
         } catch {
-          throw "The installer's Node.js $have needs replacing with $nodeVersion, but something is using it. Close any other window running the installer, then paste the line again."
+          throw "The installer's Node.js $have needs replacing with $nodeVersion, but something is using it. If the installer is still running, let it finish or stop it, then paste the line again."
         }
       }
       Move-Item -LiteralPath (Join-Path $unpacking $nodeName) -Destination $nodeDir
@@ -188,6 +259,7 @@ function Start-AgentJumpstart {
 
     $programZip = Join-Path $downloads 'installer.zip'
     Save-Download $programUrl $programZip 'the installer'
+    if (Test-RunningInstaller) { return }
     Expand-Zip $programZip $unpacking
     if (Test-Path -LiteralPath $programDir) { Remove-Item -LiteralPath $programDir -Recurse -Force }
     Move-Item -LiteralPath $unpacking -Destination $programDir
@@ -197,9 +269,64 @@ function Start-AgentJumpstart {
     return
   }
 
-  $arguments = @((Join-Path $programDir 'installer\src\main.js'), '--profile', $ProfileId)
+  # The Installer runs hidden, and its page takes over from this window. Started with a hidden
+  # window, Node has a console of its own that nobody sees: the programs it runs share it, so
+  # none flashes a window, and it carries on once this window has closed. Not detached (with no
+  # console at all, each console program it ran would flash a window), and not through a hidden
+  # powershell.exe, which leaves a window showing (microsoft/terminal#12464). Any address or
+  # connected file left from a run that has stopped is cleared first, never to be read as this
+  # run's. Start-Process joins its arguments with spaces, so the program's path is quoted.
+  $arguments = @("`"$main`"", '--profile', $ProfileId)
   if ($DebugOn) { $arguments += '--debug' }
-  & $nodeExe @arguments
+  if (Test-RunningInstaller) { return }
+  Remove-Item -LiteralPath $addressFile, $connectedFile -Force -ErrorAction SilentlyContinue
+  $installer = $null
+  try {
+    $installer = Start-Process -FilePath $nodeExe -ArgumentList $arguments -WorkingDirectory $root -WindowStyle Hidden -PassThru
+    if ($DebugOn) { Write-Host "Debug: the installer started out of sight, as process $($installer.Id)" }
+  } catch {
+    if ($DebugOn) { Write-Host "Debug: the installer couldn't start out of sight ($($_.Exception.Message))" }
+  }
+
+  # Its page is opened once its address is written, then this waits for a page to connect. The
+  # Installer stops by itself if none has within about 20 seconds; this gives it longer (about
+  # 90 seconds), for a slow start, before giving up on it.
+  $address = $null
+  $connected = $false
+  if ($installer) { Write-Host 'Opening the Installer page...' }
+  for ($tries = 0; $installer -and $tries -lt 360; $tries++) {
+    # Looked at first: once it has exited, its files say all they ever will.
+    $exited = $installer.HasExited
+    if (-not $address) {
+      $address = @(Get-Content -LiteralPath $addressFile -ErrorAction SilentlyContinue)[0]
+      if ($address) { Open-InstallerPage $address }
+    }
+    $connected = $address -and @(Get-Content -LiteralPath $connectedFile -ErrorAction SilentlyContinue)[0] -eq $address
+    if ($connected -or $exited) { break }
+    Start-Sleep -Milliseconds 250
+  }
+  if ($connected) {
+    Write-Host 'The Installer page is open, so this window closes now.'
+    exit
+  }
+
+  # No page: the Installer runs in this window instead, as it always used to. One that never
+  # stopped by itself is stopped first, so two never run at once.
+  if ($installer -and -not $installer.HasExited) {
+    Stop-Process -Id $installer.Id -Force -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath $addressFile -Force -ErrorAction SilentlyContinue
+  }
+  if (-not $installer) {
+    $why = "The installer couldn't start out of sight, so it carries on in this window instead."
+  } elseif (-not $address) {
+    $why = "The Installer page couldn't be started, so the installer carries on in this window instead."
+  } else {
+    $why = "The Installer page didn't open within 20 seconds, so the installer carries on in this window instead."
+  }
+  Write-Host $why -ForegroundColor Yellow
+  $fallback = @($main, '--profile', $ProfileId, '--terminal')
+  if ($DebugOn) { $fallback += '--debug' }
+  & $nodeExe @fallback
   if ($LASTEXITCODE -ne 0) {
     Write-Host ''
     Write-Host 'If you need help, paste this line to copy your installer log, then send it on:'

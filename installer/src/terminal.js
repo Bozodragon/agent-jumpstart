@@ -118,7 +118,7 @@ function soFar(received, total) {
  * far it has got and the time always show. Keys pressed meanwhile are swallowed, so none reaches
  * the next question, and Ctrl+C stops the run.
  * @param {string} message
- * @returns {{ progress: import('./front-end.js').Progress, stop: (text: string, ok: boolean) => void }}
+ * @returns {{ progress: import('./front-end.js').Progress, stop: (text: string, ok?: boolean) => void }}
  */
 function spin(message) {
   const out = process.stdout;
@@ -162,7 +162,7 @@ function spin(message) {
     amount = now;
     draw();
   };
-  /** @param {string} text @param {boolean} ok */
+  /** @param {string} text @param {boolean} [ok] none: neither done nor failed, just over */
   const stop = (text, ok) => {
     stopped = true;
     clearInterval(ticking);
@@ -171,7 +171,7 @@ function spin(message) {
       input.setRawMode(false);
       input.pause();
     }
-    const symbol = ok ? styleText('green', 'o') : styleText('red', 'x');
+    const symbol = ok === undefined ? styleText('gray', '-') : ok ? styleText('green', 'o') : styleText('red', 'x');
     out.write(`\r\x1b[2K${symbol}  ${text} ${styleText('gray', timeSince(since))}\n`);
     showCursor();
     process.off('exit', showCursor);

@@ -34,9 +34,8 @@ test('with stable chosen, the current stable T3 is installed per user after its 
   const machine = fakeMachine(where.home);
   await machine.setReplies({
     'node.exe --version': { output: `v${node.version}\r\n` },
-    // Anthropic's installer leaves Claude Code. T3's silent install leaves the program, and T3
-    // starting leaves its shim.
-    'powershell.exe': { creates: [claudeProgram] },
+    // Claude Code is installed by its own download, as in every test home. T3's silent install
+    // leaves the program, and T3 starting leaves its shim.
     [`${installer} /S --force-run`]: { creates: [t3Program('Beta'), t3Shim] },
     'claude.exe --version': { output: '2.1.306 (Claude Code)\n' },
     'claude.exe auth status': signedIn,
@@ -105,7 +104,6 @@ test("a T3 download that doesn't match the hash T3 published is never run, and t
 
   assert.equal(result.code, 0, result.stderr);
   checklistSays(result.stdout, 'T3 Code', "Not installed: the download didn't match T3's checksum");
-  checklistSays(result.stdout, 'Claude Code', 'Not installed');
   assert.equal((await machine.runs()).some((run) => basename(run.file) === installer), false, 'the installer was not run');
   assert.equal(await exists(join(where.home, t3Program('Beta'))), false);
 });
@@ -125,7 +123,6 @@ test("when Claude isn't signed in, its own sign-in runs in the person's window, 
   const installer = await supplyT3(where.downloads, 'latest.yml', '0.1.2');
   const machine = fakeMachine(where.home);
   await machine.setReplies({
-    'powershell.exe': { creates: [claudeProgram] },
     [`${installer} /S --force-run`]: { creates: [t3Program('Beta'), t3Shim] },
     'claude.exe --version': { output: '2.1.306 (Claude Code)\n' },
     'claude.exe auth status': [{ code: 1, output: JSON.stringify({ loggedIn: false, authMethod: 'none' }) }, signedIn],
@@ -147,7 +144,6 @@ test("a sign-in that doesn't finish leaves Claude reported as not signed in, wit
   const installer = await supplyT3(where.downloads, 'latest.yml', '0.1.2');
   const machine = fakeMachine(where.home);
   await machine.setReplies({
-    'powershell.exe': { creates: [claudeProgram] },
     [`${installer} /S --force-run`]: { creates: [t3Program('Beta'), t3Shim] },
     'claude.exe --version': { output: '2.1.306 (Claude Code)\n' },
     'claude.exe auth status': { code: 1, output: JSON.stringify({ loggedIn: false, authMethod: 'none' }) },

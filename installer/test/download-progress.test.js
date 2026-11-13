@@ -14,11 +14,11 @@ const t3Shim = join('.t3', 'bin', 't3.cmd');
 
 /**
  * Replies for a York run that installs T3 Code: its silent install leaves the program and T3
- * starting leaves its shim, and Claude Code is installed and signed in.
+ * starting leaves its shim, and Claude Code (installed by its own download, as in every test
+ * home) is signed in.
  * @param {string} installer T3's installer's file name
  */
 const t3Replies = (installer) => ({
-  'powershell.exe': { creates: [join('.local', 'bin', 'claude.exe')] },
   [`${installer} /S --force-run`]: { creates: [t3Program, t3Shim] },
   'claude.exe --version': { output: '2.1.306 (Claude Code)\n' },
   'claude.exe auth status': { output: JSON.stringify({ loggedIn: true, email: 'jo.bloggs@york.ac.uk' }) },
