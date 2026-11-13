@@ -240,7 +240,7 @@ test("the log has a line for each step of Claude Code's own download, and none f
     new RegExp(`^${platform}: 200000 bytes expected, SHA-256 [0-9a-f]{64}$`),
     `downloading ${releases}/2.1.400/${platform}/claude.exe`,
     `downloaded to ${join(downloadsFolder(where.home), 'claude.exe')}`,
-    /^200000 bytes received of the 200000 expected, in \d+\.\d s$/,
+    /^200000 bytes came, of the 200000 expected, in \d+\.\d s$/,
     "checksum matches Anthropic's",
     'claude install latest finished with code 0',
     'claude install said: Setting up Claude Code...',
@@ -264,7 +264,7 @@ test('a download cut short logs how many bytes came, of how many, and how long i
   assert.equal(result.code, 0, result.stdout + result.stderr);
   const { text } = await readOnlyLog(where.home);
   assert.match(text, /Claude Code: download failed: terminated/);
-  assert.match(text, /Claude Code: 20000 bytes received of the 50000 expected before it stopped, in \d+\.\d s/);
+  assert.match(text, /Claude Code: 20000 bytes came, of the 50000 expected, before it stopped, in \d+\.\d s/);
 });
 
 /**

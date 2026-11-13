@@ -7,7 +7,8 @@
 //   step     { text }
 //   busy     { message }                     something slow under way; its id is the busy's id
 //   progress { busy, received, total? }     how far it has got (bytes), a few times a second at most
-//   ended    { busy, text, ok }              how it ended
+//   ended    { busy, text, ok? }             how it ended: done (ok true), failed (false), or
+//                                            neither, with no ok (a step that gave way quietly)
 //   problem  { text }
 //   summary  { title, rows: [label, value][] }
 //   notice   { title, text }

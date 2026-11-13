@@ -232,7 +232,7 @@ async function ownRoute(entry, program, { places, machine, frontEnd, downloads, 
 
   const megabytes = release.size === undefined ? '' : ` (${Math.round(release.size / 1_000_000)} MB)`;
   const message = `Downloading ${entry.name}${megabytes}`;
-  const expected = release.size === undefined ? '' : ` of the ${release.size} expected`;
+  const expected = release.size === undefined ? '' : `, of the ${release.size} expected`;
   const started = performance.now();
   const took = () => `${((performance.now() - started) / 1000).toFixed(1)} s`;
   let received = 0;
@@ -253,10 +253,10 @@ async function ownRoute(entry, program, { places, machine, frontEnd, downloads, 
             },
           },
         );
-        say(`${(await stat(file)).size} bytes received${expected}, in ${took()}`);
+        say(`${(await stat(file)).size} bytes came${expected}, in ${took()}`);
         return { file };
       } catch (error) {
-        say(`${received} bytes received${expected} before it stopped, in ${took()}`);
+        say(`${received} bytes came${expected}, before it stopped, in ${took()}`);
         return { reason: why(error) };
       }
     },
