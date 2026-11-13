@@ -101,22 +101,38 @@ function timeSince(since) {
 }
 
 /**
- * The spinner: the message with the time so far, on one line that's rewritten in place each
- * second and never cleared, so nothing flickers. A message too long for the window is cut short
- * while it spins (a line that wraps can't be rewritten in place) and shown whole once it's done.
- * Keys pressed meanwhile are swallowed, so none reaches the next question, and Ctrl+C stops the run.
+ * How far a task has got, as the spinner line shows it: a percentage of the total, or the
+ * amount so far when the total isn't known. Rounded down, so 100% means all of it.
+ * @param {number} received @param {number} [total]
+ */
+function soFar(received, total) {
+  if (total !== undefined && total > 0) return `${Math.min(Math.floor((received / total) * 100), 100)}%`;
+  return `${(received / 1_000_000).toFixed(1)} MB`;
+}
+
+/**
+ * The spinner: the message with how far it has got, if the task says, and the time so far, on
+ * one line that's rewritten in place each second, and as soon as how far it has got changes,
+ * and never cleared, so nothing flickers. A message too long for the window is cut short while
+ * it spins (a line that wraps can't be rewritten in place) and shown whole once it's done; how
+ * far it has got and the time always show. Keys pressed meanwhile are swallowed, so none reaches
+ * the next question, and Ctrl+C stops the run.
  * @param {string} message
+ * @returns {{ progress: import('./front-end.js').Progress, stop: (text: string, ok: boolean) => void }}
  */
 function spin(message) {
   const out = process.stdout;
   const since = performance.now();
   let longest = 0;
+  let amount = '';
   const draw = () => {
     const time = timeSince(since);
-    const room = (out.columns || 80) - 1 - '•  '.length - ' '.length - time.length;
+    const after = amount ? ` ${amount} ${time}` : ` ${time}`;
+    const room = (out.columns || 80) - 1 - '•  '.length - after.length;
     const shown = message.length <= room ? message : `${message.slice(0, Math.max(room - 3, 0))}...`;
-    const width = '•  '.length + shown.length + 1 + time.length;
-    out.write(`\r${styleText('cyan', '•')}  ${shown} ${styleText('gray', time)}${' '.repeat(Math.max(longest - width, 0))}`);
+    const width = '•  '.length + shown.length + after.length;
+    const drawn = amount ? `${amount} ${styleText('gray', time)}` : styleText('gray', time);
+    out.write(`\r${styleText('cyan', '•')}  ${shown} ${drawn}${' '.repeat(Math.max(longest - width, 0))}`);
     longest = Math.max(longest, width);
   };
   const showCursor = () => out.write('\x1b[?25h');
@@ -138,8 +154,17 @@ function spin(message) {
   out.write(`${styleText('gray', '│')}\n\x1b[?25l`);
   draw();
   const ticking = setInterval(draw, 1000);
+  let stopped = false;
+  /** @type {import('./front-end.js').Progress} */
+  const progress = (received, total) => {
+    const now = soFar(received, total);
+    if (stopped || now === amount) return;
+    amount = now;
+    draw();
+  };
   /** @param {string} text @param {boolean} ok */
-  return (text, ok) => {
+  const stop = (text, ok) => {
+    stopped = true;
     clearInterval(ticking);
     if (input.isTTY) {
       input.off('keypress', pressed);
