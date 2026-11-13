@@ -17,6 +17,8 @@ async function seedYork(home, overrides = {}) {
   const earlier = {
     profile: 'york',
     team: 'Another team',
+    aiExperience: 'dabbled',
+    codingExperience: 'no',
     googleDriveFolder: myDrive,
     workspacesLocation: myDrive,
     topWorkspace: top,

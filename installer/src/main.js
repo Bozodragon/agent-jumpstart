@@ -30,7 +30,7 @@ import { openMachine } from './machine.js';
 import { autoMemoryInUse, switchOffAutoMemory } from './memory.js';
 import { fullSkillsSizes, loadProfile, withFullSkills, withTeam } from './profile.js';
 import { logProxySetting } from './proxy.js';
-import { answersFrom, askChange, askQuestions, askTeam, knownFrom, teamTicksToAdd } from './questions.js';
+import { answersFrom, askChange, askExperience, askingThePerson, askQuestions, askTeam, experienceOptions, knownFrom, teamTicksToAdd } from './questions.js';
 import { installSkills } from './skills.js';
 import { findT3, installT3, openT3 } from './t3.js';
 import { End, messageOf, Stop } from './stop.js';
@@ -110,6 +110,11 @@ async function reusedRows(earlier, choices, reused, downloads) {
   /** @type {[string, string][]} */
   const rows = [];
   if (reused.has('team') && choices.team !== undefined) rows.push(['Team', choices.team]);
+  // Each in the words it was answered in.
+  for (const [key, label] of /** @type {const} */ ([['aiExperience', 'AI tools'], ['codingExperience', 'Writing code']])) {
+    const said = experienceOptions[key].find((option) => option.value === choices[key]);
+    if (reused.has(key) && said) rows.push([label, said.label]);
+  }
   if (choices.topWorkspace === earlier.topWorkspace || reused.has('googleDriveFolder') || reused.has('workspacesLocation')) {
     rows.push(['Top workspace', choices.topWorkspace]);
   }
@@ -194,7 +199,7 @@ async function main() {
 
     // A re-run asks nothing an earlier run already wrote down, unless the person chooses to change it.
     const earlier = await readEarlierSettings(places.settings, offered.id, log);
-    const asker = unattended ? answersFrom(answers) : frontEnd.ask;
+    const asker = unattended ? answersFrom(answers) : askingThePerson(frontEnd.ask);
     /** @type {Set<string>} */
     const reused = new Set();
     /**
@@ -216,6 +221,7 @@ async function main() {
     let team = teamSaved ? undefined : await askTeam(offered, ask, log);
     if (earlier) for (const key of await askChange(offered, earlier, memoryInUse, asker, log)) changing.set(key, []);
     if (teamSaved) team = await askTeam(offered, ask, log);
+    const experience = await askExperience(ask, log);
     const profile = withTeam(offered, team);
     // A team joined or changed asks again each pick it ticks something new in, with its ticks added.
     if (earlier) for (const [key, ticks] of teamTicksToAdd(profile, earlier, team, log)) changing.set(key, ticks);
@@ -226,9 +232,10 @@ async function main() {
       log.write(`T3 Code: couldn't look for an earlier install: ${error.message}`);
       return undefined;
     });
-    const found = { earlier, memoryInUse, t3Channel: foundT3?.channel };
+    const found = { earlier, memoryInUse, t3Channel: foundT3?.channel, experience };
     const choices = {
       ...(team === undefined ? {} : { team }),
+      ...experience,
       ...(await askQuestions(profile, places, ask, log, found, { machine, frontEnd, attended: !unattended })),
     };
     if (earlier) {
