@@ -55,7 +55,13 @@
   ],
   "googleDrive": {
     "softwareCenter": "Google Drive",
-    "softwareCenterOffer": "Google Drive isn't on this laptop. With it, your workspaces are backed up and you can reach them from any device. York's Software Center can install it for you, with no admin rights needed."
+    "softwareCenterOffer": "Google Drive isn't on this laptop. With it, your workspaces are backed up and you can reach them from any device. York's Software Center can install it for you, with no admin rights needed.",
+    "hostedInstaller": {
+      "id": "1rRGalKcRRAW5b4AtmX8fWqdExYH2SzQd",
+      "version": "132.0.0.0",
+      "size": 292804760,
+      "sha256": "6ab7af8224736d4b6f0b06345f5bdc78a664c0a995973c0b1b38c3a0ad5cd853"
+    }
   },
   "t3": {
     "defaultModel": "claude-opus-5-5",

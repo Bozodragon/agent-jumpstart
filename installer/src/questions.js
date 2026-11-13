@@ -94,8 +94,9 @@ const anotherFolder = 'another';
 
 /**
  * How the questions reach the laptop and the person beyond the asker: to look again for Google
- * Drive for desktop, and to wait for someone at the screen to get it ready.
- * @typedef {{ machine: import('./machine.js').Machine, frontEnd: import('./front-end.js').FrontEnd, attended: boolean }} Reach
+ * Drive for desktop, to install it, and to wait for someone at the screen to get it ready.
+ * `keepDownloads`: a debug run, which keeps the Drive installer it downloaded.
+ * @typedef {{ machine: import('./machine.js').Machine, frontEnd: import('./front-end.js').FrontEnd, attended: boolean, keepDownloads?: boolean }} Reach
  */
 
 /**

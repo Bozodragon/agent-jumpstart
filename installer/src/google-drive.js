@@ -2,14 +2,21 @@
 // data for this user, so that a home override redirects every one of them. When a new top
 // workspace is to go in Google Drive and Drive for desktop isn't ready, says how to get it ready
 // and, with someone at the screen, waits for them to do it, or offers Documents instead. Drive is
-// optional, and it's never installed here: under a profile that names Drive's entry in its
-// organisation's Software Center, the person can be sent there to install it, which needs no
-// admin rights.
-import { readdir, stat } from 'node:fs/promises';
+// optional. When it isn't installed, a profile can name Drive's entry in its organisation's
+// Software Center and keep a copy of Google's Drive installer on a shared drive (York does).
+// When Software Center offers the same version as that copy, the browser downloads the copy, and
+// the Installer checks it against its pinned SHA-256 and runs it silently, as a double-click
+// would, so the person does nothing until Drive asks them to sign in. Anything that goes wrong
+// there leads to Software Center, where the person clicks Install, which needs no admin rights,
+// and Documents is always one choice away.
+import { createHash } from 'node:crypto';
+import { createReadStream } from 'node:fs';
+import { readdir, rm, stat } from 'node:fs/promises';
 import { join } from 'node:path';
+import { pipeline } from 'node:stream/promises';
 import { keepTrying, registryMiss, system32 } from './machine.js';
 import { showPage } from './open-page.js';
-import { End, Stop } from './stop.js';
+import { End, messageOf, Stop } from './stop.js';
 
 /**
  * `never-opened`: installed, but never started, so it holds nothing for this user yet.
@@ -90,9 +97,15 @@ export async function readyGoogleDrive(profile, places, ask, drive, context) {
   const { machine, frontEnd, log, attended } = context;
   const say = (/** @type {string} */ line) => log.write(`Google Drive for desktop: ${line}`);
   if (drive.status === 'not-installed') {
-    const installed = await fromSoftwareCenter(profile, places, ask, context);
-    if (installed === 'documents') return { status: 'documents' };
-    if (installed) drive = installed;
+    const name = profile.googleDrive?.softwareCenter;
+    const offered = name ? await driveInSoftwareCenter(name, context) : undefined;
+    const hosted = offered ? await fromHostedInstaller(profile, places, offered, context) : undefined;
+    if (hosted) drive = hosted;
+    else if (offered) {
+      const installed = await fromSoftwareCenter(profile, places, ask, offered.id, context);
+      if (installed === 'documents') return { status: 'documents' };
+      if (installed) drive = installed;
+    }
   }
   while (drive.status !== 'signed-in') {
     if (drive.status === 'not-installed') return withoutGoogleDrive(ask, context);
@@ -138,7 +151,10 @@ export async function readyGoogleDrive(profile, places, ask, drive, context) {
   return { status: 'signed-in', folder };
 }
 
-/** @typedef {{ machine: import('./machine.js').Machine, frontEnd: import('./front-end.js').FrontEnd, log: { write(line: string): void }, attended: boolean }} Context */
+/**
+ * `keepDownloads`: a debug run, which leaves the downloaded Drive installer in Downloads.
+ * @typedef {{ machine: import('./machine.js').Machine, frontEnd: import('./front-end.js').FrontEnd, log: { write(line: string): void }, attended: boolean, keepDownloads?: boolean }} Context
+ */
 
 /** What's said when Software Center offers Drive, unless the profile words it its own way. */
 const softwareCenterOffer =
@@ -159,22 +175,19 @@ const restartLine = 'If it asks you to restart, choose a later time.';
  * it, the person is offered to install it from there, or to use Documents. Installing opens
  * Software Center at Drive's entry and waits, up to 15 minutes, until Drive is installed; then
  * they're asked to open Google Drive and sign in, and waited for again, up to another 15 minutes.
- * Drive is never installed here: the person clicks Install.
+ * Here the person clicks Install.
  * @param {import('./profile.js').Profile} profile
  * @param {import('./places.js').Places} places
  * @param {import('./questions.js').Asker} ask
+ * @param {string} id Drive's Id in Software Center
  * @param {Context} context
  * @returns {Promise<GoogleDrive | 'documents' | undefined>} what was found once Drive is
  *   installed; `documents` when the person chose Documents; undefined when Software Center
- *   doesn't offer Drive or didn't install it in time, so Documents is offered as without it
+ *   didn't install it in time, so Documents is offered as without it
  */
-async function fromSoftwareCenter(profile, places, ask, context) {
-  const name = profile.googleDrive?.softwareCenter;
-  if (!name) return undefined;
+async function fromSoftwareCenter(profile, places, ask, id, context) {
   const { machine, frontEnd, log } = context;
   const say = (/** @type {string} */ line) => log.write(`Google Drive for desktop: ${line}`);
-  const id = await driveInSoftwareCenter(name, context);
-  if (!id) return undefined;
 
   frontEnd.notice(profile.googleDrive?.softwareCenterOffer ?? softwareCenterOffer, 'Google Drive');
   const choice = await ask.choose({
@@ -203,7 +216,18 @@ async function fromSoftwareCenter(profile, places, ask, context) {
     return undefined;
   }
   say(`installed from Software Center after ${install.waited / 1000} seconds`);
+  return waitForSignIn(places, context);
+}
 
+/**
+ * Once Drive is installed: asks the person to open it and sign in, and waits up to 15 minutes
+ * until they have.
+ * @param {import('./places.js').Places} places
+ * @param {Context} context
+ * @returns {Promise<GoogleDrive>}
+ */
+async function waitForSignIn(places, { machine, frontEnd, log }) {
+  const say = (/** @type {string} */ line) => log.write(`Google Drive for desktop: ${line}`);
   frontEnd.notice(
     [
       'Google Drive is installed. Open Google Drive from the Start menu and sign in with your work Google account.',
@@ -214,12 +238,225 @@ async function fromSoftwareCenter(profile, places, ask, context) {
   );
   const signIn = await frontEnd.busy(
     'Waiting until Google Drive is signed in',
-    () => waitFor(() => findGoogleDrive(places), (drive) => drive.status === 'signed-in'),
+    () => keepTrying({ machine, every: softwareCenterEvery, patience: softwareCenterPatience }, () => findGoogleDrive(places), (drive) => drive.status === 'signed-in'),
     ({ result }) => (result.status === 'signed-in' ? { text: 'Google Drive is signed in', ok: true } : { text: "Google Drive still isn't signed in after 15 minutes", ok: false }),
   );
   say(`${signIn.result.status === 'signed-in' ? 'signed in' : 'not signed in'} after ${signIn.waited / 1000} more seconds`);
-  // Software Center makes Drive's version folder first, and its program follows: it's installed.
+  // Drive's version folder comes first, and its program follows: it's installed.
   return signIn.result.status === 'not-installed' ? { status: 'never-opened' } : signIn.result;
+}
+
+/**
+ * The copy of Google's Drive installer that the profile's organisation keeps on a shared drive,
+ * open only to its own accounts: its Drive file ID, the version it installs, and its size and
+ * SHA-256, which are the only check made of it here. Whoever puts a new copy there checks its
+ * Authenticode signature once, and changes all four.
+ * @typedef {{ id: string, version: string, size: number, sha256: string }} HostedInstaller
+ */
+
+/** Google's flags for a silent install that doesn't open Drive when it's done, and adds no Docs, Sheets and Slides shortcuts. */
+const silentFlags = ['--silent', '--desktop_shortcut', '--skip_launch_new', '--gsuite_shortcuts=false'];
+
+/** How long, in milliseconds, a download is waited for to appear, and once it has, how long it may go without growing. */
+const downloadStarts = 60_000;
+const downloadStalls = 120_000;
+
+/** How often Downloads is looked in while the browser downloads the installer. */
+const downloadEvery = 1000;
+
+/** How long Drive's program is waited for once its installer has returned. */
+const installPatience = 5 * 60 * 1000;
+
+/**
+ * A version's numbers without trailing zeros, so `132.0.0` and `132.0.0.0` are both `132`;
+ * undefined for one that isn't numbers.
+ * @param {string} version
+ */
+function versionNumbers(version) {
+  const numbers = version.trim().split('.').map((part) => (/^\d+$/.test(part) ? Number(part) : NaN));
+  if (numbers.some((number) => Number.isNaN(number))) return undefined;
+  while (numbers.length > 1 && numbers.at(-1) === 0) numbers.pop();
+  return numbers.join('.');
+}
+
+/** The one line said when the hosted installer isn't used after all, by why; Software Center is next. */
+const missed = {
+  none: "Google Drive's installer didn't start downloading within a minute, so the Installer moves on to Software Center",
+  stopped: "Google Drive's installer stopped downloading, so the Installer moves on to Software Center",
+  mismatch: "The downloaded file isn't Google's Drive installer, so the Installer moves on to Software Center",
+  install: "Google Drive's installer didn't install it, so the Installer moves on to Software Center",
+};
+
+/**
+ * Installs Drive with the copy of Google's installer the profile names, when Software Center
+ * offers the same version. The browser, signed in to the organisation, downloads it from the
+ * shared drive by itself; Downloads is watched for it, wherever that folder is, and the file is
+ * known by its size and SHA-256 (so the browser's name for an unfinished download, and a ` (1)`
+ * added to a name already taken, don't matter). Nothing is asked. It's run as a double-click
+ * runs it, silently, Drive's program is waited for, and the person is asked to sign in. The
+ * installer is deleted afterwards, unless it's a debug run. Anything that goes wrong is said in
+ * one line.
+ * @param {import('./profile.js').Profile} profile
+ * @param {import('./places.js').Places} places
+ * @param {{ id: string, version: string | undefined }} offered what Software Center offers
+ * @param {Context} context
+ * @returns {Promise<GoogleDrive | undefined>} what was found once Drive is installed; undefined
+ *   when it wasn't, so Software Center is next
+ */
+async function fromHostedInstaller(profile, places, offered, context) {
+  const hosted = profile.googleDrive?.hostedInstaller;
+  if (!hosted) return undefined;
+  const { machine, frontEnd, log, keepDownloads } = context;
+  const say = (/** @type {string} */ line) => log.write(`Google Drive for desktop: ${line}`);
+  const ours = versionNumbers(hosted.version);
+  const theirs = offered.version === undefined ? undefined : versionNumbers(offered.version);
+  if (ours === undefined || theirs !== ours) {
+    const offers = offered.version === undefined ? "Software Center doesn't say which version it offers" : `Software Center offers ${theirs ?? offered.version}`;
+    say(`${offers}, the hosted installer is ${ours ?? hosted.version}, so Software Center is used`);
+    return undefined;
+  }
+
+  const folder = await downloadsFolder(places, machine);
+  const before = new Set(await filesIn(folder));
+  say(`watching ${folder} for the hosted installer (${hosted.size} bytes)`);
+  frontEnd.notice(
+    "Google Drive isn't on this laptop, so the Installer is installing it for you. Your browser downloads Google's installer by itself. There's nothing to do until Google Drive asks you to sign in.",
+    'Google Drive',
+  );
+  await showPage("Google Drive's installer", `https://drive.usercontent.google.com/download?id=${encodeURIComponent(hosted.id)}&export=download&confirm=t`, context);
+  const downloading = `Downloading Google Drive's installer (${Math.round(hosted.size / 1_000_000)} MB)`;
+  const downloaded = await frontEnd.busy(
+    downloading,
+    (progress) => watchDownloads(folder, before, hosted, machine, progress),
+    (outcome) => (outcome.status === 'found' ? { text: "Google Drive's installer downloaded", ok: true } : { text: downloading, ok: false }),
+  );
+  /** @param {string} file */
+  const tidy = async (file) => {
+    if (keepDownloads) return say(`kept ${file}, as this is a debug run`);
+    await rm(file, { force: true }).then(
+      () => say(`deleted ${file}`),
+      (/** @type {unknown} */ error) => say(`couldn't delete ${file}: ${messageOf(error)}`),
+    );
+  };
+  if (downloaded.status === 'none') say(`no download appeared in ${folder} within ${downloadStarts / 1000} seconds`);
+  if (downloaded.status === 'stopped') say(`the download stopped growing for ${downloadStalls / 1000} seconds, at ${downloaded.size} bytes`);
+  if (downloaded.status === 'mismatch') {
+    say(`${downloaded.file} is the hosted installer's size, but its SHA-256 is ${downloaded.sha256}, not ${hosted.sha256}`);
+    await tidy(downloaded.file);
+  }
+  if (downloaded.status !== 'found') {
+    frontEnd.step(missed[downloaded.status]);
+    return undefined;
+  }
+  say(`found the hosted installer at ${downloaded.file}, and its SHA-256 matches`);
+
+  const quote = (/** @type {string} */ text) => `'${text.replaceAll("'", "''")}'`;
+  // Start-Process goes through Windows' ShellExecute, as a double-click does, which is how the
+  // organisation's privilege management lets an approved installer through.
+  const script = [
+    "$ErrorActionPreference = 'Stop'",
+    `$setup = Start-Process -FilePath ${quote(downloaded.file)} -ArgumentList ${silentFlags.map(quote).join(',')} -Wait -PassThru`,
+    'exit $setup.ExitCode',
+  ].join('; ');
+  const install = await frontEnd.busy(
+    'Installing Google Drive',
+    async () => {
+      const ran = await machine.run(system32(join('WindowsPowerShell', 'v1.0', 'powershell.exe')), ['-NoProfile', '-NonInteractive', '-Command', script]);
+      if (ran.code !== 0) return { code: ran.code, there: false };
+      const { result: there } = await keepTrying({ machine, every: softwareCenterEvery, patience: installPatience }, () => programThere(places), (found) => found);
+      return { code: ran.code, there };
+    },
+    ({ there }) => (there ? { text: 'Google Drive is installed', ok: true } : { text: 'Installing Google Drive', ok: false }),
+  );
+  await tidy(downloaded.file);
+  if (!install.there) {
+    say(install.code === 0 ? `the hosted installer finished, but Drive's program wasn't there after ${installPatience / 1000} more seconds` : `the hosted installer failed (code ${install.code})`);
+    frontEnd.step(missed.install);
+    return undefined;
+  }
+  say('installed with the hosted installer');
+  return waitForSignIn(places, context);
+}
+
+/** Where Windows records the person's Downloads folder, a known folder that can be moved. */
+const downloadsKey = 'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\User Shell Folders';
+const downloadsValue = '{374DE290-123F-4565-9164-39C4925E467B}';
+
+/**
+ * The person's Downloads folder, wherever it has been moved, as Windows records it, with
+ * `%USERPROFILE%` read as the profile folder; `Downloads` in the profile folder when it isn't recorded.
+ * @param {import('./places.js').Places} places
+ * @param {import('./machine.js').Machine} machine
+ */
+async function downloadsFolder(places, machine) {
+  const ran = await machine.run(system32('reg.exe'), ['query', downloadsKey, '/v', downloadsValue], { expected: registryMiss });
+  const match = /REG_(?:EXPAND_)?SZ[ \t]+(.+)$/im.exec(ran.output);
+  if (ran.code !== 0 || !match) return join(places.home, 'Downloads');
+  return match[1].trim().replace(/%([^%]+)%/g, (whole, name) => (name.toUpperCase() === 'USERPROFILE' ? places.home : (process.env[name] ?? whole)));
+}
+
+/** The names of the files in a folder; none if it isn't there. @param {string} folder */
+async function filesIn(folder) {
+  const entries = await readdir(folder, { withFileTypes: true }).catch(() => []);
+  return entries.filter((entry) => entry.isFile()).map((entry) => entry.name);
+}
+
+/** A name a browser gives a download until it's whole. @param {string} name */
+const unfinished = (name) => /\.(crdownload|part|partial|tmp)$/i.test(name);
+
+/**
+ * Watches Downloads for the hosted installer among the files that weren't there before: a
+ * finished one of its size is it if its SHA-256 matches, and the wrong file if not. The largest
+ * new file no bigger than it shows how far the download has got. With no new file after a
+ * minute, or nothing new changing for two minutes once there is one, it's given up on. Only the
+ * waits count.
+ * @param {string} folder @param {Set<string>} before the names already there
+ * @param {HostedInstaller} hosted
+ * @param {import('./machine.js').Machine} machine
+ * @param {import('./front-end.js').Progress} progress
+ * @returns {Promise<{ status: 'found', file: string } | { status: 'mismatch', file: string, sha256: string } | { status: 'stopped', size: number } | { status: 'none' }>}
+ */
+async function watchDownloads(folder, before, hosted, machine, progress) {
+  let waited = 0;
+  let changedAt = 0;
+  let seen = '';
+  progress(0, hosted.size);
+  for (;;) {
+    /** @type {{ name: string, size: number }[]} */
+    const fresh = [];
+    for (const name of await filesIn(folder)) {
+      if (before.has(name)) continue;
+      const size = await stat(join(folder, name)).then((found) => found.size, () => undefined);
+      if (size !== undefined && size <= hosted.size) fresh.push({ name, size });
+    }
+    for (const { name, size } of fresh) {
+      if (size !== hosted.size || unfinished(name)) continue;
+      const file = join(folder, name);
+      const sha256 = await sha256Of(file).catch(() => undefined);
+      if (sha256 === undefined) continue;
+      if (sha256 !== hosted.sha256.toLowerCase()) return { status: 'mismatch', file, sha256 };
+      progress(size, hosted.size);
+      return { status: 'found', file };
+    }
+    const largest = Math.max(0, ...fresh.map(({ size }) => size));
+    const now = fresh.map(({ name, size }) => `${name}:${size}`).sort().join('|');
+    if (now !== seen) {
+      seen = now;
+      changedAt = waited;
+    }
+    if (fresh.length > 0) progress(largest, hosted.size);
+    if (fresh.length === 0 && waited >= downloadStarts) return { status: 'none' };
+    if (fresh.length > 0 && waited - changedAt >= downloadStalls) return { status: 'stopped', size: largest };
+    await machine.wait(downloadEvery);
+    waited += downloadEvery;
+  }
+}
+
+/** @param {string} file */
+async function sha256Of(file) {
+  const hash = createHash('sha256');
+  await pipeline(createReadStream(file), hash);
+  return hash.digest('hex');
 }
 
 /**
@@ -233,13 +470,13 @@ async function installing(places) {
 }
 
 /**
- * Drive's Id in Software Center, found by name, if the laptop has Software Center and it offers
+ * Drive's Id in Software Center, and the version it lists, found by name, if the laptop has Software Center and it offers
  * Drive: the Configuration Manager client's service (CcmExec) running, the `softwarecenter:`
  * protocol registered, and Drive among the applications the client offers (`CCM_Application`).
  * Any step that finds nothing, or fails, means no Software Center. Only reads.
  * @param {string} name what Software Center lists Drive under, or part of it
  * @param {Context} context
- * @returns {Promise<string | undefined>}
+ * @returns {Promise<{ id: string, version: string | undefined } | undefined>} Drive's Id, and its `SoftwareVersion` when Software Center lists one
  */
 async function driveInSoftwareCenter(name, { machine, log }) {
   /** @param {string} why */
@@ -255,7 +492,7 @@ async function driveInSoftwareCenter(name, { machine, log }) {
   // A cmdlet, and its answer as one line of JSON: both allowed in Constrained Language Mode.
   const script = [
     "$ErrorActionPreference = 'Stop'",
-    `$app = Get-CimInstance -Namespace 'root\\ccm\\ClientSDK' -ClassName CCM_Application | Where-Object { $_.Name -like '*${name.replaceAll("'", "''")}*' } | Select-Object -First 1 -Property Id, Name, InstallState`,
+    `$app = Get-CimInstance -Namespace 'root\\ccm\\ClientSDK' -ClassName CCM_Application | Where-Object { $_.Name -like '*${name.replaceAll("'", "''")}*' } | Select-Object -First 1 -Property Id, Name, InstallState, SoftwareVersion`,
     'if ($app) { $app | ConvertTo-Json -Compress }',
   ].join('; ');
   const offered = await machine.run(system32(join('WindowsPowerShell', 'v1.0', 'powershell.exe')), ['-NoProfile', '-NonInteractive', '-Command', script]);
@@ -271,8 +508,9 @@ async function driveInSoftwareCenter(name, { machine, log }) {
   }
   const id = app && typeof app === 'object' && 'Id' in app && typeof app.Id === 'string' && app.Id !== '' ? app.Id : undefined;
   if (!id) return none(`it doesn't offer ${name}`);
-  log.write(`Software Center: offers ${name} as ${id}`);
-  return id;
+  const version = app && typeof app === 'object' && 'SoftwareVersion' in app && typeof app.SoftwareVersion === 'string' && app.SoftwareVersion !== '' ? app.SoftwareVersion : undefined;
+  log.write(`Software Center: offers ${name} as ${id}${version ? `, version ${version}` : ''}`);
+  return { id, version };
 }
 
 /** What the installer says when Drive for desktop isn't on the laptop. */
