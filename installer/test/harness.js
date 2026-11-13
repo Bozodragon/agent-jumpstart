@@ -47,6 +47,8 @@ export async function readProfile(name) {
  * @typedef {'signed-in' | 'signed-out' | 'missing' | 'signed-in, no My Drive yet' | 'installed, never opened'} GoogleDriveState
  */
 
+/** @typedef {{ from: string, saves: string, after?: number, perSecond?: number, stopsAt?: number }} BrowserDownload See the fake machine's `setBrowser`. */
+
 /** @typedef {{ code?: number, output?: string, creates?: string[], writes?: Record<string, string>, reads?: string[], takes?: number }} Reply What a faked program run returns, leaves behind, and looks for as it starts (its record says which of `reads` it `found`), and how many milliseconds it really takes before it returns (`takes`, to watch a spinner over a fake run; only claude.test.js uses it, in its test of `takes` itself, over Claude Code's install). */
 
 /** The version of Claude Code whose release files every test home's downloads folder holds. */
@@ -250,6 +252,21 @@ export async function readManifest() {
 }
 
 /**
+ * Puts the pinned gh where the installer installs it, so it's taken as already installed. With
+ * no reply for `gh.exe auth status`, it says it's signed in, as any run with no reply succeeds.
+ * @param {string} home
+ * @returns {Promise<{ gh: string, replies: Record<string, { code?: number, output?: string }> }>}
+ */
+export async function ghAlreadyInstalled(home) {
+  const { tools } = await readManifest();
+  const tool = tools.find((/** @type {any} */ entry) => entry.id === 'gh');
+  const gh = join(programsFolder(home), tool.install.folder, tool.install.check);
+  await mkdir(join(gh, '..'), { recursive: true });
+  await writeFile(gh, 'stand-in');
+  return { gh, replies: { 'gh.exe --version': { output: `gh version ${tool.version} (2026-10-01)\n` } } };
+}
+
+/**
  * With `--home`, whatever would change the real machine lands in `<home>/fake-machine/`:
  * `environment.json` stands for the user's environment variables (the user PATH is its
  * `Path`, entries joined with `;`), `runs.json` lists every program it was asked to run,
@@ -301,6 +318,16 @@ export function fakeMachine(home) {
      *   `folders` relative to the home
      */
     setWaiting: (waiting) => writeJson('waiting.json', waiting),
+    /**
+     * What the browser downloads when an address is opened, standing in for Chrome's download:
+     * the bytes of `from`, saved in the home at `saves`. It appears `after` milliseconds of
+     * counted time from when the address was opened (at once if not given) and grows by
+     * `perSecond` bytes each counted second (all at once if not given), as `<saves>.crdownload`
+     * until it's whole, when it's renamed to `saves`. With `stopsAt`, it grows no further than
+     * so many bytes, and is never renamed.
+     * @param {Record<string, BrowserDownload>} downloads by the address that starts each one
+     */
+    setBrowser: (downloads) => writeJson('browser.json', downloads),
     /**
      * Keyed by the program's file name, optionally followed by its first arguments
      * (`"node.exe --version"`, `"skills.cmd add"`); the longest key that matches wins. Runs with no reply succeed with no output.
@@ -463,9 +490,24 @@ export async function seedT3Projects(home, projects) {
  * @param {string} stdout @param {string} label @param {string} value
  */
 export function checklistSays(stdout, label, value) {
-  const flowing = (/** @type {string} */ text) => text.replace(/[│|]|\s/g, '');
-  assert.ok(flowing(stdout).includes(flowing(`${label} ${value}`)), `expected a checklist line "${label} … ${value}" in:\n${stdout}`);
+  assert.ok(shows(stdout, `${label} ${value}`), `expected a checklist line "${label} … ${value}" in:\n${stdout}`);
 }
+
+/**
+ * Whether the window showed this text, read as checklistSays reads it: borders, spaces and line
+ * breaks aside.
+ * @param {string} stdout @param {string} text
+ */
+export function shows(stdout, text) {
+  const flowing = (/** @type {string} */ words) => words.replace(/[│|]|\s/g, '');
+  return flowing(stdout).includes(flowing(text));
+}
+
+/**
+ * The arguments of each run of this gh, apart from asking its version, in order.
+ * @param {{ file: string, args: string[] }[]} runs @param {string} gh
+ */
+export const ghCommands = (runs, gh) => runs.filter((run) => run.file === gh && run.args[0] !== '--version').map((run) => run.args.join(' '));
 
 /** @param {string} home */
 export async function readOnlyLog(home) {
@@ -475,7 +517,7 @@ export async function readOnlyLog(home) {
 }
 
 /** Every question a run can put, keyed as the answers file keys them. */
-const questions = ['team', 'topWorkspace', 'googleDriveFolder', 'workspacesLocation', 'channel', 'github', 'workspaces', 'connectors', 'extraTools', 'fullSkills', 'switchOffMemory'];
+const questions = ['team', 'aiExperience', 'codingExperience', 'topWorkspace', 'googleDriveFolder', 'workspacesLocation', 'channel', 'github', 'workspaces', 'connectors', 'extraTools', 'fullSkills', 'switchOffMemory'];
 
 /**
  * An answers file that gives these answers and stops the run if any other question is put to

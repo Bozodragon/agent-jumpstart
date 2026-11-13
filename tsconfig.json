@@ -9,7 +9,9 @@
     "strict": true,
     "resolveJsonModule": true,
     "skipLibCheck": true,
-    "types": ["node"]
+    "types": ["node"],
+    "jsx": "react-jsx"
   },
-  "include": ["installer/**/*.js", "bootstrap/**/*.js", "page/**/*.js"]
+  "include": ["installer/**/*.js", "bootstrap/**/*.js", "page/**/*.js"],
+  "exclude": ["installer/page/built", "**/node_modules"]
 }

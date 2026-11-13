@@ -17,6 +17,8 @@ async function seedYork(home, overrides = {}) {
   const earlier = {
     profile: 'york',
     team: 'Another team',
+    aiExperience: 'dabbled',
+    codingExperience: 'no',
     googleDriveFolder: myDrive,
     workspacesLocation: myDrive,
     topWorkspace: top,
@@ -113,7 +115,7 @@ test("a change the list doesn't offer stops the run, naming the options: Team un
 
   assert.equal(result.code, 1, result.stdout + result.stderr);
   assert.ok(
-    result.stdout.includes(`The answers file's "change" is wrong: "team" isn't one of "workspaces", "connectors", "extraTools", "github", "fullSkills".`),
+    result.stdout.includes(`The answers file's "change" is wrong: "team" isn't one of "experience", "workspaces", "connectors", "extraTools", "github", "fullSkills".`),
     result.stdout,
   );
 });
@@ -127,7 +129,7 @@ test("a change the list doesn't offer stops the run: Skills before fullSkills is
     const result = await runWith(where, 'york');
 
     assert.equal(result.code, 1, result.stdout + result.stderr);
-    assert.ok(result.stdout.includes(`The answers file's "change" is wrong: "${change}" isn't one of "team", "workspaces", "connectors", "extraTools", "github"`), result.stdout);
+    assert.ok(result.stdout.includes(`The answers file's "change" is wrong: "${change}" isn't one of "team", "experience", "workspaces", "connectors", "extraTools", "github"`), result.stdout);
   }
 });
 
