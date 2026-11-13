@@ -13,6 +13,9 @@ import { existingTopWorkspaces, topWorkspaceIn } from './workspaces.js';
  * @typedef {object} Answers
  * @property {string} [team] The chosen team's name, or `Another team`. Only under a profile that
  *   lists teams. Saved for a later release: Jumpstart and the setup page don't read it yet.
+ * @property {AiExperience} [aiExperience] How much the person has used AI tools (see askExperience,
+ *   which asks it, rather than askQuestions).
+ * @property {CodingExperience} [codingExperience] Whether the person has written code (also asked by askExperience).
  * @property {string | null} googleDriveFolder The confirmed My Drive folder, or null when the profile doesn't use Drive.
  * @property {string} workspacesLocation The folder the top workspace is in.
  * @property {string} topWorkspace The top workspace: a new one, named by the profile, in Google
@@ -38,6 +41,10 @@ import { existingTopWorkspaces, topWorkspaceIn } from './workspaces.js';
  * @property {boolean} memoryInUse Whether the person has been using Claude's automatic memory.
  * @property {'stable' | 'nightly'} [t3Channel] The channel of a T3 Code already installed, which
  *   is left as it is, so the channel isn't asked.
+ * @property {Experience} experience The experience answers, which decide which of the rest are
+ *   asked and what they start with.
+ * @property {boolean} [githubSignedIn] Whether the GitHub CLI was signed in before the questions
+ *   (see signedInBefore), so GitHub isn't asked, and is Yes.
  */
 
 /**
@@ -48,16 +55,36 @@ import { existingTopWorkspaces, topWorkspaceIn } from './workspaces.js';
 /**
  * Something that answers questions: the person at the screen, or an answers
  * file. `key` names the answer in an answers file.
+ *
+ * `hidden` marks a question this person isn't asked (see theRest): someone at the screen gets
+ * `initial` without seeing it (see askingThePerson, which a front end's own asker is wrapped in),
+ * and so does an answers file that gives an experience answer. An answers file from before the
+ * experience questions, with neither key, still answers it, so it sets up what it did then.
+ * Settings from an earlier run answer a hidden question as they answer any other (see knownFrom).
  * @typedef {object} Asker
  * @property {(q: { key: string, message: string, initial: string | undefined, placeholder: string, validate: (value: string) => Promise<string | undefined> }) => Promise<string>} folder
- * @property {<T extends string>(q: { key: string, message: string, options: Option<T>[], initial: T, other?: T, inTurn?: boolean }) => Promise<T>} choose
+ * @property {<T extends string>(q: { key: string, message: string, options: Option<T>[], initial: T, other?: T, inTurn?: boolean, hidden?: boolean }) => Promise<T>} choose
  *   `other`, if given, is the option whose answer a follow-up `folder` question with the same key
  *   asks for; an answers file gives that folder's whole path in place of the option. `inTurn`
  *   marks a question that may be asked several times in a run: an answers file may give a list,
  *   which answers it one item at a time, and then the default.
- * @property {(q: { key: string, message: string, initial: boolean }) => Promise<boolean>} confirm
+ * @property {(q: { key: string, message: string, initial: boolean, hidden?: boolean }) => Promise<boolean>} confirm
  * @property {<T extends string>(q: { key: string, message: string, options: Option<T>[], initial: T[] }) => Promise<T[]>} pick
  */
+
+/**
+ * The asker for someone at the screen: their front end's, except that a hidden question isn't
+ * put to them and takes its default.
+ * @param {Asker} ask @returns {Asker}
+ */
+export function askingThePerson(ask) {
+  return {
+    folder: (q) => ask.folder(q),
+    choose: (q) => (q.hidden ? Promise.resolve(q.initial) : ask.choose(q)),
+    confirm: (q) => (q.hidden ? Promise.resolve(q.initial) : ask.confirm(q)),
+    pick: (q) => ask.pick(q),
+  };
+}
 
 /** @param {{ name: string, default: boolean }[]} choices */
 const optionsOf = (choices) => choices.map(({ name }) => ({ value: name, label: name }));
@@ -113,7 +140,7 @@ const anotherFolder = 'another';
  * @returns {Promise<Answers>}
  */
 export async function askQuestions(profile, places, ask, log, found, reach) {
-  return theRest(profile, ask, log, found, await whereWorkspacesLive(profile, places, ask, log, found, reach));
+  return theRest(profile, ask, log, found, await whereWorkspacesLive(profile, places, ask, log, found, reach), reach);
 }
 
 /**
@@ -137,36 +164,138 @@ export async function askTeam(profile, ask, log) {
 }
 
 /**
+ * How much the person has used AI tools, as they said it, smallest first.
+ * @typedef {'first-time' | 'dabbled' | 'confident' | 'teach'} AiExperience
+ */
+
+/**
+ * Whether the person has written code, as they said it, smallest first.
+ * @typedef {'no' | 'a-little' | 'small-projects' | 'work'} CodingExperience
+ */
+
+/** @typedef {{ aiExperience: AiExperience, codingExperience: CodingExperience }} Experience */
+
+/** The experience answers' keys, in the order they're asked. */
+const experienceKeys = ['aiExperience', 'codingExperience'];
+
+/** The experience questions' answers, in the person's words. */
+export const experienceOptions = {
+  /** @type {Option<AiExperience>[]} */
+  aiExperience: [
+    { value: 'first-time', label: 'This is my first time' },
+    { value: 'dabbled', label: "I've dabbled a bit" },
+    { value: 'confident', label: "I'm pretty confident" },
+    { value: 'teach', label: 'I could teach you a thing or two' },
+  ],
+  /** @type {Option<CodingExperience>[]} */
+  codingExperience: [
+    { value: 'no', label: 'No' },
+    { value: 'a-little', label: 'A little: spreadsheet formulas, mail merges' },
+    { value: 'small-projects', label: 'A few small projects: Apps Script, Python' },
+    { value: 'work', label: "Yes, it's part of my work" },
+  ],
+};
+
+/**
+ * The experience questions, asked under every profile straight after the team (or first, with
+ * no teams), the second whatever the first answer. Nothing is set up because of them: they
+ * decide only which later questions are asked and what those start with (see theRest).
+ * @param {Asker} ask @param {{ write(line: string): void }} log
+ * @returns {Promise<Experience>}
+ */
+export async function askExperience(ask, log) {
+  const aiExperience = await ask.choose({
+    key: 'aiExperience',
+    message: 'How much experience do you have using AI tools like ChatGPT, Claude, or Gemini?',
+    options: experienceOptions.aiExperience,
+    initial: 'first-time',
+  });
+  log.write(`Answer: aiExperience: ${JSON.stringify(aiExperience)}`);
+  const codingExperience = await ask.choose({
+    key: 'codingExperience',
+    message: 'Have you written code before?',
+    options: experienceOptions.codingExperience,
+    initial: 'no',
+  });
+  log.write(`Answer: codingExperience: ${JSON.stringify(codingExperience)}`);
+  return { aiExperience, codingExperience };
+}
+
+/** Pretty confident with AI tools, or more. @param {Pick<Experience, 'aiExperience'>} experience */
+const isConfidentWithAi = ({ aiExperience }) => aiExperience === 'confident' || aiExperience === 'teach';
+
+/** Has written a few small projects, or more. @param {Experience} experience */
+const hasWrittenProjects = ({ codingExperience }) => codingExperience === 'small-projects' || codingExperience === 'work';
+
+/**
+ * The keys of the questions these experience answers hide, which take their defaults without
+ * being asked: T3 Code's channel unless the person is pretty confident with AI tools or more
+ * (Stable), and full skills from a first-timer (No). Only the AI answer hides anything.
+ * @param {Pick<Experience, 'aiExperience'>} experience
+ * @returns {string[]}
+ */
+export function hiddenFor(experience) {
+  return [...(isConfidentWithAi(experience) ? [] : ['channel']), ...(experience.aiExperience === 'first-time' ? ['fullSkills'] : [])];
+}
+
+/**
+ * On a re-run, the questions last time's experience answers hid that these ones don't. Each is
+ * asked now, as on a first run, with its own default for these answers, rather than taking the
+ * default it was given without being asked. Settings without a saved AI answer that's still one
+ * of its options hid nothing.
+ * @param {Record<string, unknown>} earlier @param {Experience} experience
+ * @param {{ write(line: string): void }} log
+ * @returns {string[]}
+ */
+export function revealedBy(earlier, experience, log) {
+  const before = experienceOptions.aiExperience.find((option) => option.value === earlier.aiExperience)?.value;
+  if (before === undefined) return [];
+  const hiddenBefore = hiddenFor({ aiExperience: before });
+  const now = hiddenFor(experience);
+  const revealed = hiddenBefore.filter((key) => !now.includes(key));
+  for (const key of revealed) log.write(`Experience: last time's answer about AI tools (${JSON.stringify(before)}) hid ${key}, and these don't, so it isn't kept from last time`);
+  return revealed;
+}
+
+/**
  * On a re-run, which of last time's answers to ask again. Only answers the settings hold are
- * offered: Team only under a profile with teams, and Memory only when a first run would ask it
- * (`memoryInUse`) or last time it was left on. The top workspace and T3 Code's channel never
- * are. Nothing ticked, the default, keeps everything. Settings never answer it, and it isn't saved.
+ * offered: Team only under a profile with teams; Experience, which stands for both experience
+ * answers, after it; GitHub only while the GitHub CLI isn't signed in (once it is, GitHub is Yes
+ * without asking); Skills unless last time's AI answer was a first time, which it isn't asked of
+ * (new experience answers that reveal it ask it anyway, see revealedBy); and Memory only when a
+ * first run would ask it (`memoryInUse`) or last time it was left on. The top workspace and T3
+ * Code's channel never are. Nothing ticked, the default, keeps everything. Settings never answer
+ * it, and it isn't saved.
  * @param {import('./profile.js').Profile} profile @param {Record<string, unknown>} earlier
- * @param {boolean} memoryInUse @param {Asker} ask the person or the answers file, not the settings
+ * @param {Pick<Found, 'memoryInUse' | 'githubSignedIn'> & { olderAnswers?: boolean }} found `olderAnswers`: the answers
+ *   come from a file from before the experience questions, which answers Skills whatever it hides
+ *   (see fromBeforeExperience), so Skills is offered to it.
+ * @param {Asker} ask the person or the answers file, not the settings
  * @param {{ write(line: string): void }} log
  * @returns {Promise<string[]>} the keys of the answers to ask again
  */
-export async function askChange(profile, earlier, memoryInUse, ask, log) {
-  /** @type {[string, string, boolean][]} */
+export async function askChange(profile, earlier, { memoryInUse, githubSignedIn, olderAnswers = false }, ask, log) {
+  /** Each entry's answer, its label, the keys of the answers it asks again, and whether it's offered. @type {[string, string, string[], boolean][]} */
   const offered = [
-    ['team', 'Team', Boolean(profile.teams?.length)],
-    ['workspaces', 'Workspaces', true],
-    ['connectors', 'Connectors', true],
-    ['extraTools', 'Extra tools', true],
-    ['github', 'GitHub', true],
-    ['fullSkills', 'Skills', true],
-    ['switchOffMemory', 'Memory', memoryInUse || earlier.switchOffMemory === false],
+    ['team', 'Team', ['team'], Boolean(profile.teams?.length)],
+    ['experience', 'Experience', experienceKeys, true],
+    ['workspaces', 'Workspaces', ['workspaces'], true],
+    ['connectors', 'Connectors', ['connectors'], true],
+    ['extraTools', 'Extra tools', ['extraTools'], true],
+    ['github', 'GitHub', ['github'], !githubSignedIn],
+    ['fullSkills', 'Skills', ['fullSkills'], olderAnswers || earlier.aiExperience !== 'first-time'],
+    ['switchOffMemory', 'Memory', ['switchOffMemory'], memoryInUse || earlier.switchOffMemory === false],
   ];
-  const options = offered.filter(([key, , shown]) => shown && key in earlier).map(([value, label]) => ({ value, label }));
-  if (options.length === 0) return [];
+  const held = offered.filter(([, , keys, shown]) => shown && keys.some((key) => key in earlier));
+  if (held.length === 0) return [];
   const change = await ask.pick({
     key: 'change',
     message: "Anything to change from last time? Tick what to change, or nothing to keep it all. Unticking something later doesn't remove it.",
-    options,
+    options: held.map(([value, label]) => ({ value, label })),
     initial: [],
   });
   log.write(`Answer: change: ${JSON.stringify(change)}`);
-  return change;
+  return held.filter(([value]) => change.includes(value)).flatMap(([, , keys]) => keys);
 }
 
 /**
@@ -329,9 +458,17 @@ async function newLocation(profile, places, ask, found, context) {
  * The rest of the questions.
  * @param {import('./profile.js').Profile} profile @param {Asker} ask
  * @param {{ write(line: string): void }} log @param {Found} found @param {Location} location
+ * @param {Reach} reach
  * @returns {Promise<Answers>}
  */
-async function theRest(profile, ask, log, found, { googleDriveFolder, workspacesLocation, topWorkspace }) {
+async function theRest(profile, ask, log, found, { googleDriveFolder, workspacesLocation, topWorkspace }, { frontEnd }) {
+  const { experience } = found;
+  const hidden = hiddenFor(experience);
+  /** @param {string} key */
+  const notAsked = (key) => {
+    if (hidden.includes(key)) log.write(`Experience: ${key} isn't asked of someone who answered ${JSON.stringify(experience.aiExperience)} about AI tools`);
+    return hidden.includes(key);
+  };
   if (found.t3Channel) log.write(`T3 Code is already installed (${found.t3Channel}), so which T3 Code isn't asked`);
   /** @type {'stable' | 'nightly'} */
   const channel =
@@ -340,13 +477,25 @@ async function theRest(profile, ask, log, found, { googleDriveFolder, workspaces
       key: 'channel',
       message: 'Which T3 Code?',
       options: /** @type {Option<'stable' | 'nightly'>[]} */ ([
-        { value: 'stable', label: 'Stable', hint: 'recommended' },
-        { value: 'nightly', label: 'Nightly', hint: 'the newest build, which can need troubleshooting' },
+        { value: 'stable', label: 'Stable', hint: 'recommended: tried and tested' },
+        { value: 'nightly', label: 'Nightly', hint: 'gets new features sooner, but can be less stable and may need troubleshooting' },
       ]),
       initial: 'stable',
+      hidden: notAsked('channel'),
     }));
 
-  const github = await ask.confirm({ key: 'github', message: 'Set up GitHub now? You can change this on a later run.', initial: false });
+  // Someone already signed in isn't asked: there's nothing to choose (see setUpGitHub).
+  const signedIn = found.githubSignedIn === true;
+  const github = await ask.confirm({
+    key: 'github',
+    message: 'Set up GitHub now? You can change this on a later run.',
+    initial: signedIn || hasWrittenProjects(experience),
+    hidden: signedIn,
+  });
+  if (signedIn && github) {
+    log.write("GitHub: the GitHub CLI is already signed in, so whether to set up GitHub isn't asked");
+    frontEnd.step("GitHub: you're already signed in with GitHub's own tool, so GitHub is set up without asking.");
+  }
 
   const workspaces = await ask.pick({
     key: 'workspaces',
@@ -375,7 +524,9 @@ async function theRest(profile, ask, log, found, { googleDriveFolder, workspaces
       { value: 'finished', label: 'Yes, his finished skills' },
       { value: 'beta', label: 'Yes, and his unfinished ones as a beta' },
     ]),
-    initial: 'no',
+    // The unfinished beta is never the default.
+    initial: isConfidentWithAi(experience) && hasWrittenProjects(experience) ? 'finished' : 'no',
+    hidden: notAsked('fullSkills'),
   });
 
   // Someone who has been using it is asked, and keeps it unless they say otherwise. So is anyone
@@ -406,6 +557,10 @@ async function theRest(profile, ask, log, found, { googleDriveFolder, workspaces
  * @param {Asker} ask
  * @param {{ write(line: string): void }} log
  * @param {Set<string>} [reused] Filled with the key of each answer the settings gave.
+ * @param {Set<string>} [fresh] The keys of the answers the settings no longer give, filled in
+ *   before their questions come: each is put to `ask` as on a first run, with the question's own
+ *   default. They're GitHub once the GitHub CLI is signed in (Yes, without asking), and a question
+ *   new experience answers reveal (see revealedBy).
  * @param {Map<string, string[]>} [changing] The keys of the answers to ask again, filled in before
  *   their questions come: those the person chose to change (see askChange), and the picks a team
  *   joined or changed brings ticks to (see teamTicksToAdd), each with those ticks. Each is put to
@@ -414,9 +569,18 @@ async function theRest(profile, ask, log, found, { googleDriveFolder, workspaces
  *   whose saved answer is no longer right is asked with the question's own default.
  * @returns {Asker}
  */
-export function knownFrom(settings, ask, log, reused = new Set(), changing = new Map()) {
+export function knownFrom(settings, ask, log, reused = new Set(), fresh = new Set(), changing = new Map()) {
   const { topWorkspace, ...answerable } = settings;
-  const known = answersFrom(answerable);
+  const fromFile = answersFrom(answerable);
+  // The settings answer a question this person isn't asked as they answer any other, so a saved
+  // answer is kept whatever the experience answers now hide.
+  /** @type {Asker} */
+  const known = {
+    folder: (q) => fromFile.folder(q),
+    choose: (q) => fromFile.choose({ ...q, hidden: false }),
+    confirm: (q) => fromFile.confirm({ ...q, hidden: false }),
+    pick: (q) => fromFile.pick(q),
+  };
   /**
    * A question the person chose to change, asked with `initial`, last time's answer, or, when
    * that's no longer right, the question's own default.
@@ -451,15 +615,37 @@ export function knownFrom(settings, ask, log, reused = new Set(), changing = new
     }
     return otherwise();
   };
+  /**
+   * Where a question goes: as on a first run, when the settings no longer give it; again, with
+   * last time's answer, when it's to change; otherwise to the settings, and only when they can't
+   * answer it, as `otherwise` says.
+   * @template Q, T
+   * @param {Q & { key: string }} q @param {() => Promise<T>} fromSettings @param {(q: Q) => Promise<T>} put
+   * @param {() => Promise<unknown>} [lastTime] @param {() => Promise<T>} [otherwise]
+   * @returns {Promise<T>}
+   */
+  const route = (q, fromSettings, put, lastTime = fromSettings, otherwise = () => put(q)) => {
+    if (fresh.has(q.key)) {
+      log.write(`Settings: ${q.key} isn't taken from last time, so it's put as on a first run`);
+      return put(q);
+    }
+    if (changing.has(q.key)) {
+      if (!/** @type {{ hidden?: boolean }} */ (q).hidden) return again(q, lastTime, put);
+      // Ticked to change, then hidden by new experience answers: it takes what this person gets.
+      log.write(`Settings: ${q.key} is to change, but these experience answers don't ask it, so it takes their default`);
+      return put(q);
+    }
+    return either(q.key, fromSettings, otherwise);
+  };
   return {
-    folder: (q) => (changing.has(q.key) ? again(q, () => known.folder(q), (r) => ask.folder(r)) : either(q.key, () => known.folder(q), () => ask.folder(q))),
-    choose: (q) => (changing.has(q.key) ? again(q, () => known.choose(q), (r) => ask.choose(r)) : either(q.key, () => known.choose(q), () => ask.choose(q))),
-    confirm: (q) => (changing.has(q.key) ? again(q, () => known.confirm(q), (r) => ask.confirm(r)) : either(q.key, () => known.confirm(q), () => ask.confirm(q))),
+    folder: (q) => route(q, () => known.folder(q), (r) => ask.folder(r)),
+    choose: (q) => route(q, () => known.choose(q), (r) => ask.choose(r)),
+    confirm: (q) => route(q, () => known.confirm(q), (r) => ask.confirm(r)),
     // A re-asked pick's default is last time's ticks without anything the profile no longer
     // offers, and with a team's, whether the person chose to change it or it came back by itself.
     pick: (q) => {
       const lastTime = () => lastTicks(settings[q.key], q.options, q.initial, changing.get(q.key));
-      return changing.has(q.key) ? again(q, async () => lastTime(), (r) => ask.pick(r)) : either(q.key, () => known.pick(q), () => ask.pick({ ...q, initial: lastTime() }));
+      return route(q, () => known.pick(q), (r) => ask.pick(r), async () => lastTime(), () => ask.pick({ ...q, initial: lastTime() }));
     },
   };
 }
@@ -479,6 +665,14 @@ function lastTicks(saved, options, initial, added = []) {
 }
 
 /**
+ * Whether an answers file is from before the experience questions: it gives neither answer. It
+ * sets up what it did then: it answers even a question the experience defaults hide (see
+ * answersFrom), and a signed-in GitHub CLI isn't looked for (see main).
+ * @param {Record<string, unknown>} file
+ */
+export const fromBeforeExperience = (file) => !('aiExperience' in file) && !('codingExperience' in file);
+
+/**
  * Answers from an answers file: a JSON object keyed as {@link Answers}. A
  * missing answer takes the default, as Enter would; a wrong one stops the run.
  * @param {Record<string, unknown>} file
@@ -492,6 +686,8 @@ export function answersFrom(file) {
 
   /** How many times each key has been asked, for a list that answers it in turn. @type {Record<string, number>} */
   const turns = {};
+  /** A file from before the experience questions answers even a hidden question, as it did then. */
+  const older = fromBeforeExperience(file);
 
   return {
     async folder({ key, initial, validate }) {
@@ -502,7 +698,8 @@ export function answersFrom(file) {
       if (problem) throw wrong(key, problem);
       return value;
     },
-    async choose({ key, options, initial, other, inTurn }) {
+    async choose({ key, options, initial, other, inTurn, hidden }) {
+      if (hidden && !older) return initial;
       // A question asked again and again (after each failed sign-in) takes a list, one answer
       // each time, and the default once the list runs out.
       let value = file[key] ?? initial;
@@ -518,7 +715,8 @@ export function answersFrom(file) {
       if (other !== undefined && typeof value === 'string' && isAbsolute(value)) return other;
       throw wrong(key, `it should be one of ${listOf(named)}${other === undefined ? '' : ", or a folder's whole path"}${inTurn ? ', or a list of them' : ''}.`);
     },
-    async confirm({ key, initial }) {
+    async confirm({ key, initial, hidden }) {
+      if (hidden && !older) return initial;
       const value = file[key] ?? initial;
       if (typeof value !== 'boolean') throw wrong(key, 'it should be true or false.');
       return value;

@@ -23,7 +23,7 @@ async function seed(home, files) {
  */
 async function refuseEveryQuestion(answersFile) {
   const asked = 'a question was asked';
-  const keys = ['team', 'topWorkspace', 'googleDriveFolder', 'workspacesLocation', 'channel', 'github', 'workspaces', 'connectors', 'extraTools', 'fullSkills', 'switchOffMemory'];
+  const keys = ['team', 'aiExperience', 'codingExperience', 'topWorkspace', 'googleDriveFolder', 'workspacesLocation', 'channel', 'github', 'workspaces', 'connectors', 'extraTools', 'fullSkills', 'switchOffMemory'];
   await writeFile(answersFile, JSON.stringify(Object.fromEntries(keys.map((key) => [key, asked]))));
 }
 
@@ -34,6 +34,8 @@ test('a second run with a settings file present asks none of the four questions 
   const earlier = {
     profile: 'york',
     team: 'Another team',
+    aiExperience: 'confident',
+    codingExperience: 'work',
     googleDriveFolder: myDrive,
     workspacesLocation: myDrive,
     channel: 'nightly',
@@ -66,6 +68,8 @@ test('a re-run says what it reuses from last time: the top workspace and each ea
   await seedSettings(where.home, {
     profile: 'york',
     team: 'Another team',
+    aiExperience: 'confident',
+    codingExperience: 'small-projects',
     googleDriveFolder: join(where.home, 'My Drive'),
     workspacesLocation: join(where.home, 'My Drive'),
     topWorkspace: top,
@@ -83,6 +87,8 @@ test('a re-run says what it reuses from last time: the top workspace and each ea
 
   assert.equal(result.code, 0, result.stdout + result.stderr);
   assert.match(result.stdout, /Using your answers from last time/);
+  checklistSays(result.stdout, 'AI tools', "I'm pretty confident");
+  checklistSays(result.stdout, 'Writing code', 'A few small projects: Apps Script, Python');
   checklistSays(result.stdout, 'Top workspace', top);
   checklistSays(result.stdout, 'T3 Code', 'Nightly');
   checklistSays(result.stdout, 'GitHub', 'Set up');
@@ -179,6 +185,8 @@ test('a re-run of a home set up earlier updates what is out of date, re-adds PAT
   const earlier = {
     profile: 'york',
     team: 'Another team',
+    aiExperience: 'confident',
+    codingExperience: 'work',
     googleDriveFolder: myDrive,
     workspacesLocation: myDrive,
     channel: 'nightly',

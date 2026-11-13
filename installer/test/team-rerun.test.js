@@ -20,6 +20,8 @@ async function seedYork(home, overrides = {}) {
   const earlier = {
     profile: 'york',
     team: 'Another team',
+    aiExperience: 'dabbled',
+    codingExperience: 'no',
     googleDriveFolder: myDrive,
     workspacesLocation: myDrive,
     topWorkspace: top,
@@ -146,6 +148,8 @@ test('with a fixture profile, a team that adds an extra tool asks the extra-tool
   await mkdir(join(documents, 'Claude'), { recursive: true });
   await seedSettings(where.home, {
     profile: 'fixture',
+    aiExperience: 'dabbled',
+    codingExperience: 'no',
     googleDriveFolder: null,
     workspacesLocation: documents,
     topWorkspace: join(documents, 'Claude'),

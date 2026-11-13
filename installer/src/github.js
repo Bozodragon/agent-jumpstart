@@ -6,8 +6,37 @@
 // invites: the username goes in the checklist so Jacob can send one.
 import { githubHost as host, loadManifest, toolEntry } from './manifest.js';
 import { showPage } from './open-page.js';
-import { Stop } from './stop.js';
+import { messageOf, Stop } from './stop.js';
 import { bullet } from './text.js';
+import { findTool } from './tools.js';
+
+/**
+ * Before the questions: whether the GitHub CLI already on the laptop (the copy the tools step
+ * will find and use) is signed in. Then GitHub isn't asked (see theRest). Undefined when there's
+ * no copy to ask, or the list of versions can't be read; the tools step says why later.
+ * @param {import('./tools.js').Context} context
+ * @returns {Promise<boolean | undefined>}
+ */
+export async function signedInBefore(context) {
+  const { machine, downloads, log } = context;
+  const say = (/** @type {string} */ line) => log.write(`GitHub: ${line}`);
+  let entry;
+  try {
+    entry = toolEntry(await loadManifest(downloads), 'gh');
+  } catch (error) {
+    if (!(error instanceof Stop)) throw error;
+    say(`couldn't look for the GitHub CLI before the questions: ${messageOf(error)}`);
+    return undefined;
+  }
+  const program = entry && (await findTool(entry, context));
+  if (!program) {
+    say(entry ? "the GitHub CLI isn't on the laptop yet, so nobody is signed in" : 'the list of versions has no GitHub CLI, so nobody is signed in');
+    return undefined;
+  }
+  const status = await machine.run(program.file, [...program.args, 'auth', 'status', '--hostname', host]);
+  say(status.code === 0 ? `${program.file} is already signed in` : `${program.file} isn't signed in yet`);
+  return status.code === 0;
+}
 
 /**
  * Someone already signed in (a re-run, or an earlier gh) is left signed in and isn't sent to the
@@ -17,9 +46,11 @@ import { bullet } from './text.js';
  * @param {boolean} wanted Whether the person chose to set up GitHub now.
  * @param {Partial<Record<string, import('./tools.js').Command>>} programs The tools in place, by id.
  * @param {import('./tools.js').Context} context
+ * @param {boolean} [signedIn] Whether gh was signed in before the questions (see signedInBefore),
+ *   if that was looked at, so gh's sign-in isn't checked a second time.
  * @returns {Promise<string>} The checklist's GitHub line.
  */
-export async function setUpGitHub(profile, wanted, programs, context) {
+export async function setUpGitHub(profile, wanted, programs, context, signedIn) {
   const { machine, frontEnd, downloads, log } = context;
   const say = (/** @type {string} */ line) => log.write(`GitHub: ${line}`);
   if (!wanted) {
@@ -41,10 +72,10 @@ export async function setUpGitHub(profile, wanted, programs, context) {
   /** @param {string[]} args */
   const gh = (args) => machine.run(program.file, [...program.args, ...args]);
 
-  const status = await gh(['auth', 'status', '--hostname', host]);
+  const already = signedIn ?? (await gh(['auth', 'status', '--hostname', host])).code === 0;
   /** @type {import('./machine.js').Ran | undefined} */
   let git;
-  if (status.code === 0) {
+  if (already) {
     say('already signed in, so the sign-up page and sign-in were skipped');
   } else {
     say('not signed in yet');
