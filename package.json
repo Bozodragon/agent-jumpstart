@@ -6,16 +6,25 @@
     "installer"
   ],
   "scripts": {
+    "pretest": "node installer/page/build.js",
     "test": "node --test \"installer/test/**/*.test.js\"",
     "typecheck": "tsc",
     "build:portall": "node bootstrap/build.js",
+    "build:installer-page": "node installer/page/build.js",
     "publish:portall": "node bootstrap/build.js && portall publish dist/portall --item jumpstart-install --public",
     "build:page": "node page/build.js",
     "fetch:skill-texts": "node page/fetch-skill-texts.js",
     "publish:page": "node page/fetch-skill-texts.js && node page/build.js --publish"
   },
   "devDependencies": {
+    "@fontsource/instrument-sans": "^5.3.0",
+    "@fontsource/jetbrains-mono": "^5.3.0",
     "@types/node": "^24.0.0",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "esbuild": "^0.28.2",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
     "typescript": "^5.9.0"
   }
 }

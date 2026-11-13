@@ -1,0 +1,46 @@
+/* The bare page: plain, readable, and nothing more. The look (issue #66's round two) comes later.
+   The fonts are the Installer's own copies (fonts/), never Google's. */
+@font-face { font-family: "Instrument Sans"; font-weight: 400; font-display: swap; src: url("fonts/instrument-sans-latin-400-normal.woff2") format("woff2"); }
+@font-face { font-family: "Instrument Sans"; font-weight: 500; font-display: swap; src: url("fonts/instrument-sans-latin-500-normal.woff2") format("woff2"); }
+@font-face { font-family: "Instrument Sans"; font-weight: 600; font-display: swap; src: url("fonts/instrument-sans-latin-600-normal.woff2") format("woff2"); }
+@font-face { font-family: "JetBrains Mono"; font-weight: 400; font-display: swap; src: url("fonts/jetbrains-mono-latin-400-normal.woff2") format("woff2"); }
+
+:root {
+  --bg: #000000;
+  --panel: #0b0c0e;
+  --outline: #2b2e35;
+  --text: #ecedef;
+  --secondary: #9b9ea7;
+  --accent: #5b95ff;
+  --warn: #f0a656;
+  --ok: #4fc483;
+  --mono: "JetBrains Mono", Consolas, monospace;
+}
+* { box-sizing: border-box; }
+html { background: var(--bg); }
+body {
+  margin: 0;
+  font-family: "Instrument Sans", "Segoe UI", system-ui, sans-serif;
+  line-height: 1.55;
+  color: var(--text);
+}
+main { max-width: 48rem; margin: 0 auto; padding: 1.75rem 1.5rem 6rem; }
+h1 { font-size: 1.25rem; font-weight: 600; margin: 0 0 1.5rem; }
+h2 { font-size: 1rem; font-weight: 600; margin: 0 0 .5rem; }
+ol.events { list-style: none; margin: 0; padding: 0; display: grid; gap: .75rem; }
+.event { padding: .75rem 1rem; border: 1px solid var(--outline); border-radius: .5rem; background: var(--panel); white-space: pre-wrap; }
+.event.problem { border-color: var(--warn); }
+.event.finish { border-color: var(--accent); }
+.muted { color: var(--secondary); }
+.ok { color: var(--ok); }
+.failed { color: var(--warn); }
+.refused { color: var(--warn); margin: .5rem 0 0; }
+table { border-collapse: collapse; }
+td { padding: .125rem 1rem .125rem 0; vertical-align: top; }
+pre.output { font-family: var(--mono); font-size: .8125rem; margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+form { display: grid; gap: .5rem; margin-top: .5rem; }
+label { display: flex; gap: .5rem; align-items: baseline; }
+input[type="text"] { font: inherit; color: inherit; background: var(--bg); border: 1px solid var(--outline); border-radius: .375rem; padding: .375rem .5rem; width: 100%; }
+button { font: inherit; color: var(--bg); background: var(--text); border: 0; border-radius: .375rem; padding: .375rem 1rem; justify-self: start; cursor: pointer; }
+button + button { margin-left: .5rem; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }

@@ -1,16 +1,20 @@
 #!/usr/bin/env node
 // The Installer. The bootstrap runs this as:
 //
-//   node main.js --profile <id> [--debug]
+//   node main.js --profile <id> [--debug] [--terminal]
 //
 // --debug comes from the debug pasted line (york-debug.ps1).
+// --terminal keeps the Installer in the window (the terminal front end). Without it, a run with
+// nobody's answers file serves the Installer page and writes its address to a file, for the
+// Bootstrap to open (installer-page.js).
 //
 // Four overrides are for tests. Three let a test run it end to end with no network and no prompts:
 //   --home <folder>       use this as the user's profile folder (local AppData sits inside it);
 //                         everything that would change the rest of the machine, opening a page
 //                         in the browser among it, is faked inside it (machine.js)
 //   --answers <file>      answer every question from this JSON file; nothing is asked and
-//                         nothing waits for Enter, because nobody is at the screen
+//                         nothing waits for Enter, because nobody is at the screen. The run
+//                         uses the terminal front end
 //   --downloads <folder>  take downloads from this folder instead of the internet
 //
 // A fourth, for tests only, which the bootstrap never passes:
@@ -37,15 +41,17 @@ import { End, messageOf, Stop } from './stop.js';
 import { installTools, isRecord } from './tools.js';
 import { openTerminal } from './terminal.js';
 import { inWords } from './text.js';
+import { openInstallerPage } from './installer-page.js';
 import { setWindowTitle } from './window.js';
 import { addToT3, createWorkspaces } from './workspaces.js';
 
-/** @returns {{ profile: string, debug: boolean, home?: string, answers?: string, downloads?: string, profiles?: string }} */
+/** @returns {{ profile: string, debug: boolean, terminal: boolean, home?: string, answers?: string, downloads?: string, profiles?: string }} */
 function readOptions() {
   const { values } = parseArgs({
     options: {
       profile: { type: 'string', default: 'default' },
       debug: { type: 'boolean', default: false },
+      terminal: { type: 'boolean', default: false },
       home: { type: 'string' },
       answers: { type: 'string' },
       downloads: { type: 'string' },
@@ -154,14 +160,15 @@ async function main() {
 
   // Everything the person sees and answers from here on goes through it: steps are given it in
   // their context, as they're given the machine.
-  const frontEnd = await openTerminal();
   const places = findPlaces(options.home);
+  const { frontEnd, why } = await openFrontEnd(options, places);
   const log = openLog(places.logs, { debug: options.debug });
   log.write(`Installer started with Node ${process.version}`);
   log.write(`Profile: ${options.profile}`);
   log.write(`Debug: ${options.debug ? 'on' : 'off'}`);
   log.write(`Home: ${places.home}`);
   log.write(frontEnd.description);
+  if (why) log.write(why);
   if (options.answers) log.write(`Answers from: ${options.answers}`);
   if (options.downloads) log.write(`Downloads from: ${options.downloads}`);
   if (options.profiles) log.write(`Profiles from: ${options.profiles}`);
@@ -361,6 +368,26 @@ async function main() {
   } finally {
     if (options.debug) await logUserPath(machine, log, 'after');
     await frontEnd.close();
+  }
+}
+
+/**
+ * The front end for this run: the Installer page for someone at the screen, unless `--terminal`
+ * keeps them in the window; the terminal for a run whose answers come from a file. A page that
+ * can't be served leaves the run in the window, and says why for the log.
+ * @param {{ answers?: string, terminal: boolean }} options @param {import('./places.js').Places} places
+ * @returns {Promise<{ frontEnd: import('./front-end.js').FrontEnd, why?: string }>}
+ */
+async function openFrontEnd(options, places) {
+  if (options.answers !== undefined || options.terminal) return { frontEnd: await openTerminal() };
+  try {
+    const page = await openInstallerPage({ addressFile: places.pageAddress });
+    // For whoever started it by hand: the Bootstrap opens the address from the file.
+    process.stdout.write(`The Installer page: ${page.address}
+`);
+    return { frontEnd: page };
+  } catch (error) {
+    return { frontEnd: await openTerminal(), why: `The Installer page couldn't be served, so the run stays in the window: ${messageOf(error)}` };
   }
 }
 
