@@ -14,7 +14,11 @@
 //                                         (one whose output is kept also prints its reply's
 //                                         output to the front end's screen, as the program
 //                                         would have),
-//                                         `leftRunning: true` for one started and not waited for
+//                                         `leftRunning: true` for one started and not waited for,
+//                                         and `input`, what its input was: `pipe` (the
+//                                         Installer's, as every program's is), or `inherit`
+//                                         (the person's window, for a program on the terminal's
+//                                         screen)
 //   <home>/fake-machine/pages.json        every address it was asked to open in the browser
 //   <home>/fake-machine/replies.json      written by a test: what a run returns, keyed by the
 //                                         file name, or the file name and its first arguments
@@ -431,23 +435,24 @@ function fakeMachine(folder, home, screen) {
       },
     },
     pathSources,
-    start: (file, args, env) => reply(file, args, { file, args, path: env.Path ?? '' }),
-    startOnScreen: async (file, args, env, extra) => (await reply(file, args, { file, args, path: env.Path ?? '', ...recordOf(extra), onScreen: true })).code,
+    start: (file, args, env) => reply(file, args, { file, args, path: env.Path ?? '', input: 'pipe' }),
+    startOnScreen: async (file, args, env, extra) =>
+      (await reply(file, args, { file, args, path: env.Path ?? '', ...recordOf(extra), onScreen: true, input: inputOf(screen.stdio(false)) })).code,
     // The reply's output is what the program prints, so it's shown on the screen, as it would be.
     async startOnScreenAndKeep(file, args, env, extra) {
-      const ran = await reply(file, args, { file, args, path: env.Path ?? '', ...recordOf(extra), onScreen: true });
+      const ran = await reply(file, args, { file, args, path: env.Path ?? '', ...recordOf(extra), onScreen: true, input: inputOf(screen.stdio(true)) });
       screen.write(ran.output);
       return ran;
     },
     async startAndLeave(file, args, env) {
-      const { code, output } = await reply(file, args, { file, args, path: env.Path ?? '', leftRunning: true });
+      const { code, output } = await reply(file, args, { file, args, path: env.Path ?? '', leftRunning: true, input: inputOf(leftRunning) });
       if (code === -1) throw new Error(output || `${basename(file)} couldn't be started`);
     },
   };
 
   /**
    * @param {string} file @param {string[]} args
-   * @param {{ file: string, args: string[], path: string, env?: Record<string, string>, onScreen?: boolean, leftRunning?: boolean, found?: string[] }} record
+   * @param {{ file: string, args: string[], path: string, env?: Record<string, string>, onScreen?: boolean, leftRunning?: boolean, input: string, found?: string[] }} record
    * @returns {Promise<Ran>}
    */
   async function reply(file, args, record) {
@@ -486,6 +491,39 @@ function fakeMachine(folder, home, screen) {
     if (found.takes) await sleep(found.takes);
     return { code: found.code ?? 0, output: found.output ?? '' };
   }
+}
+
+/**
+ * How a program started and not waited for is connected: its input a pipe of the Installer's,
+ * which is closed at once, and its output nowhere. Never the Installer's own input: started
+ * hidden by the Bootstrap, the Installer's input is a hidden console, which still counts as a
+ * terminal, so a program that read it would wait for an Enter nobody can press.
+ * @type {import('node:child_process').StdioOptions}
+ */
+const leftRunning = ['pipe', 'ignore', 'ignore'];
+
+/**
+ * What a program's input is, from how it's started: `pipe`, or `inherit` (the Installer's own).
+ * @param {import('node:child_process').StdioOptions} stdio
+ */
+const inputOf = (stdio) => String(Array.isArray(stdio) ? stdio[0] : stdio);
+
+/**
+ * Starts a program and leaves it running, detached, so it stays open after the Installer and its
+ * window have gone.
+ * @param {string} file @param {string[]} args @param {import('node:child_process').SpawnOptions} [options]
+ * @returns {Promise<void>}
+ */
+function leave(file, args, options = {}) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(file, args, { ...options, detached: true, stdio: leftRunning });
+    child.stdin?.destroy();
+    child.once('error', reject);
+    child.once('spawn', () => {
+      child.unref();
+      resolve();
+    });
+  });
 }
 
 /**
@@ -603,16 +641,7 @@ function realMachine(loggedRun, screen) {
       patience: 120_000,
       wait: (ms) => sleep(ms),
       waitFor: withinRealTime,
-      openPage(url) {
-        return new Promise((resolve, reject) => {
-          const child = spawn(system32('rundll32.exe'), ['url.dll,FileProtocolHandler', url], { detached: true, stdio: 'ignore' });
-          child.once('error', reject);
-          child.once('spawn', () => {
-            child.unref();
-            resolve();
-          });
-        });
-      },
+      openPage: (url) => leave(system32('rundll32.exe'), ['url.dll,FileProtocolHandler', url]),
     },
     pathSources,
     start: runProgram,
@@ -650,15 +679,7 @@ function realMachine(loggedRun, screen) {
     startAndLeave(file, args, env) {
       const how = startable(file, args);
       if ('refused' in how) return Promise.reject(new Error(how.refused));
-      return new Promise((resolve, reject) => {
-        // Detached, so it stays open after the installer and its window have gone.
-        const child = spawn(how.file, how.args, { ...how.options, env, detached: true, stdio: 'ignore' });
-        child.once('error', reject);
-        child.once('spawn', () => {
-          child.unref();
-          resolve();
-        });
-      });
+      return leave(how.file, how.args, { ...how.options, env });
     },
   };
 }
@@ -690,7 +711,8 @@ function runProgram(file, args, env = process.env) {
   if ('refused' in how) return Promise.resolve({ code: -1, output: how.refused });
   return new Promise((resolve) => {
     let output = '';
-    const child = spawn(how.file, how.args, { ...how.options, env, windowsHide: true });
+    // Its input a pipe of the Installer's, never the hidden console's (see `leftRunning`).
+    const child = spawn(how.file, how.args, { ...how.options, env, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] });
     child.stdout?.on('data', (chunk) => (output += chunk));
     child.stderr?.on('data', (chunk) => (output += chunk));
     child.once('error', (error) => resolve({ code: -1, output: error.message }));

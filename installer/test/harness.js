@@ -300,8 +300,9 @@ export function fakeMachine(home) {
      * with `;`), rebuilt at that moment from the machine PATH, the user PATH and the installer's own.
      * A reply's `reads` adds `found`: which of those files were there when the program started.
      * `env` is the environment variables a run was given beyond PATH, for that run only (the
-     * record has none for a run given none).
-     * @returns {Promise<{ file: string, args: string[], path: string, env?: Record<string, string>, onScreen?: boolean, leftRunning?: boolean, found?: string[] }[]>}
+     * record has none for a run given none). `input` is what the program's input was: `pipe`, or
+     * `inherit` (the person's window, for a program on the terminal's screen).
+     * @returns {Promise<{ file: string, args: string[], path: string, env?: Record<string, string>, onScreen?: boolean, leftRunning?: boolean, input: string, found?: string[] }[]>}
      */
     runs: () => readJson('runs.json', []),
     /** @returns {Promise<string[]>} the addresses it was asked to open in the browser, in order */
