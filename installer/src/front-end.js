@@ -31,8 +31,15 @@
  */
 
 /**
+ * @typedef {object} Links
+ * @property {string} [setupPage] The profile's setup page, which the person came from.
+ * @property {string} [shareLogLine] The line that copies the newest installer log, for asking for help.
+ */
+
+/**
  * @typedef {object} FrontEnd
- * @property {(title: string) => void} start The run's first words.
+ * @property {(title: string, links?: Links) => void} start The run's first words. `links` are
+ *   the profile's, for a front end that shows them (the page does; the terminal doesn't).
  * @property {(text: string) => void} step A line saying what's happening.
  * @property {<T>(message: string, task: (progress: Progress) => Promise<T>, ended?: (result: T) => { text: string, ok: boolean }) => Promise<T>} busy
  *   Shows that something slow is under way while `task` runs, then how it ended (`ended`, or

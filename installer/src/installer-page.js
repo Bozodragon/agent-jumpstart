@@ -3,7 +3,7 @@
 // pace; the run waits only for answers.
 //
 // The events, each with `type` (and an `id` the server numbers them by, from 1):
-//   start    { title }
+//   start    { title, setupPage?, shareLogLine? }   the profile's setup page and share-log line
 //   step     { text }
 //   busy     { message }                     something slow under way; its id is the busy's id
 //   progress { busy, received, total? }     how far it has got (bytes), a few times a second at most
@@ -121,8 +121,8 @@ export async function openInstallerPage({ addressFile, page }) {
 
   return {
     address: server.address,
-    start(title) {
-      server.send({ type: 'start', title });
+    start(title, links) {
+      server.send({ type: 'start', title, ...links });
     },
     step(text) {
       server.send({ type: 'step', text });

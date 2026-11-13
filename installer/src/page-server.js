@@ -153,7 +153,9 @@ export async function openPageServer({ answer, page = builtPage }) {
     // it; any other connection (a reload, a second window) gets every event so far.
     const last = Number(request.headers['last-event-id']);
     const from = Number.isInteger(last) && last >= 0 ? last : 0;
-    response.write(`event: connection\ndata: ${JSON.stringify({ connection })}\n\n`);
+    // How far the run had got, so the page can rebuild what had already happened without
+    // pausing on it, and pace only what happens from now on.
+    response.write(`event: connection\ndata: ${JSON.stringify({ connection, before: events.length })}\n\n`);
     for (const event of events) if (event.id > from) response.write(framed(event));
     streams.set(connection, { response, seen: from });
     response.once('close', () => {

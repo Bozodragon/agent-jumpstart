@@ -205,7 +205,7 @@ async function main() {
     const unattended = answers !== undefined;
 
     // The setup page isn't opened: the person has just pasted its line into this window.
-    frontEnd.start(`Agent Jumpstart · ${offered.name}`);
+    frontEnd.start(`Agent Jumpstart · ${offered.name}`, { setupPage: offered.page, shareLogLine: offered.shareLogLine });
 
     // A re-run asks nothing an earlier run already wrote down, unless the person chooses to change it.
     const earlier = await readEarlierSettings(places.settings, offered.id, log);

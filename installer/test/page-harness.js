@@ -115,6 +115,8 @@ export function connect(events, { lastEventId } = {}) {
   let closed = false;
   /** The id the server gives this connection, once its stream has opened. @type {number | undefined} */
   let id;
+  /** How many events the run had sent when this connection opened. @type {number | undefined} */
+  let before;
   /** @type {(error: unknown) => void} */
   let failed = () => {};
   const finished = new Promise((resolve) => (failed = resolve));
@@ -149,7 +151,7 @@ export function connect(events, { lastEventId } = {}) {
           fields[line.slice(0, colon)] = line.slice(colon + 1).trimStart();
         }
         if (fields.event === 'connection') {
-          id = JSON.parse(fields.data).connection;
+          ({ connection: id, before } = JSON.parse(fields.data));
           continue;
         }
         if (fields.data === undefined) continue;
@@ -164,6 +166,10 @@ export function connect(events, { lastEventId } = {}) {
     /** The id the server gave this connection, once its stream has opened. */
     get id() {
       return id;
+    },
+    /** How many events the run had sent when the stream opened: those it sends first, as history. */
+    get before() {
+      return before;
     },
     /** Every event received so far, in the order received. */
     events: seen,

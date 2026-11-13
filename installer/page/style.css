@@ -1,46 +1,327 @@
-/* The bare page: plain, readable, and nothing more. The look (issue #66's round two) comes later.
-   The fonts are the Installer's own copies (fonts/), never Google's. */
+/* The Installer page: issue #66's round-two look. The tokens are the setup page's, so the two
+   pages read as one family. The fonts are the Installer's own copies (fonts/), never Google's.
+
+   Scale: everything is set in rem, and the root size follows the window. At 1366x768, and
+   anything narrower or shorter, the root is 16px. Above that it grows with whichever of width
+   and height runs out first, so a short wide window never overflows, up to 30px: 1.875 times,
+   a 2560x1440 window. Below 1366 wide it stays 16px and the layout reflows. */
 @font-face { font-family: "Instrument Sans"; font-weight: 400; font-display: swap; src: url("fonts/instrument-sans-latin-400-normal.woff2") format("woff2"); }
 @font-face { font-family: "Instrument Sans"; font-weight: 500; font-display: swap; src: url("fonts/instrument-sans-latin-500-normal.woff2") format("woff2"); }
 @font-face { font-family: "Instrument Sans"; font-weight: 600; font-display: swap; src: url("fonts/instrument-sans-latin-600-normal.woff2") format("woff2"); }
 @font-face { font-family: "JetBrains Mono"; font-weight: 400; font-display: swap; src: url("fonts/jetbrains-mono-latin-400-normal.woff2") format("woff2"); }
 
+html { font-size: clamp(16px, min(1.1713vw, 2.0834vh), 30px); }
+
 :root {
   --bg: #000000;
   --panel: #0b0c0e;
+  --hover: #131417;
+  --selected: #1b1d21;
+  --hairline: #1f2126;
   --outline: #2b2e35;
   --text: #ecedef;
   --secondary: #9b9ea7;
+  --muted: #666973;
   --accent: #5b95ff;
+  --accent-hover: #77a8ff;
+  --accent-soft: rgba(91, 149, 255, .12);
+  --accent-half: rgba(91, 149, 255, .5);
+  --on-accent: #03102b;
   --warn: #f0a656;
-  --ok: #4fc483;
+  --warn-fill: rgba(240, 166, 86, .14);
+  --warn-line: rgba(240, 166, 86, .58);
+  --warn-text: #fad8b0;
+  --lit: inset 0 1px 0 rgba(255, 255, 255, .055);
   --mono: "JetBrains Mono", Consolas, monospace;
+  --ease: cubic-bezier(.2, .7, .2, 1);
+  /* A window taller than the composition: the spare height, part of which goes above the stage. */
+  --spare: max(0px, 100vh - 48rem);
+  color-scheme: dark;
 }
 * { box-sizing: border-box; }
 html { background: var(--bg); }
 body {
   margin: 0;
+  background: var(--bg);
   font-family: "Instrument Sans", "Segoe UI", system-ui, sans-serif;
+  font-size: 1rem;
   line-height: 1.55;
   color: var(--text);
+  -webkit-font-smoothing: antialiased;
 }
-main { max-width: 48rem; margin: 0 auto; padding: 1.75rem 1.5rem 6rem; }
-h1 { font-size: 1.25rem; font-weight: 600; margin: 0 0 1.5rem; }
-h2 { font-size: 1rem; font-weight: 600; margin: 0 0 .5rem; }
-ol.events { list-style: none; margin: 0; padding: 0; display: grid; gap: .75rem; }
-.event { padding: .75rem 1rem; border: 1px solid var(--outline); border-radius: .5rem; background: var(--panel); white-space: pre-wrap; }
-.event.problem { border-color: var(--warn); }
-.event.finish { border-color: var(--accent); }
-.muted { color: var(--secondary); }
-.ok { color: var(--ok); }
-.failed { color: var(--warn); }
-.refused { color: var(--warn); margin: .5rem 0 0; }
-table { border-collapse: collapse; }
-td { padding: .125rem 1rem .125rem 0; vertical-align: top; }
-pre.output { font-family: var(--mono); font-size: .8125rem; margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
-form { display: grid; gap: .5rem; margin-top: .5rem; }
-label { display: flex; gap: .5rem; align-items: baseline; }
-input[type="text"] { font: inherit; color: inherit; background: var(--bg); border: 1px solid var(--outline); border-radius: .375rem; padding: .375rem .5rem; width: 100%; }
-button { font: inherit; color: var(--bg); background: var(--text); border: 0; border-radius: .375rem; padding: .375rem 1rem; justify-self: start; cursor: pointer; }
-button + button { margin-left: .5rem; }
-:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.offscreen { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+a { color: var(--accent); text-underline-offset: 3px; }
+a:focus-visible, button:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: .25rem; }
+code, kbd {
+  font-family: var(--mono); font-size: .82em; color: var(--text);
+  background: var(--selected); border: 1px solid var(--outline); border-radius: .375rem; padding: 1px .375rem;
+}
+.path { font-family: var(--mono); font-size: .88em; }
+.path > span { white-space: nowrap; }
+
+/* ---- The shell: one column, the same left edge for everything ---- */
+.shell {
+  max-width: 48rem; min-height: 100vh; margin: 0 auto;
+  padding: 1.75rem 1.5rem 7rem;
+  transition: max-width .45s var(--ease);
+}
+.shell.is-ending { max-width: 68rem; }
+
+.head {
+  display: flex; align-items: center; gap: .5rem;
+  margin-bottom: calc(clamp(1.75rem, 10vh, 5.75rem) + var(--spare) * .3);
+}
+.shell.is-ending .head { margin-bottom: calc(clamp(1.75rem, 6vh, 3.25rem) + var(--spare) * .25); }
+.brand { display: flex; align-items: center; gap: .75rem; min-width: 0; font-size: .875rem; font-weight: 500; color: var(--secondary); white-space: nowrap; }
+.brand > span:last-child { overflow: hidden; text-overflow: ellipsis; }
+.mark {
+  width: 1.875rem; height: 1.875rem; flex: none; border-radius: .625rem;
+  background: var(--selected); border: 1px solid var(--outline); box-shadow: var(--lit);
+  display: grid; place-items: center;
+}
+.mark svg { width: .9375rem; height: .9375rem; stroke: var(--accent); }
+
+/* Back to the setup page: quiet, in the person's browser. */
+.setup {
+  display: inline-flex; align-items: center; gap: .375rem; flex: none;
+  height: 2.25rem; padding: 0 .75rem; border-radius: 999px;
+  font-size: .8125rem; font-weight: 500; color: var(--muted); text-decoration: none; white-space: nowrap;
+}
+.setup svg { width: .8125rem; height: .8125rem; }
+.setup:hover { color: var(--text); background: var(--hover); }
+.setup:focus-visible { border-radius: 999px; outline-offset: 2px; }
+
+/* How far along: a dash per question, a dash per thing done, and the ending's. Nothing says how
+   many are to come, so the work run squeezes its dashes rather than grow past its room. */
+.progress {
+  display: flex; align-items: center; gap: .625rem; min-width: 0; max-width: 22rem; margin-left: auto;
+  height: 2.25rem; padding: 0 .875rem; border-radius: 999px; border: 1px solid var(--hairline);
+}
+.run { display: flex; gap: .1875rem; min-width: 0; }
+.run:empty { display: none; }
+.run.is-work { flex: 0 1 auto; overflow: hidden; justify-content: flex-end; }
+.dash { flex: 0 1 1rem; width: 1rem; min-width: .125rem; height: .1875rem; border-radius: .125rem; background: var(--outline); transition: background-color .3s ease; }
+.dash.is-done { background: var(--accent-half); }
+.dash.is-now { background: var(--accent); }
+.dash.is-warn { background: var(--warn); }
+
+/* ---- The stage: one screen at a time ---- */
+.stage { display: grid; }
+.screen { grid-area: 1 / 1; min-width: 0; animation: come-in .34s var(--ease) .09s both; }
+.screen.is-leaving { animation: go-out .16s ease-in both; pointer-events: none; }
+@keyframes come-in { from { opacity: 0; transform: translateY(1.125rem); } }
+@keyframes go-out { to { opacity: 0; transform: translateY(-.75rem); } }
+@keyframes fade-in { from { opacity: 0; } }
+
+/* The badge says whose turn it is. */
+.status { display: flex; align-items: center; gap: .75rem; height: 2.125rem; margin-bottom: 1.375rem; }
+.badge {
+  width: 2.125rem; height: 2.125rem; flex: none; border-radius: 50%;
+  border: 1px solid var(--outline); color: var(--secondary);
+  font-size: .875rem; font-weight: 600; font-variant-numeric: tabular-nums;
+  display: grid; place-items: center;
+}
+.status-note { font-size: .875rem; color: var(--secondary); }
+.badge.is-ring { border: 0; }
+.badge.is-ring svg { width: 2.125rem; height: 2.125rem; animation: spin .95s linear infinite; }
+.ring-track { stroke: var(--outline); stroke-width: 1.5; }
+.ring-arc { stroke: var(--accent); stroke-width: 2; stroke-linecap: round; stroke-dasharray: 28 100; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.badge.is-tick { border-color: var(--accent-half); background: var(--accent-soft); color: var(--accent); }
+.badge.is-tick svg { width: 1.125rem; height: 1.125rem; }
+.draw { stroke-dasharray: 24; stroke-dashoffset: 24; animation: draw .36s cubic-bezier(.3, .7, .2, 1) .22s forwards; }
+@keyframes draw { to { stroke-dashoffset: 0; } }
+.badge.is-warn { border-color: var(--warn-line); background: var(--warn-fill); color: var(--warn); font-size: 1rem; }
+.badge.is-you { border-color: rgba(91, 149, 255, .55); }
+.badge.is-you i { width: .625rem; height: .625rem; border-radius: 50%; background: var(--accent); }
+/* Waiting on the person: the dot's ring breathes out. */
+.badge.is-waiting { animation: call 2.2s ease-out infinite; }
+@keyframes call { 0% { box-shadow: 0 0 0 0 rgba(91, 149, 255, .45); } 70%, 100% { box-shadow: 0 0 0 .5rem rgba(91, 149, 255, 0); } }
+
+.title {
+  margin: 0; max-width: 21em;
+  font-size: clamp(1.625rem, 1.9vw + .8rem, 2.375rem); line-height: 1.16; font-weight: 600; letter-spacing: -0.022em;
+  text-wrap: balance; overflow-wrap: break-word;
+}
+.title.quiet { color: var(--secondary); }
+.title .path { font-size: .6em; letter-spacing: 0; font-weight: 400; color: var(--secondary); }
+.lede { margin: .875rem 0 0; max-width: 40em; font-size: 1.0625rem; line-height: 1.6; color: var(--secondary); text-wrap: pretty; overflow-wrap: break-word; }
+.lede + .lede { margin-top: .75rem; }
+.lede.small { font-size: .9375rem; }
+.notice-body { margin-top: .125rem; }
+.notice-body .lede:first-child { margin-top: .875rem; }
+
+form { margin: 0; }
+.body { margin-top: 1.875rem; }
+
+/* ---- Options: one panel, one row each, the default already chosen ---- */
+.options {
+  display: grid; gap: 2px; padding: .5rem;
+  background: var(--panel); border: 1px solid var(--hairline); border-radius: 1rem; box-shadow: var(--lit);
+}
+.option { position: relative; display: flex; align-items: center; gap: .875rem; padding: .8125rem .875rem; border-radius: .625rem; cursor: pointer; }
+.option input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
+.option:hover { background: var(--hover); }
+.option:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 0; }
+.box {
+  flex: none; width: 1.125rem; height: 1.125rem; border-radius: 50%;
+  border: 1.5px solid var(--outline); display: grid; place-items: center;
+  transition: border-color .12s ease, background-color .12s ease;
+}
+.box::after { content: ""; width: .5rem; height: .5rem; border-radius: 50%; background: var(--accent); transform: scale(0); transition: transform .14s ease; }
+.option:has(input:checked) .box { border-color: var(--accent); }
+.option:has(input:checked) .box::after { transform: scale(1); }
+.option-text { display: flex; flex-wrap: wrap; align-items: baseline; gap: 1px .875rem; min-width: 0; }
+.option-label { font-weight: 500; }
+.option-hint { font-size: .90625rem; color: var(--secondary); }
+.options:not(.is-pick) .option:has(input:checked) { background: var(--selected); box-shadow: var(--lit), inset 0 0 0 1px var(--outline); }
+
+/* Tick boxes, and what each one is for in a second column. */
+.options.is-pick .option { padding: .625rem .875rem; }
+.options.is-pick .option-text { display: grid; grid-template-columns: 9.25rem minmax(0, 1fr); flex: 1; }
+.options.is-pick .box { border-radius: .3125rem; }
+.options.is-pick .box::after {
+  width: .625rem; height: .375rem; border-radius: 0; background: none;
+  border-left: 2px solid var(--on-accent); border-bottom: 2px solid var(--on-accent);
+  transform: translateY(-1px) rotate(-45deg) scale(0);
+}
+.options.is-pick .option:has(input:checked) .box { background: var(--accent); }
+.options.is-pick .option:has(input:checked) .box::after { transform: translateY(-1px) rotate(-45deg) scale(1); }
+.options.is-pick .option:not(:has(input:checked)) .option-label { color: var(--secondary); }
+.options.is-pick .option:not(:has(input:checked)) .option-hint { color: var(--muted); }
+
+/* ---- A folder to type ---- */
+.input {
+  width: 100%; height: 3.375rem; padding: 0 1.125rem;
+  font-family: var(--mono); font-size: .9375rem; color: var(--text);
+  background: var(--panel); border: 1px solid var(--outline); border-radius: .875rem; box-shadow: var(--lit);
+}
+.input::placeholder { color: var(--muted); }
+.input:focus { outline: 2px solid var(--accent); outline-offset: 1px; border-color: transparent; }
+.input[aria-invalid="true"] { border-color: var(--warn-line); }
+.input[aria-invalid="true"]:focus { outline-color: var(--warn); }
+.error { margin: .75rem 2px 0; color: var(--warn-text); font-size: .9375rem; }
+
+/* ---- Buttons ---- */
+.actions { display: flex; align-items: center; flex-wrap: wrap; gap: 1rem; margin-top: 1.75rem; }
+.primary, .secondary {
+  display: inline-flex; align-items: center; justify-content: center; gap: .5625rem; flex: none;
+  height: 2.875rem; padding: 0 1.5rem; border-radius: 999px; cursor: pointer;
+  font: inherit; font-size: .96875rem; font-weight: 600; text-decoration: none;
+}
+.primary { background: var(--accent); color: var(--on-accent); border: 0; }
+.primary:hover { background: var(--accent-hover); }
+.primary:disabled { opacity: .38; cursor: default; }
+.primary:disabled:hover { background: var(--accent); }
+.secondary { background: var(--panel); color: var(--text); border: 1px solid var(--outline); box-shadow: var(--lit); font-weight: 500; }
+.secondary:hover { background: var(--hover); }
+.secondary svg { width: .9375rem; height: .9375rem; color: var(--secondary); }
+.secondary.small { height: 2.25rem; padding: 0 .875rem; font-size: .875rem; }
+.primary:focus-visible, .secondary:focus-visible { border-radius: 999px; }
+.hint { font-size: .875rem; color: var(--muted); }
+.hint kbd { font-size: .75rem; color: var(--secondary); margin-left: 3px; }
+
+/* ---- Notices ---- */
+.bullets { list-style: none; margin: 1rem 0 0; padding: 0; max-width: 40em; }
+.bullets > li { position: relative; padding-left: 1.25rem; color: var(--secondary); overflow-wrap: break-word; }
+.bullets > li + li { margin-top: .5rem; }
+.bullets > li::before { content: ""; position: absolute; left: .3125rem; top: .72em; width: .25rem; height: .25rem; border-radius: 50%; background: var(--muted); }
+.panel { background: var(--panel); border: 1px solid var(--hairline); border-radius: 1rem; box-shadow: var(--lit); padding: .5rem; }
+.rows { margin: 1.5rem 0 0; }
+.row { display: grid; grid-template-columns: minmax(0, 12rem) minmax(0, 1fr); gap: .875rem; padding: .5rem .75rem; }
+.row dt { font-weight: 500; }
+.row dd { margin: 0; color: var(--secondary); overflow-wrap: anywhere; }
+
+/* ---- Something slow ---- */
+.bar { height: .5rem; margin-top: 2.125rem; border-radius: 999px; background: var(--selected); overflow: hidden; }
+.bar i { display: block; height: 100%; width: 0; border-radius: 999px; background: var(--accent); transition: width .2s linear; }
+.readout { margin: 1rem 0 0; font-size: 1.1875rem; color: var(--secondary); font-variant-numeric: tabular-nums; }
+.readout b { color: var(--text); font-weight: 600; }
+
+/* ---- A line to copy, in the setup page's copy box ---- */
+.copybox { margin-top: 1.25rem; background: var(--bg); border: 1px solid var(--hairline); border-radius: .875rem; overflow: hidden; }
+.copybox-head { padding: .5625rem 1rem; border-bottom: 1px solid var(--hairline); background: var(--panel); font-size: .84375rem; font-weight: 500; color: var(--secondary); }
+.copybox-row { display: flex; align-items: center; gap: .75rem; padding: .625rem .625rem .625rem 1rem; }
+.copybox-text { flex: 1; min-width: 0; background: none; border: 0; padding: 0; font-size: .8125rem; line-height: 1.65; color: var(--accent); overflow-wrap: anywhere; user-select: all; }
+
+/* ---- A run that stopped or failed ---- */
+.summary { margin-top: 2rem; }
+.summary h2, .next h2 { margin: 0 0 .375rem; font-size: .9375rem; font-weight: 600; }
+.summary .rows { margin-top: .625rem; }
+/* The help comes in a beat after the problem, so a problem that the run goes on to ask about
+   (Try again or Skip) never shows it. */
+.help { margin-top: 2.25rem; animation: fade-in .3s ease .5s both; }
+
+/* ---- The ending: the one screen with everything at once ---- */
+.ending { display: grid; gap: 2rem; }
+.problems {
+  margin: 1.125rem 0 0; padding: .75rem .875rem; max-width: 40em;
+  border: 1px solid var(--warn-line); border-radius: .75rem; background: var(--warn-fill); color: var(--warn-text); font-size: .9375rem;
+}
+.problems p { margin: 0; overflow-wrap: break-word; }
+.problems p + p { margin-top: .5rem; }
+.problems a { color: inherit; }
+.next { margin-top: 1.875rem; padding: 1.25rem 1.25rem 1.375rem; }
+.next p { margin: 0; font-size: 1.0625rem; line-height: 1.6; color: var(--secondary); }
+.next p + p { margin-top: .75rem; }
+.log { margin: 1.375rem .25rem 0; font-size: .8125rem; line-height: 1.6; color: var(--muted); }
+.log .path { display: block; font-size: .75rem; }
+.checklist { margin: 0; }
+.check {
+  display: grid; grid-template-columns: 1.125rem 7rem minmax(0, 1fr); gap: .875rem; align-items: baseline;
+  padding: .5625rem .75rem; border-radius: .625rem;
+  animation: come-in .32s var(--ease) both; animation-delay: calc(var(--k) * 45ms + .25s);
+}
+.check dt { font-weight: 500; }
+.check dd { margin: 0; color: var(--secondary); overflow-wrap: anywhere; }
+.check-mark { align-self: start; margin-top: .3125rem; width: 1rem; height: 1rem; color: var(--accent); }
+.check-mark svg { display: block; width: 1rem; height: 1rem; }
+.check.is-bad { background: var(--warn-fill); }
+.check.is-bad .check-mark { color: var(--warn); font-weight: 600; text-align: center; line-height: 1rem; }
+.check.is-bad dd { color: var(--warn-text); }
+.more { margin-top: .75rem; }
+.more summary { cursor: pointer; padding: .5rem .75rem; font-size: .9375rem; font-weight: 500; color: var(--secondary); border-radius: .5rem; }
+.more summary:hover { color: var(--text); background: var(--hover); }
+.more .rows { margin-top: .375rem; }
+
+@media (min-width: 900px) {
+  .ending { grid-template-columns: minmax(0, 5fr) minmax(0, 6fr); gap: 3.5rem; align-items: start; }
+}
+
+/* ---- A narrower window: the header takes two lines, and the dashes get the second ---- */
+@media (max-width: 640px) {
+  .head { flex-wrap: wrap; row-gap: .75rem; }
+  .brand { margin-right: auto; }
+  .setup { margin-right: -.75rem; }
+  .progress { order: 3; flex: 1 1 100%; max-width: none; margin-left: 0; }
+  .run.is-work { flex: 1 1 auto; }
+  .dash { flex: 1 1 1rem; }
+}
+
+@media (max-width: 560px) {
+  .shell { padding: 1.25rem 1rem 5rem; }
+  .brand { gap: .625rem; }
+  .status { margin-bottom: 1.125rem; }
+  .body { margin-top: 1.5rem; }
+  .lede, .next p, .readout { font-size: 1rem; }
+  .option-text, .options.is-pick .option-text { display: block; }
+  .option-hint { display: block; }
+  .option { align-items: flex-start; }
+  .box { margin-top: 3px; }
+  .hint.is-key { display: none; }
+  .row { grid-template-columns: minmax(0, 1fr); gap: 0; }
+  .check { grid-template-columns: 1.125rem minmax(0, 1fr); gap: 0 .875rem; }
+  .check dd { grid-column: 2; }
+  .copybox-row { flex-direction: column; align-items: stretch; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shell, .dash, .box, .box::after, .bar i { transition: none; }
+  .screen, .check, .help { animation: none; }
+  .screen.is-leaving { display: none; }
+  .draw { animation: none; stroke-dashoffset: 0; }
+  .badge.is-waiting { animation: none; }
+  /* A ring that doesn't turn breathes instead, so "working" still shows. */
+  .badge.is-ring svg { animation: breathe 1.8s ease-in-out infinite alternate; }
+  @keyframes breathe { from { opacity: .45; } to { opacity: 1; } }
+}

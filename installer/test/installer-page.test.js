@@ -38,6 +38,36 @@ test('a run with no answers file serves the Installer page on 127.0.0.1, at an a
   assert.match(log.text, /Front end: the Installer page/);
 });
 
+test("the run's first event gives the page its profile's setup page and the line that copies the installer log", async (t) => {
+  const where = await makeHome(t);
+  const profile = await readProfile('york');
+
+  const run = await runOnPage(where, 'york');
+  t.after(run.kill);
+  const page = run.connect();
+  const start = await page.next((event) => event.type === 'start');
+  page.close();
+
+  assert.equal(start.setupPage, profile.page);
+  assert.equal(start.shareLogLine, profile.shareLogLine);
+  assert.match(start.shareLogLine, /share-log\.ps1/);
+});
+
+test('a page connecting is told how far the run had got, so it can tell what had already happened from what happens next', async (t) => {
+  const where = await makeHome(t);
+  const run = await runOnPage(where, 'york');
+  t.after(run.kill);
+
+  const first = run.connect();
+  const team = await first.next((event) => event.type === 'question' && event.key === 'team');
+  // The run waits at the team question, so a page connecting now finds everything up to it had happened.
+  const later = run.connect();
+  await later.next((event) => event.id === team.id);
+  assert.equal(later.before, team.id);
+  assert.ok(first.before !== undefined && first.before <= team.id, `the first page was told ${first.before}`);
+  for (const page of [first, later]) page.close();
+});
+
 /**
  * A York laptop on which every step works: Node.js, Git and the GitHub CLI already on the machine
  * PATH (the GitHub CLI not signed in yet, so GitHub is asked), the skills CLI installable and each
