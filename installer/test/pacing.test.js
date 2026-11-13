@@ -356,3 +356,22 @@ test("the header's dashes: one per question, one per thing done, and the ending'
   page = later(page, 20_000);
   assert.deepEqual(dashes(page), { questions: ['done', 'done'], work: ['warn', 'done'], ending: 'now' });
 });
+
+test('a page opened mid-run skips the notices and summaries the run had already moved past, even with no question answered since', () => {
+  /** @type {[number, Record<string, unknown>][]} */
+  const history = [
+    [0, { type: 'summary', title: 'Using your answers from last time', rows: [['Team', 'Marketing']] }],
+    [0, { type: 'notice', title: 'Sign in to Claude Code', text: 'Claude Code signs you in next, in your browser.' }],
+    [0, { type: 'output', text: 'https://claude.ai/oauth/authorize?code=true\n' }],
+    [0, { type: 'problem', text: "Claude Code's sign-in said: that code wasn't accepted." }],
+    [0, choose(1, 'claudeSignIn', "Claude Code isn't signed in yet.")],
+  ];
+  const page = play(history, { before: history.length });
+  const open = /** @type {any} */ (onScreen(page));
+  assert.equal(open.kind, 'question', `the open question, not ${words(open)}`);
+  assert.equal(open.question.key, 'claudeSignIn');
+
+  // The newest thing that had happened is still shown, if it's a notice: the person may not have read it.
+  const last = play(history.slice(0, 2), { before: 2 });
+  assert.equal(/** @type {any} */ (onScreen(last)).title, 'Sign in to Claude Code');
+});

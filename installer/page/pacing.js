@@ -283,8 +283,9 @@ function isThrough(screen, page, now, behind) {
     case 'notice':
     case 'summary':
       // Continued here, or the person has moved on past it: answered a later question, on this
-      // page before a reload or in another window.
-      return page.continued.includes(screen.key) || answeredSince(page, screen.key);
+      // page before a reload or in another window, or the run had gone on to something else
+      // before this page connected.
+      return page.continued.includes(screen.key) || answeredSince(page, screen.key) || movedOnBefore(page, screen.key);
     case 'step':
     case 'busy': {
       const due = dueAt(screen, page, behind);
@@ -316,6 +317,15 @@ export function wakeAt(page) {
   const screen = page.screens[page.current];
   if (screen?.kind !== 'step' && screen?.kind !== 'busy') return undefined;
   return dueAt(screen, page, page.screens.length - 1 - page.current);
+}
+
+/**
+ * Whether the run had already gone on from event `key` to another screen when the page last
+ * connected. The newest thing it had shown isn't counted as past: the person may not have read it.
+ * @param {Page} page @param {number} key
+ */
+function movedOnBefore(page, key) {
+  return page.events.some((event) => event.id > key && event.id <= page.before && makesAScreen.has(event.type));
 }
 
 /** Whether a question asked after event `key` has been answered. @param {Page} page @param {number} key */

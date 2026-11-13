@@ -6,7 +6,7 @@ import { StrictMode, useEffect, useReducer, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { begin, dashes, onScreen, reduce, wakeAt } from './pacing.js';
 import { icons } from './parts.js';
-import { Screen, postAnswer } from './screens.js';
+import { Screen, announced, postAnswer } from './screens.js';
 
 /** @typedef {import('./pacing.js').PageEvent} PageEvent */
 /** @typedef {import('./pacing.js').Shown} Shown */
@@ -106,31 +106,44 @@ const leavingFor = 180;
 
 /**
  * Where the screen is: the one on screen, and for a moment the one going off, so one gives way
- * to the next. A screen that changes in place (a busy line's figure, a notice joined by its Done)
- * stays put.
+ * to the next. The one going off is the same element, kept as it was (with the answer just
+ * given); a screen that changes in place (a busy line's figure, a notice joined by its Done)
+ * stays put. What a screen says is announced from one live region that's always there.
  * @param {{ shown: Shown, actions: import('./screens.js').Actions }} props
  */
 function Stage({ shown, actions }) {
+  // The screen as last drawn, and the one going off: worked out while drawing, so the outgoing
+  // screen is never dropped and drawn again from scratch.
+  const [current, setCurrent] = useState(shown);
   const [leaving, setLeaving] = useState(/** @type {Shown | undefined} */ (undefined));
-  const previous = useRef(shown);
+  // A 'between' screen is made afresh each time it's asked for, so it's the same if its key is.
+  if (shown !== current && !(shown.kind === 'between' && current.kind === 'between' && shown.key === current.key)) {
+    if (shown.key !== current.key) setLeaving(current);
+    setCurrent(shown);
+  }
   useEffect(() => {
-    const before = previous.current;
-    previous.current = shown;
-    if (before.key === shown.key) return;
-    setLeaving(before);
+    if (!leaving) return;
     const timer = setTimeout(() => setLeaving(undefined), leavingFor);
     return () => clearTimeout(timer);
-  }, [shown]);
+  }, [leaving]);
+  // A new screen starts at the top, whatever was scrolled to on the one before.
+  // (In braces: newer browsers return a promise from scrollTo, which React would take for a cleanup.)
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [shown.key]);
   return (
     <main className="stage">
       {leaving && leaving.key !== shown.key && (
-        <section key={`leaving-${leaving.key}`} className="screen is-leaving" inert>
+        <section key={leaving.key} className="screen is-leaving" inert>
           <Screen shown={leaving} actions={actions} />
         </section>
       )}
       <section key={shown.key} className="screen">
         <Screen shown={shown} actions={actions} />
       </section>
+      <p className="offscreen" role="status">
+        {announced(shown)}
+      </p>
     </main>
   );
 }

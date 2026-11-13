@@ -38,12 +38,12 @@ function useFocus(selector) {
   return ref;
 }
 
-/** A heading, with the line under it if there is one. @param {{ text: string, role?: string }} props */
-function Heading({ text, role }) {
+/** A heading, with the line under it if there is one. @param {{ text: string }} props */
+function Heading({ text }) {
   const [heading, lede] = split(text);
   return (
     <>
-      <h1 className="title" role={role}>
+      <h1 className="title">
         <Line text={heading} />
       </h1>
       {lede && (
@@ -53,6 +53,26 @@ function Heading({ text, role }) {
       )}
     </>
   );
+}
+
+/**
+ * What a screen that asks nothing says, for a screen reader to announce as it comes. A screen
+ * that asks something puts the focus on its control instead, which is read out.
+ * @param {Shown} shown
+ */
+export function announced(shown) {
+  switch (shown.kind) {
+    case 'step':
+      return shown.text;
+    case 'busy':
+      return shown.ended?.text ?? shown.message;
+    case 'ending':
+      return shown.closing ?? '';
+    case 'problem':
+      return [...shown.problems, shown.closing ?? ''].join(' ');
+    default:
+      return '';
+  }
 }
 
 /** @param {{ shown: Shown, actions: Actions }} props */
@@ -68,7 +88,7 @@ export function Screen({ shown, actions }) {
       return (
         <>
           <Status kind="tick" />
-          <h1 className="title" role="status">
+          <h1 className="title">
             <Line text={shown.text} />
           </h1>
         </>
@@ -83,7 +103,7 @@ export function Screen({ shown, actions }) {
       return (
         <>
           <Status kind="ring" />
-          <h1 className="title quiet" role="status">
+          <h1 className="title quiet">
             One moment
           </h1>
         </>
@@ -146,7 +166,7 @@ function Busy({ screen }) {
     return (
       <>
         <Status kind={ended.ok ? 'tick' : 'warn'} />
-        <Heading text={ended.text} role="status" />
+        <Heading text={ended.text} />
       </>
     );
   }
@@ -185,7 +205,9 @@ function Question({ screen, actions }) {
   const { question, refused, problem, notice, number } = screen;
   const [sending, setSending] = useState(false);
   // A refusal hands the question back.
-  useEffect(() => setSending(false), [refused]);
+  useEffect(() => {
+    setSending(false);
+  }, [refused]);
   /** @param {unknown} value */
   const answer = (value) => {
     if (sending) return;
@@ -270,7 +292,9 @@ function Form({ question, refused, sending, onAnswer }) {
   const [ticked, setTicked] = useState(/** @type {string[]} */ (Array.isArray(question.initial) ? question.initial : []));
   const [folder, setFolder] = useState(typeof question.initial === 'string' ? question.initial : '');
   const [edited, setEdited] = useState(false);
-  useEffect(() => setEdited(false), [refused]);
+  useEffect(() => {
+    setEdited(false);
+  }, [refused]);
   const ref = useFocus(kind === 'folder' ? 'input' : kind === 'pick' ? 'input' : 'input:checked');
   const name = `q${question.question}`;
   const showRefusal = refused !== undefined && !edited;
@@ -384,7 +408,7 @@ function Ending({ screen }) {
     <div className="ending">
       <div>
         {closing === undefined ? <Status kind="ring" /> : <Status kind={problems.length > 0 ? 'warn' : 'tick'} />}
-        <h1 className="title" role="status">
+        <h1 className="title">
           {closing === undefined ? 'Finishing off' : <Line text={heading} />}
         </h1>
         {more.map((line, index) => (
@@ -458,7 +482,7 @@ function Stopped({ screen, shareLogLine }) {
   return (
     <>
       <Status kind="warn" />
-      <h1 className="title" role="alert">
+      <h1 className="title">
         <Line text={heading} />
       </h1>
       {[...(reason ? [reason] : []), ...others, ...lines, ...(closing ? closing.split('\n') : [])].map((line, index) => (
