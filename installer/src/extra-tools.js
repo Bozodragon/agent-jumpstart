@@ -5,7 +5,6 @@
 import { loadManifest } from './manifest.js';
 import { showPage } from './open-page.js';
 import { installTool } from './tools.js';
-import * as ui from './ui.js';
 
 /**
  * @param {import('./profile.js').Profile} profile
@@ -47,12 +46,12 @@ export async function setUpExtraTools(profile, ticked, context) {
  * @param {import('./profile.js').ExtraTool} extra
  * @param {import('./tools.js').Context} context
  */
-async function walkThroughSettings(extra, { attended, machine, log }) {
+async function walkThroughSettings(extra, { attended, machine, frontEnd, log }) {
   if (!extra.settingsPage) return;
-  await showPage('Settings page', extra.settingsPage, { machine, log });
-  ui.notice([extra.settings ?? 'Change the setting on this page.', '', ui.comeBack].join('\n'), 'One setting only you can change');
+  await showPage('Settings page', extra.settingsPage, { machine, frontEnd, log });
+  frontEnd.notice([extra.settings ?? 'Change the setting on this page.', '', frontEnd.comeBack()].join('\n'), 'One setting only you can change');
   if (attended) {
-    await ui.pressEnter("Press Enter once you've done that.");
+    await frontEnd.waitForDone("you've done that");
     log.write(`Settings page for ${extra.id}: the person pressed Enter`);
   } else {
     log.write(`Settings page for ${extra.id}: taken as done from the answers file`);
@@ -70,12 +69,12 @@ async function walkThroughSettings(extra, { attended, machine, log }) {
  * @returns {Promise<{ account?: string, already: boolean }>} the account signed in, if any, and
  *   whether it was signed in before this run
  */
-async function signIn(tool, program, extra, { machine, log }) {
+async function signIn(tool, program, extra, { machine, frontEnd, log }) {
   const say = (/** @type {string} */ line) => log.write(`${tool.name}: ${line}`);
   const how = /** @type {import('./manifest.js').SignIn} */ (tool.signIn);
   const whoIsSignedIn = async () => {
     // clasp takes a few seconds to answer, with nothing on screen of its own.
-    const ran = await ui.busy(`Checking ${tool.name}'s sign-in`, () => machine.run(program.file, [...program.args, ...how.check]));
+    const ran = await frontEnd.busy(`Checking ${tool.name}'s sign-in`, () => machine.run(program.file, [...program.args, ...how.check]));
     const match = ran.code === 0 ? new RegExp(how.signedInAs, 'm').exec(ran.output) : null;
     if (!match) say('not signed in');
     return match?.[1];
@@ -86,7 +85,7 @@ async function signIn(tool, program, extra, { machine, log }) {
     say(`already signed in as ${before}, so the sign-in was skipped`);
     return { account: before, already: true };
   }
-  ui.notice(extra.signIn ?? 'A browser window will open for you to sign in.', `Sign in to ${tool.name}`);
+  frontEnd.notice(extra.signIn ?? 'A browser window will open for you to sign in.', `Sign in to ${tool.name}`);
   const code = await machine.runOnScreen(program.file, [...program.args, ...how.run]);
   say(`sign-in finished with code ${code}`);
   const after = await whoIsSignedIn();

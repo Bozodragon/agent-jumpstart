@@ -20,7 +20,6 @@ import { pipeline } from 'node:stream/promises';
 import { system32 } from './machine.js';
 import { loadManifest } from './manifest.js';
 import { messageOf } from './stop.js';
-import * as ui from './ui.js';
 
 /** A reason a tool isn't installed, worded for the checklist. */
 export class NotInstalled extends Error {}
@@ -32,6 +31,7 @@ export const installedMarker = '.installed-by-agent-jumpstart';
  * @typedef {object} Context
  * @property {import('./places.js').Places} places
  * @property {import('./machine.js').Machine} machine
+ * @property {import('./front-end.js').FrontEnd} frontEnd What the person sees and answers.
  * @property {string} [downloads] The downloads-folder override. It stands in for the internet
  *   only: what's taken from it is still copied into the installer's own downloads folder.
  * @property {boolean} [keepDownloads] Leave the downloads in the installer's own folder after
@@ -84,7 +84,7 @@ export async function installTools(context) {
  * @returns {Promise<Installed>} A copy of the installer's at another version is replaced; the
  *   person's own copy is left as it is.
  */
-export async function installTool(tool, { places, machine, downloads, keepDownloads, log }) {
+export async function installTool(tool, { places, machine, frontEnd, downloads, keepDownloads, log }) {
   const say = (/** @type {string} */ line) => log.write(`${tool.name}: ${line}`);
   const folder = join(places.programs, tool.install.folder);
   const marker = join(folder, installedMarker);
@@ -95,7 +95,7 @@ export async function installTool(tool, { places, machine, downloads, keepDownlo
     const ours = await exists(marker);
     if (here && !ours) {
       say(`${folder} holds it, but the installer didn't put it there`);
-      return await leaveTheirs(tool, here, folder, { machine, say });
+      return await leaveTheirs(tool, here, folder, { machine, frontEnd, say });
     }
     if (!here && !ours) {
       // A tool only the installer runs (no PATH entry) is always its own copy.
@@ -103,7 +103,7 @@ export async function installTool(tool, { places, machine, downloads, keepDownlo
       const elsewhere = tool.install.path.length === 0 ? [] : (await machine.findOnPath(name)).filter((found) => !isInside(found, folder));
       if (elsewhere.length > 0) {
         say(`found on the PATH at ${elsewhere.join(', ')}`);
-        return await leaveTheirs(tool, { file: join(elsewhere[0], name), args: [] }, elsewhere[0], { machine, say });
+        return await leaveTheirs(tool, { file: join(elsewhere[0], name), args: [] }, elsewhere[0], { machine, frontEnd, say });
       }
       if (await holdsAnything(folder)) {
         say(`${folder} holds other things, not ${tool.install.check}, and the installer didn't put them there, so it's left as it is`);
@@ -116,7 +116,7 @@ export async function installTool(tool, { places, machine, downloads, keepDownlo
 
   // The download and the install show nothing of their own, for a minute or more.
   const there = here;
-  return ui.busy(
+  return frontEnd.busy(
     `Installing ${tool.name} ${tool.version}`,
     () => putInPlace(tool, there, { places, machine, downloads, keepDownloads, say }),
     ({ installed, row }) => ({ text: `${tool.name}: ${row}`, ok: installed }),
@@ -241,11 +241,11 @@ async function unpackFallback(fallback, folder, { places, machine, downloads, ke
  * The person's own copy: asked its version for the checklist, and otherwise left exactly as it
  * is, with no PATH entry added for it.
  * @param {import('./manifest.js').Tool} tool @param {Command} program @param {string} folder
- * @param {{ machine: import('./machine.js').Machine, say: (line: string) => void }} how
+ * @param {{ machine: import('./machine.js').Machine, frontEnd: import('./front-end.js').FrontEnd, say: (line: string) => void }} how
  * @returns {Promise<Installed>}
  */
-async function leaveTheirs(tool, program, folder, { machine, say }) {
-  ui.step(`Using the ${tool.name} already at ${folder}`);
+async function leaveTheirs(tool, program, folder, { machine, frontEnd, say }) {
+  frontEnd.step(`Using the ${tool.name} already at ${folder}`);
   const ran = await machine.run(program.file, [...program.args, '--version']);
   const version = ran.code === 0 ? versionIn(ran.output) : undefined;
   say(`${version ?? "a version that couldn't be read"} is already installed at ${folder}, so it's left as it is and used`);

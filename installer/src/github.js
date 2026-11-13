@@ -7,7 +7,7 @@
 import { githubHost as host, loadManifest, toolEntry } from './manifest.js';
 import { showPage } from './open-page.js';
 import { Stop } from './stop.js';
-import * as ui from './ui.js';
+import { bullet } from './text.js';
 
 /**
  * Someone already signed in (a re-run, or an earlier gh) is left signed in and isn't sent to the
@@ -20,7 +20,7 @@ import * as ui from './ui.js';
  * @returns {Promise<string>} The checklist's GitHub line.
  */
 export async function setUpGitHub(profile, wanted, programs, context) {
-  const { machine, downloads, log } = context;
+  const { machine, frontEnd, downloads, log } = context;
   const say = (/** @type {string} */ line) => log.write(`GitHub: ${line}`);
   if (!wanted) {
     say('not chosen, so it was skipped');
@@ -49,14 +49,14 @@ export async function setUpGitHub(profile, wanted, programs, context) {
   } else {
     say('not signed in yet');
     await walkThroughSignUp(github, { ...context, say });
-    ui.notice(
+    frontEnd.notice(
       [
         "GitHub's own tool signs you in next, in your browser:",
         '',
-        `  ${ui.bullet} Asked to authenticate Git? Press Enter for Yes.`,
-        `  ${ui.bullet} It copies a one-time code for you.`,
-        `  ${ui.bullet} Press Enter to open the browser.`,
-        `  ${ui.bullet} Paste the code, sign in, and click Authorize.`,
+        `  ${bullet} Asked to authenticate Git? Press Enter for Yes.`,
+        `  ${bullet} It copies a one-time code for you.`,
+        `  ${bullet} Press Enter to open the browser.`,
+        `  ${bullet} Paste the code, sign in, and click Authorize.`,
       ].join('\n'),
       'Sign in to GitHub',
     );
@@ -89,20 +89,20 @@ export async function setUpGitHub(profile, wanted, programs, context) {
  * @param {{ signUpPage: string, email: string }} github
  * @param {import('./tools.js').Context & { say: (line: string) => void }} context
  */
-async function walkThroughSignUp({ signUpPage, email }, { attended, machine, log, say }) {
-  await showPage('GitHub sign-up page', signUpPage, { machine, log });
-  ui.notice(
+async function walkThroughSignUp({ signUpPage, email }, { attended, machine, frontEnd, log, say }) {
+  await showPage('GitHub sign-up page', signUpPage, { machine, frontEnd, log });
+  frontEnd.notice(
     [
       `If you don't have a GitHub account yet, create one on the sign-up page with ${email}.`,
       'Follow its steps, including the code GitHub emails you.',
       "If you already have an account, there's nothing to do here.",
       '',
-      ui.comeBack,
+      frontEnd.comeBack(),
     ].join('\n'),
     'Create a GitHub account',
   );
   if (attended) {
-    await ui.pressEnter('Press Enter once you have a GitHub account.');
+    await frontEnd.waitForDone('you have a GitHub account');
     say('the person pressed Enter after the sign-up page');
   } else {
     say('account taken as made from the answers file');

@@ -26,7 +26,6 @@ import { join } from 'node:path';
 import { loadManifest, toolEntry } from './manifest.js';
 import { skillNames } from './profile.js';
 import { exists, installTool } from './tools.js';
-import * as ui from './ui.js';
 
 const leftAlone = 'Already there, left as it is';
 const upToDate = 'Up to date';
@@ -43,7 +42,7 @@ const upToDate = 'Up to date';
  *   run installed; and the commit each source's skills are now from, where that's known.
  */
 export async function installSkills(profile, ours, installedFrom, context) {
-  const { places, machine, downloads, log } = context;
+  const { places, machine, frontEnd, downloads, log } = context;
   const sources = profile.skills ?? [];
   if (sources.length === 0) return { rows: [], line: 'None in this profile', installed: [], sources: {} };
 
@@ -70,7 +69,7 @@ export async function installSkills(profile, ours, installedFrom, context) {
   const latest = new Map();
   const toLookUp = program && git.length > 0 ? named.filter(({ skills }) => skills.some((name) => !theirs.includes(name))) : [];
   if (toLookUp.length > 0) {
-    await ui.busy(
+    await frontEnd.busy(
       'Checking the skill sources for changes',
       async () => {
         for (const { source } of toLookUp) latest.set(source, await latestCommit(source, join(git[0], 'git.exe'), context));
@@ -100,7 +99,7 @@ export async function installSkills(profile, ours, installedFrom, context) {
     if (program && git.length > 0 && wanted.length > 0 && !unchanged) {
       const args = ['add', source, '-g', '-a', 'claude-code', '-y', ...(names ? ['-s', ...wanted] : [])];
       const what = `${wanted.length === 1 ? 'the skill' : `${wanted.length} skills`} from ${source}`;
-      ran = await ui.busy(`Installing ${what}`, () => machine.run(program.file, [...program.args, ...args]), ({ code }) =>
+      ran = await frontEnd.busy(`Installing ${what}`, () => machine.run(program.file, [...program.args, ...args]), ({ code }) =>
         code === 0 ? { text: `Installed ${what}`, ok: true } : { text: `Couldn't install ${what}`, ok: false },
       );
     }

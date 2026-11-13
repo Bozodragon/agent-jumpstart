@@ -22,7 +22,6 @@ import { loadManifest, toolEntry } from './manifest.js';
 import { messageOf } from './stop.js';
 import { checkSha512, findRelease } from './t3-release.js';
 import { change, exists, isRecord, NotInstalled, obtain } from './tools.js';
-import * as ui from './ui.js';
 
 /**
  * @typedef {object} T3Result
@@ -44,13 +43,13 @@ import * as ui from './ui.js';
  * @param {import('./tools.js').Context} context
  * @returns {Promise<FoundT3 | undefined>}
  */
-export async function findT3({ places, machine, downloads, log }) {
+export async function findT3({ places, machine, frontEnd, downloads, log }) {
   const entry = toolEntry(await loadManifest(downloads), 't3');
   if (!entry) return undefined;
   /** @type {('stable' | 'nightly')[]} */
   const channels = ['stable', 'nightly'];
   // reg.exe can take a moment, before anything else is on screen.
-  const { version, programsThere } = await ui.busy(`Checking whether ${entry.name} is installed`, async () => {
+  const { version, programsThere } = await frontEnd.busy(`Checking whether ${entry.name} is installed`, async () => {
     const version = await installedVersion(machine, entry.install.versionIn);
     /** @type {('stable' | 'nightly')[]} */
     const programsThere = [];
@@ -82,18 +81,18 @@ export async function findT3({ places, machine, downloads, log }) {
  * @returns {Promise<T3Result>}
  */
 export async function installT3(profile, channel, found, open, context) {
-  const { places, machine, downloads, keepDownloads, log, attended } = context;
+  const { places, machine, frontEnd, downloads, keepDownloads, log, attended } = context;
   const entry = toolEntry(await loadManifest(downloads), 't3');
   if (!entry) return { row: 'Not installed: the list of versions has no entry for it', installed: false, opened: false };
   const say = (/** @type {string} */ line) => log.write(`${entry.name}: ${line}`);
   const shim = join(places.home, entry.install.firstLaunchLeaves);
 
   if (found) {
-    ui.step(`Checking ${entry.name}`);
+    frontEnd.step(`Checking ${entry.name}`);
     say(`${found.version ?? 'a version Windows doesn\'t record'} (${found.channel}) is already installed, so it was left as it is`);
     await setUpT3(profile, places.t3UserData, say);
     // An install that was already there may never have been opened.
-    const opened = await waitForFirstLaunch(shim, 0, { machine, attended: attended && open, say, name: entry.name });
+    const opened = await waitForFirstLaunch(shim, 0, { machine, frontEnd, attended: attended && open, say, name: entry.name });
     const state = [found.channel, 'already installed, left as it is', ...(opened ? [] : ['not opened yet'])].join(', ');
     return { row: `${found.version ?? 'Version unknown'} (${state})`, installed: true, opened, shim };
   }
@@ -132,7 +131,7 @@ export async function installT3(profile, channel, found, open, context) {
     }
   };
   // The download and the silent install show nothing of their own for about half a minute.
-  const outcome = await ui.busy(`Installing ${entry.name}. This takes about a minute${open ? `, and ${entry.name} opens by itself when it's done` : ''}.`, install, (outcome) =>
+  const outcome = await frontEnd.busy(`Installing ${entry.name}. This takes about a minute${open ? `, and ${entry.name} opens by itself when it's done` : ''}.`, install, (outcome) =>
     'release' in outcome
       ? { text: `${entry.name} ${outcome.release.version} installed`, ok: true }
       : { text: `${entry.name} not installed: ${outcome.reason}`, ok: false },
@@ -141,7 +140,7 @@ export async function installT3(profile, channel, found, open, context) {
   const { release } = outcome;
 
   // The silent install starts T3 (--force-run).
-  const opened = await waitForFirstLaunch(shim, open ? machine.patience : 0, { machine, attended: attended && open, say, name: entry.name });
+  const opened = await waitForFirstLaunch(shim, open ? machine.patience : 0, { machine, frontEnd, attended: attended && open, say, name: entry.name });
   const state = [channel, change.installed, ...(opened ? [] : ['not opened yet'])].join(', ');
   return { row: `${release.version} (${state})`, installed: true, opened, shim };
 }
@@ -244,14 +243,14 @@ async function installedVersion(machine, key) {
  * Waits for T3's first start to leave its shim. If it doesn't come, the person (when there is
  * one) is asked to open T3 from the Start menu.
  * @param {string} shim @param {number} patience
- * @param {{ machine: import('./machine.js').Machine, attended: boolean, say: (line: string) => void, name: string }} how
+ * @param {{ machine: import('./machine.js').Machine, frontEnd: import('./front-end.js').FrontEnd, attended: boolean, say: (line: string) => void, name: string }} how
  */
-async function waitForFirstLaunch(shim, patience, { machine, attended, say, name }) {
+async function waitForFirstLaunch(shim, patience, { machine, frontEnd, attended, say, name }) {
   const wait = () => keepTrying({ machine, every: 1000, patience }, () => exists(shim), (there) => there);
-  if (patience > 0 && !(await exists(shim))) await ui.busy(`Waiting for ${name} to open`, wait, ({ result }) => ({ text: result ? `${name} is open` : `${name} hasn't opened`, ok: result }));
+  if (patience > 0 && !(await exists(shim))) await frontEnd.busy(`Waiting for ${name} to open`, wait, ({ result }) => ({ text: result ? `${name} is open` : `${name} hasn't opened`, ok: result }));
   if (!(await exists(shim)) && attended) {
-    ui.notice(`Open ${name} from the Start menu and wait for its window to appear.`, `Open ${name}`);
-    await ui.pressEnter(`Press Enter once ${name} is open.`);
+    frontEnd.notice(`Open ${name} from the Start menu and wait for its window to appear.`, `Open ${name}`);
+    await frontEnd.waitForDone(`${name} is open`);
   }
   const opened = await exists(shim);
   say(opened ? `first launch seen (${shim})` : `hasn't been opened yet (no ${shim})`);
@@ -265,7 +264,7 @@ async function waitForFirstLaunch(shim, patience, { machine, attended, say, name
  * @param {'stable' | 'nightly'} channel The channel of the T3 that's installed.
  * @param {import('./tools.js').Context} context
  */
-export async function openT3(channel, { places, machine, downloads, log }) {
+export async function openT3(channel, { places, machine, frontEnd, downloads, log }) {
   const entry = toolEntry(await loadManifest(downloads), 't3');
   const where = entry?.channels[channel];
   if (!entry || !where) return;
@@ -275,7 +274,7 @@ export async function openT3(channel, { places, machine, downloads, log }) {
     say(`not opened at the end: ${program} isn't there`);
     return;
   }
-  ui.step(`Opening ${entry.name}`);
+  frontEnd.step(`Opening ${entry.name}`);
   try {
     await machine.launch(program, []);
   } catch (error) {

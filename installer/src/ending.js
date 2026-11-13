@@ -6,7 +6,7 @@
 // work is noted by `note`; a step that knows better (Claude's sign-in, skipped) can add its own
 // failure and lines, give its own closing line (with any other step that didn't work named on a
 // line after it), and say T3 Code isn't to be opened.
-import * as ui from './ui.js';
+import { inWords } from './text.js';
 
 /** @typedef {{ step: string, message: string }} Failure A step that didn't work, and why, as its row says. */
 
@@ -60,7 +60,7 @@ export function closingLines(ending) {
   if (closing !== undefined) {
     const others = steps.filter((step) => step !== closing.step);
     if (others.length === 1) return [closing.line, `One more step didn't work: ${others[0]}.`];
-    if (others.length > 1) return [closing.line, `These steps didn't work either: ${ui.inWords(others)}.`];
+    if (others.length > 1) return [closing.line, `These steps didn't work either: ${inWords(others)}.`];
     return [closing.line];
   }
   return [closingLine(steps)];
@@ -69,7 +69,7 @@ export function closingLines(ending) {
 /** @param {string[]} steps */
 function closingLine(steps) {
   if (steps.length === 1) return `One step didn't work: ${steps[0]}.`;
-  if (steps.length > 1) return `These steps didn't work: ${ui.inWords(steps)}.`;
+  if (steps.length > 1) return `These steps didn't work: ${inWords(steps)}.`;
   return 'All done.';
 }
 
@@ -84,11 +84,11 @@ const neededForJumpstart = (tools) => [tools.claude, tools.t3, 'Workspaces'];
 /**
  * Shows the ending: what to do next, the failures repeated, and the closing line.
  * @param {Ending} ending
- * @param {{ top: string, t3Installed: boolean, tools: ToolNames, log: import('./log.js').Log }} how
+ * @param {{ top: string, t3Installed: boolean, tools: ToolNames, log: import('./log.js').Log, frontEnd: import('./front-end.js').FrontEnd }} how
  *   `top` is the top workspace's name, as T3 Code lists it; `tools` names the steps for Claude
  *   Code and T3 Code, as the checklist does.
  */
-export function showEnding(ending, { top, t3Installed, tools, log }) {
+export function showEnding(ending, { top, t3Installed, tools, log, frontEnd }) {
   /** @type {string[]} */
   const next = [];
   if (t3Installed && !ending.failed.some(({ step }) => neededForJumpstart(tools).includes(step))) {
@@ -97,16 +97,16 @@ export function showEnding(ending, { top, t3Installed, tools, log }) {
   if (ending.failed.length > 0 && ending.closing === undefined) {
     next.push("Paste the same line again to try again what didn't work. It skips everything that's already done.");
   }
-  if (next.length > 0) ui.notice(next.join('\n\n'), 'What to do next');
+  if (next.length > 0) frontEnd.notice(next.join('\n\n'), 'What to do next');
   for (const { step, message } of ending.failed) {
-    ui.problem(`${step}: ${message}`);
+    frontEnd.problem(`${step}: ${message}`);
     log.write(`Ending: didn't work: ${step}: ${message}`);
   }
   for (const line of ending.lines) {
-    ui.problem(line);
+    frontEnd.problem(line);
     log.write(`Ending: ${line}`);
   }
   const closing = closingLines(ending);
   for (const line of closing) log.write(`Ending: ${line}`);
-  ui.finish(closing.join('\n'));
+  frontEnd.finish(closing.join('\n'));
 }

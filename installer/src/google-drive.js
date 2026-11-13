@@ -10,7 +10,6 @@ import { join } from 'node:path';
 import { keepTrying, registryMiss, system32 } from './machine.js';
 import { showPage } from './open-page.js';
 import { End, Stop } from './stop.js';
-import * as ui from './ui.js';
 
 /**
  * `never-opened`: installed, but never started, so it holds nothing for this user yet.
@@ -88,7 +87,7 @@ export function describeGoogleDrive(drive) {
  * @returns {Promise<WhereItGoes>}
  */
 export async function readyGoogleDrive(profile, places, ask, drive, context) {
-  const { machine, log, attended } = context;
+  const { machine, frontEnd, log, attended } = context;
   const say = (/** @type {string} */ line) => log.write(`Google Drive for desktop: ${line}`);
   if (drive.status === 'not-installed') {
     const installed = await fromSoftwareCenter(profile, places, ask, context);
@@ -96,8 +95,8 @@ export async function readyGoogleDrive(profile, places, ask, drive, context) {
     if (installed) drive = installed;
   }
   while (drive.status !== 'signed-in') {
-    if (drive.status === 'not-installed') return withoutGoogleDrive(ask, log);
-    ui.notice(
+    if (drive.status === 'not-installed') return withoutGoogleDrive(ask, context);
+    frontEnd.notice(
       [
         drive.status === 'never-opened'
           ? 'Your workspaces live in Google Drive, and Google Drive for desktop is installed but has never been opened.'
@@ -105,7 +104,7 @@ export async function readyGoogleDrive(profile, places, ask, drive, context) {
         '',
         'Open Google Drive from the Start menu and sign in with your work Google account.',
         '',
-        ui.comeBack,
+        frontEnd.comeBack(),
       ].join('\n'),
       'Get Google Drive ready',
     );
@@ -133,13 +132,13 @@ export async function readyGoogleDrive(profile, places, ask, drive, context) {
       (found) => found.status === 'signed-in' && found.folder !== undefined,
     );
   const message = 'Looking for My Drive, which can take a few seconds to appear after Google Drive signs in';
-  const { result, waited } = machine.patience > 0 ? await ui.busy(message, look, ({ result }) => ({ text: 'Looked for My Drive', ok: result.status === 'signed-in' && result.folder !== undefined })) : await look();
+  const { result, waited } = machine.patience > 0 ? await frontEnd.busy(message, look, ({ result }) => ({ text: 'Looked for My Drive', ok: result.status === 'signed-in' && result.folder !== undefined })) : await look();
   const folder = result.status === 'signed-in' ? result.folder : undefined;
   say(folder ? `My Drive found at ${folder} after ${waited / 1000} seconds` : `My Drive not found after ${waited / 1000} seconds, so where it is is asked`);
   return { status: 'signed-in', folder };
 }
 
-/** @typedef {{ machine: import('./machine.js').Machine, log: { write(line: string): void }, attended: boolean }} Context */
+/** @typedef {{ machine: import('./machine.js').Machine, frontEnd: import('./front-end.js').FrontEnd, log: { write(line: string): void }, attended: boolean }} Context */
 
 /** What's said when Software Center offers Drive, unless the profile words it its own way. */
 const softwareCenterOffer =
@@ -172,17 +171,17 @@ const restartLine = 'If it asks you to restart, choose a later time.';
 async function fromSoftwareCenter(profile, places, ask, context) {
   const name = profile.googleDrive?.softwareCenter;
   if (!name) return undefined;
-  const { machine, log } = context;
+  const { machine, frontEnd, log } = context;
   const say = (/** @type {string} */ line) => log.write(`Google Drive for desktop: ${line}`);
   const id = await driveInSoftwareCenter(name, context);
   if (!id) return undefined;
 
-  ui.notice(profile.googleDrive?.softwareCenterOffer ?? softwareCenterOffer, 'Google Drive');
+  frontEnd.notice(profile.googleDrive?.softwareCenterOffer ?? softwareCenterOffer, 'Google Drive');
   const choice = await ask.choose({
     key: 'softwareCenter',
     message: 'Install Google Drive, or use Documents?',
     options: [
-      { value: 'install', label: 'Install it from Software Center', hint: 'it opens at Google Drive, and this window waits while it installs' },
+      { value: 'install', label: 'Install it from Software Center', hint: 'it opens at Google Drive, and the Installer waits while it installs' },
       { value: 'documents', label: 'Use Documents instead', hint: "your workspaces stay on this laptop only, so they aren't backed up" },
     ],
     initial: 'install',
@@ -191,10 +190,10 @@ async function fromSoftwareCenter(profile, places, ask, context) {
   if (choice === 'documents') return 'documents';
 
   await showPage('Software Center', `softwarecenter:SoftwareID=${id}`, context);
-  ui.notice(['Click Install in Software Center, then come back to this window.', restartLine].join('\n'), 'Install Google Drive');
+  frontEnd.notice(['Click Install in Software Center.', frontEnd.comeBack('Software Center'), restartLine].join('\n'), 'Install Google Drive');
   const waitFor = /** @template T @param {() => Promise<T>} look @param {(found: T) => boolean} done */ (look, done) =>
     keepTrying({ machine, every: softwareCenterEvery, patience: softwareCenterPatience }, look, done);
-  const install = await ui.busy(
+  const install = await frontEnd.busy(
     'Waiting until Google Drive is installed',
     () => waitFor(() => installing(places), (there) => there),
     ({ result }) => (result ? { text: 'Google Drive is installed', ok: true } : { text: "Google Drive still isn't installed after 15 minutes", ok: false }),
@@ -205,15 +204,15 @@ async function fromSoftwareCenter(profile, places, ask, context) {
   }
   say(`installed from Software Center after ${install.waited / 1000} seconds`);
 
-  ui.notice(
+  frontEnd.notice(
     [
       'Google Drive is installed. Open Google Drive from the Start menu and sign in with your work Google account.',
       '',
-      "This window carries on by itself once it's signed in.",
+      "The Installer carries on by itself once it's signed in.",
     ].join('\n'),
     'Sign in to Google Drive',
   );
-  const signIn = await ui.busy(
+  const signIn = await frontEnd.busy(
     'Waiting until Google Drive is signed in',
     () => waitFor(() => findGoogleDrive(places), (drive) => drive.status === 'signed-in'),
     ({ result }) => (result.status === 'signed-in' ? { text: 'Google Drive is signed in', ok: true } : { text: "Google Drive still isn't signed in after 15 minutes", ok: false }),
@@ -285,11 +284,11 @@ const documentsInstead =
  * installing Drive first, which ends the run cleanly, before anything is changed. A check for
  * another way to get Drive goes here, in front of the Documents text.
  * @param {import('./questions.js').Asker} ask
- * @param {{ write(line: string): void }} log
+ * @param {Context} context
  * @returns {Promise<WhereItGoes>}
  */
-async function withoutGoogleDrive(ask, log) {
-  ui.notice(documentsInstead, 'Google Drive');
+async function withoutGoogleDrive(ask, { frontEnd, log }) {
+  frontEnd.notice(documentsInstead, 'Google Drive');
   const choice = await ask.choose({
     key: 'withoutGoogleDrive',
     message: 'Where should your workspaces go?',

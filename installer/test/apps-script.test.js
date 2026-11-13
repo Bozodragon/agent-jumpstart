@@ -115,7 +115,7 @@ test('after the sign-in, the Apps Script settings page is given with a plain ins
   assert.ok(page > result.stdout.indexOf(appsScript.signIn.slice(0, 40)), 'the page comes after the sign-in');
   assert.match(result.stdout, /Google Apps Script API and switch it on/);
   const flowing = result.stdout.slice(page).replace(/[│|]/g, ' ').replace(/\s+/g, ' ');
-  assert.match(flowing, /Once you're done in the browser, come back to the Agent Jumpstart window, where you pasted the line, and press Enter\./);
+  assert.match(flowing, /Once you're done in the browser, come back to the Agent Jumpstart window, where you pasted the line\./);
   const log = await readOnlyLog(where.home);
   assert.ok(log.text.includes(`Settings page: ${appsScript.settingsPage} (opened)`), log.text);
   assert.ok((await fakeMachine(where.home).pagesOpened()).includes(appsScript.settingsPage));

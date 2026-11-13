@@ -1,5 +1,5 @@
 // The questions, built from the profile and what is already on the laptop. Each has a default,
-// so pressing Enter (or leaving it out of an answers file) gives a sensible setup.
+// so accepting the default (Enter, or leaving it out of an answers file) gives a sensible setup.
 import { stat } from 'node:fs/promises';
 import { dirname, isAbsolute, join } from 'node:path';
 import { describeGoogleDrive, findGoogleDrive, isFolder, readyGoogleDrive } from './google-drive.js';
@@ -95,7 +95,7 @@ const anotherFolder = 'another';
 /**
  * How the questions reach the laptop and the person beyond the asker: to look again for Google
  * Drive for desktop, and to wait for someone at the screen to get it ready.
- * @typedef {{ machine: import('./machine.js').Machine, attended: boolean }} Reach
+ * @typedef {{ machine: import('./machine.js').Machine, frontEnd: import('./front-end.js').FrontEnd, attended: boolean }} Reach
  */
 
 /**
@@ -160,7 +160,7 @@ export async function askChange(profile, earlier, memoryInUse, ask, log) {
   if (options.length === 0) return [];
   const change = await ask.pick({
     key: 'change',
-    message: "Anything to change from last time? Tick what to change, or press Enter to keep it all. Unticking something later doesn't remove it.",
+    message: "Anything to change from last time? Tick what to change, or nothing to keep it all. Unticking something later doesn't remove it.",
     options,
     initial: [],
   });
@@ -305,7 +305,7 @@ async function newLocation(profile, places, ask, found, context) {
     googleDriveFolder = await ask.folder({
       key: 'googleDriveFolder',
       message: drive.folder
-        ? 'Is this your Google Drive folder? Press Enter if so, or type the right one.'
+        ? 'Is this your Google Drive folder? If not, type the right one.'
         : "Where is your Google Drive folder? It's usually a drive letter followed by My Drive.",
       initial: drive.folder,
       placeholder: 'G:\\My Drive',
@@ -315,7 +315,7 @@ async function newLocation(profile, places, ask, found, context) {
   } else {
     workspacesLocation = await ask.folder({
       key: 'workspacesLocation',
-      message: 'Where should your workspaces live? Press Enter for this folder, or type another.',
+      message: 'Where should your workspaces live? Keep this folder, or type another.',
       initial: join(places.home, profile.workspaces.defaultLocation ?? ''),
       placeholder: join(places.home, 'Documents'),
       validate: mustBeAPath,
