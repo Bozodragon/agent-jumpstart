@@ -27,12 +27,15 @@ async function aLaptop(t) {
   for (const name of supplied) await writeFile(join(where.downloads, name), `not really ${name}`);
   // Claude Code's own download, from the release files every test home has, is one of them too.
   const downloaded = [...supplied, 'claude.exe'];
-  const override = (await readdir(where.downloads)).sort();
+  const override = await everythingIn(where.downloads);
   const machine = fakeMachine(where.home);
   await machine.setEnvironment({ Path: 'C:\\Already\\There' });
   await machine.setReplies({ 'node.exe --version': { output: nodeSays(node.version) } });
   return { where, node, nodeFolder, downloaded, override };
 }
+
+/** Every file and folder in a folder, at any depth (Claude Code's release files are in folders of their own). @param {string} folder */
+const everythingIn = async (folder) => (await readdir(folder, { recursive: true })).sort();
 
 /** The installer's own downloads folder, not the test's downloads override. @param {string} home */
 async function keptDownloads(home) {
@@ -112,7 +115,7 @@ test("a debug run keeps the downloads in the installer's folder", async (t) => {
 
   assert.equal(result.code, 0, result.stderr);
   assert.deepEqual(await keptDownloads(where.home), [...downloaded].sort());
-  assert.deepEqual((await readdir(where.downloads)).sort(), override, 'the downloads override is left as it was');
+  assert.deepEqual(await everythingIn(where.downloads), override, 'the downloads override is left as it was');
 });
 
 test("an ordinary run deletes the downloads from the installer's folder", async (t) => {
@@ -123,7 +126,7 @@ test("an ordinary run deletes the downloads from the installer's folder", async 
   assert.equal(result.code, 0, result.stderr);
   assert.match((await readOnlyLog(where.home)).text, /Git: downloaded to .*agent-jumpstart\\downloads/, 'it was obtained there first');
   assert.deepEqual(await keptDownloads(where.home), []);
-  assert.deepEqual((await readdir(where.downloads)).sort(), override, 'the downloads override is left as it was');
+  assert.deepEqual(await everythingIn(where.downloads), override, 'the downloads override is left as it was');
 });
 
 test('the person sees the same questions and checklist in both modes; only the log is bigger', async (t) => {

@@ -39,7 +39,7 @@ test('a program the installer runs sees a Git on the machine PATH that the insta
   assert.equal(new Set(given).size, given.length, 'each folder once');
 });
 
-test("T3 Code starts with Claude Code's folder on its PATH, even if Claude Code's install didn't finish, and with the folders this run added", async (t) => {
+test("T3 Code's installer runs with Claude Code's folder on its PATH, even if Claude Code's install didn't finish, and with the folders this run added", async (t) => {
   const where = await makeHome(t, { channel: 'stable' });
   await supplyDownloads(where, ['node']);
   const installer = await supplyT3(where.downloads, 'latest.yml', '0.1.2');

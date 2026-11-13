@@ -100,6 +100,10 @@ for (const { failure, release, internet, reason } of [
     // The other pinned tools aren't on the fake internet, so their rows say they couldn't be downloaded.
     assert.ok(!result.stdout.includes(reason), `the reason isn't shown:\n${result.stdout}`);
     assert.doesNotMatch(result.stdout, /Claude Code isn't installed|Try again/);
+    // No problem notice at all (a line marked x) while Claude Code is installed, before T3 Code's step.
+    const during = result.stdout.slice(result.stdout.indexOf('Checking Claude Code'), result.stdout.indexOf('Installing T3 Code'));
+    assert.ok(during.includes('Installing Claude Code'), result.stdout);
+    assert.doesNotMatch(during, /^x {2}/m, `no problem notice:\n${during}`);
     const { text } = await readOnlyLog(where.home);
     assert.ok(text.includes(`Claude Code: falling back to Anthropic's script, because ${reason}`), text);
     assert.match(text, /Claude Code: installed by Anthropic's script \(code 0\)/);
@@ -154,20 +158,34 @@ test("a failed `claude install` doesn't fall back to Anthropic's script, even wi
   assert.match(text, /Claude Code: claude install latest finished with code 1/);
   assert.match(text, /\| Error: could not write to \.local\\bin/, "what it said is logged, as any program's that fails");
   assert.doesNotMatch(text, /falling back/);
+  assert.deepEqual(await readdir(downloadsFolder(where.home)), [], 'the download is deleted all the same');
+});
+
+test("a `claude install` that exits 0 but leaves no Claude Code doesn't fall back either, and says why", async (t) => {
+  const { where, internet, machine } = await online(t, {}, { 'claude.exe install': { output: 'Done.' } });
+
+  const result = await runOnline(where, 'york', { folder: internet });
+
+  assert.equal(result.code, 0, result.stdout + result.stderr);
+  assert.ok(!(await machine.runs()).some((run) => run.file === powershell), "Anthropic's script isn't run");
+  checklistSays(result.stdout, 'Claude Code', "Not installed: its setup didn't leave it in place");
+  assert.match(flowing(result.stdout), /Claude Code isn't installed: its setup didn't leave it in place\./);
+  const { text } = await readOnlyLog(where.home);
+  assert.match(text, /Claude Code: claude install said: Done\./);
+  assert.match(text, /Claude Code: .*claude\.exe isn't there after claude install/);
 });
 
 test('Try again, after both routes fail, starts again from the beginning, and goes on as normal once Claude Code is installed', async (t) => {
-  const where = await makeHome(t, { claudeInstall: ['again'] });
-  const machine = fakeMachine(where.home);
-  await machine.setReplies({ ...installs, 'claude.exe install': [{ code: 1 }, installs['claude.exe install']] });
+  // Anthropic's manifest is missing, so its own download fails each time, and the script fails once.
+  const { where, internet, machine } = await online(t, { noManifest: true }, { 'powershell.exe': [{ code: 1 }, { creates: [claudeProgram] }] }, { claudeInstall: ['again'] });
 
-  const result = await runWith(where, 'york');
+  const result = await runOnline(where, 'york', { folder: internet });
 
   assert.equal(result.code, 0, result.stdout + result.stderr);
   checklistSays(result.stdout, 'Claude Code', '2.1.400, signed in as jo.bloggs@york.ac.uk');
-  assert.equal(installsOf(await machine.runs()).length, 2);
+  assert.equal((await machine.runs()).filter((run) => run.file === powershell).length, 2);
   const { text } = await readOnlyLog(where.home);
-  assert.equal(text.match(/Claude Code: taking .*latest$/gm)?.length, 2, 'the version is read again');
+  assert.equal(text.match(/Claude Code: reading .*\/latest$/gm)?.length, 2, 'its own download is tried again from the version');
   assert.equal(text.match(/Answer: claudeInstall: "again"/g)?.length, 1, text);
   assert.doesNotMatch(flowing(result.stdout), /isn't installed, so T3 Code can't use it yet/);
 });
@@ -200,6 +218,7 @@ for (const { who, answers } of [
     assert.match(text, /Answer: claudeInstall: "skip"/);
     assert.match(text, /Claude Code: install skipped for now/);
     assert.match(text, /Ending: T3 Code isn't opened/);
+    assert.doesNotMatch(text, /Ending: its setup stopped/, 'the reason is in its row, and not repeated on a line of its own');
   });
 }
 
@@ -311,4 +330,20 @@ test('in a terminal, a download that fails closes quietly, with no cross, and th
   assert.match(plain, /o {2}Claude Code installed/);
   assert.ok(plain.indexOf('Downloading Claude Code (3 MB)') < plain.indexOf("Installing Claude Code. It's over 300 MB"));
   assert.doesNotMatch(plain, /x {2}(Claude Code|Downloading)/);
+});
+
+test('in a terminal, a checksum mismatch closes the setting-up line quietly too, with no cross', async (t) => {
+  const { where, internet } = await online(t, { size: 3_000_000, wrongChecksum: true });
+
+  const result = await runOnline(where, 'york', { folder: internet, chunk: 300_000, terminal: true });
+
+  assert.equal(result.code, 0, result.stdout + result.stderr);
+  const plain = stripVTControlCharacters(result.stdout);
+  const closed = plain.split(/[\r\n]/).filter((line) => /^[-ox] {2}(Setting up Claude Code|Claude Code)/.test(line));
+  assert.deepEqual(
+    closed.map((line) => line.replace(/\s*\[\d+s\]\s*$/, '')),
+    ['o  Claude Code downloaded', '-  Setting up Claude Code', 'o  Claude Code installed'],
+    plain,
+  );
+  assert.ok(plain.indexOf('Setting up Claude Code') < plain.indexOf("Installing Claude Code. It's over 300 MB"));
 });
