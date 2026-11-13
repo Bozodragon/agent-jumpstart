@@ -30,7 +30,7 @@ import { openMachine } from './machine.js';
 import { autoMemoryInUse, switchOffAutoMemory } from './memory.js';
 import { fullSkillsSizes, loadProfile, withFullSkills, withTeam } from './profile.js';
 import { logProxySetting } from './proxy.js';
-import { answersFrom, askChange, askExperience, askingThePerson, askQuestions, askTeam, experienceOptions, fromBeforeExperience, knownFrom, revealedBy, teamTicksToAdd } from './questions.js';
+import { answersFrom, askChange, askExperience, askingThePerson, askQuestions, askTeam, experienceOptions, fromBeforeExperience, hiddenFor, knownFrom, revealedBy, teamTicksToAdd } from './questions.js';
 import { installSkills } from './skills.js';
 import { findT3, installT3, openT3 } from './t3.js';
 import { End, messageOf, Stop } from './stop.js';
@@ -97,14 +97,17 @@ async function readEarlierSettings(path, profile, log) {
 
 /**
  * What a re-run takes from the settings file instead of asking, in the person's words: the top
- * workspace, if it's the one an earlier run wrote down, and each answer the settings gave.
+ * workspace, if it's the one an earlier run wrote down, and each answer the settings gave, except
+ * those to questions this person isn't asked, which they never chose.
  * @param {Record<string, unknown>} earlier
  * @param {import('./questions.js').Answers} choices
- * @param {Set<string>} reused The keys of the answers the settings gave.
+ * @param {Set<string>} given The keys of the answers the settings gave.
+ * @param {string[]} hidden The keys of the questions the experience answers hide (see hiddenFor).
  * @param {string | undefined} downloads
  * @returns {Promise<[string, string][]>}
  */
-async function reusedRows(earlier, choices, reused, downloads) {
+async function reusedRows(earlier, choices, given, hidden, downloads) {
+  const reused = new Set([...given].filter((key) => !hidden.includes(key)));
   /** @param {string[]} names */
   const list = (names) => (names.length === 0 ? 'None' : inWords(names));
   /** @type {[string, string][]} */
@@ -216,20 +219,23 @@ async function main() {
     // What's already on the laptop decides what's asked. Memory's sign is looked for before
     // what to change, which offers Memory only when there's a sign of it or it was left on.
     const memoryInUse = await autoMemoryInUse(context);
+    // An answers file from before the experience questions answers every question as it did then,
+    // hidden or not, so nothing the experience answers hide is left out or brought back for it.
+    const olderAnswers = answers !== undefined && fromBeforeExperience(answers);
     // So is whether GitHub's own tool is signed in, which leaves nothing to ask about GitHub. An
-    // answers file from before the experience questions doesn't look, so it sets up what it did.
-    const githubSignedIn = answers && fromBeforeExperience(answers) ? undefined : await signedInBefore(context);
+    // older answers file doesn't look, so it runs what it did.
+    const githubSignedIn = olderAnswers ? undefined : await signedInBefore(context);
     if (githubSignedIn) fresh.add('github');
     // The team first, and on a re-run, what to change from last time. With a team saved, what
     // to change comes first, so a ticked Team is asked next, in its usual place. From here on
     // the run works from the profile with the team's entries merged in.
     const teamSaved = earlier !== undefined && 'team' in earlier;
     let team = teamSaved ? undefined : await askTeam(offered, ask, log);
-    if (earlier) for (const key of await askChange(offered, earlier, { memoryInUse, githubSignedIn }, asker, log)) changing.set(key, []);
+    if (earlier) for (const key of await askChange(offered, earlier, { memoryInUse, githubSignedIn, olderAnswers }, asker, log)) changing.set(key, []);
     if (teamSaved) team = await askTeam(offered, ask, log);
     const experience = await askExperience(ask, log);
     // A question the new experience answers reveal is asked, rather than kept from last time.
-    if (earlier) for (const key of revealedBy(earlier, experience, log)) fresh.add(key);
+    if (earlier && !olderAnswers) for (const key of revealedBy(earlier, experience, log)) fresh.add(key);
     const profile = withTeam(offered, team);
     // A team joined or changed asks again each pick it ticks something new in, with its ticks added.
     if (earlier) for (const [key, ticks] of teamTicksToAdd(profile, earlier, team, log)) changing.set(key, ticks);
@@ -247,7 +253,7 @@ async function main() {
       ...(await askQuestions(profile, places, ask, log, found, { machine, frontEnd, attended: !unattended })),
     };
     if (earlier) {
-      const rows = await reusedRows(earlier, choices, reused, options.downloads);
+      const rows = await reusedRows(earlier, choices, reused, olderAnswers ? [] : hiddenFor(experience), options.downloads);
       if (rows.length > 0) frontEnd.summary(rows, 'Using your answers from last time');
     }
 

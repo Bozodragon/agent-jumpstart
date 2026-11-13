@@ -113,10 +113,9 @@ test("a change the list doesn't offer stops the run, naming the options: Team un
 
   const result = await runWith(where, 'default');
 
-  // The first run took the first-time AI answer, which isn't asked about Skills, so Skills isn't offered either.
   assert.equal(result.code, 1, result.stdout + result.stderr);
   assert.ok(
-    result.stdout.includes(`The answers file's "change" is wrong: "team" isn't one of "experience", "workspaces", "connectors", "extraTools", "github".`),
+    result.stdout.includes(`The answers file's "change" is wrong: "team" isn't one of "experience", "workspaces", "connectors", "extraTools", "github", "fullSkills".`),
     result.stdout,
   );
 });

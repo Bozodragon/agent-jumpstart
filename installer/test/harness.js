@@ -395,9 +395,24 @@ export async function seedT3Projects(home, projects) {
  * @param {string} stdout @param {string} label @param {string} value
  */
 export function checklistSays(stdout, label, value) {
-  const flowing = (/** @type {string} */ text) => text.replace(/[│|]|\s/g, '');
-  assert.ok(flowing(stdout).includes(flowing(`${label} ${value}`)), `expected a checklist line "${label} … ${value}" in:\n${stdout}`);
+  assert.ok(shows(stdout, `${label} ${value}`), `expected a checklist line "${label} … ${value}" in:\n${stdout}`);
 }
+
+/**
+ * Whether the window showed this text, read as checklistSays reads it: borders, spaces and line
+ * breaks aside.
+ * @param {string} stdout @param {string} text
+ */
+export function shows(stdout, text) {
+  const flowing = (/** @type {string} */ words) => words.replace(/[│|]|\s/g, '');
+  return flowing(stdout).includes(flowing(text));
+}
+
+/**
+ * The arguments of each run of this gh, apart from asking its version, in order.
+ * @param {{ file: string, args: string[] }[]} runs @param {string} gh
+ */
+export const ghCommands = (runs, gh) => runs.filter((run) => run.file === gh && run.args[0] !== '--version').map((run) => run.args.join(' '));
 
 /** @param {string} home */
 export async function readOnlyLog(home) {

@@ -4,16 +4,7 @@
 // and sees what was run in runs.json.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { fakeMachine, ghAlreadyInstalled, makeHome, readOnlyLog, readProfile, runWith } from './harness.js';
-
-/** @param {string} stdout @param {string} label @param {string} value */
-function checklistSays(stdout, label, value) {
-  const escaped = value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  assert.match(stdout, new RegExp(`${label}\\s+${escaped}`), stdout);
-}
-
-/** @param {{ file: string, args: string[] }[]} runs @param {string} gh */
-const ghCommands = (runs, gh) => runs.filter((run) => run.file === gh && run.args[0] !== '--version').map((run) => run.args.join(' '));
+import { checklistSays, fakeMachine, ghAlreadyInstalled, ghCommands, makeHome, readOnlyLog, readProfile, runWith } from './harness.js';
 
 test('with GitHub declined no page opens, gh signs nobody in, and the checklist says GitHub was skipped', async (t) => {
   const where = await makeHome(t, { github: false });

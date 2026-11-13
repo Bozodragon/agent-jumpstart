@@ -30,7 +30,7 @@ export async function signedInBefore(context) {
   }
   const program = entry && (await findTool(entry, context));
   if (!program) {
-    say("the GitHub CLI isn't on the laptop yet, so nobody is signed in");
+    say(entry ? "the GitHub CLI isn't on the laptop yet, so nobody is signed in" : 'the list of versions has no GitHub CLI, so nobody is signed in');
     return undefined;
   }
   const status = await machine.run(program.file, [...program.args, 'auth', 'status', '--hostname', host]);
@@ -47,7 +47,7 @@ export async function signedInBefore(context) {
  * @param {Partial<Record<string, import('./tools.js').Command>>} programs The tools in place, by id.
  * @param {import('./tools.js').Context} context
  * @param {boolean} [signedIn] Whether gh was signed in before the questions (see signedInBefore),
- *   if that was looked at, so it isn't asked again.
+ *   if that was looked at, so gh's sign-in isn't checked a second time.
  * @returns {Promise<string>} The checklist's GitHub line.
  */
 export async function setUpGitHub(profile, wanted, programs, context, signedIn) {

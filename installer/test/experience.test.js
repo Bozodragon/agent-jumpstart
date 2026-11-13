@@ -5,16 +5,10 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdir, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { answerOnly, checklistSays, fakeMachine, ghAlreadyInstalled, makeHome, readOnlyLog, readSettings, runWith, seedSettings, stateFolder, t3Leaves } from './harness.js';
+import { answerOnly, checklistSays, fakeMachine, ghAlreadyInstalled, ghCommands, makeHome, readOnlyLog, readSettings, runWith, seedSettings, shows, stateFolder, t3Leaves } from './harness.js';
 
 /** The keys of the log's `Answer:` lines, in the order they were written. @param {string} log */
 const answered = (log) => [...log.matchAll(/Answer: (\w+):/g)].map((match) => match[1]);
-
-/** Whether the window showed this text, read as checklistSays reads it, line breaks and borders aside. @param {string} stdout @param {string} text */
-const shows = (stdout, text) => stdout.replace(/[│|]|\s/g, '').includes(text.replace(/\s/g, ''));
-
-/** gh's runs, apart from asking its version. @param {{ file: string, args: string[] }[]} runs @param {string} gh */
-const ghCommands = (runs, gh) => runs.filter((run) => run.file === gh && run.args[0] !== '--version').map((run) => run.args.join(' '));
 
 const signedInLine = "GitHub: you're already signed in with GitHub's own tool, so GitHub is set up without asking.";
 
@@ -75,10 +69,15 @@ for (const row of rows) {
       { channel: settings.channel, fullSkills: settings.fullSkills, github: settings.github },
       { channel: row.channel, fullSkills: row.fullSkills, github: row.github },
     );
+    // A hidden question would take its default too, so the log is read for which were hidden.
+    const { text } = await readOnlyLog(where.home);
+    for (const key of ['channel', 'fullSkills']) {
+      assert.equal(text.includes(`Experience: ${key} isn't asked`), !row.asked.includes(key), `${key}: ${text}`);
+    }
   });
 }
 
-test('the beta skills are never the default, and a first-timer whose answers file asks for them still gets none', async (t) => {
+test("a first-timer isn't asked full skills, so an answers file's beta is set aside and full skills is No", async (t) => {
   const where = await makeHome(t, { aiExperience: 'first-time', codingExperience: 'work', fullSkills: 'beta' });
 
   const result = await runWith(where, 'york');
@@ -311,4 +310,43 @@ test('new experience answers that hide a question keep its saved answer', async 
   assert.equal(result.code, 0, result.stdout + result.stderr);
   const settings = await readSettings(where.home);
   assert.deepEqual({ channel: settings.channel, fullSkills: settings.fullSkills }, { channel: 'nightly', fullSkills: 'finished' });
+});
+
+test('an answers file from before the experience questions can still change Skills on a re-run', async (t) => {
+  const where = await makeHome(t, { fullSkills: 'finished' });
+  const first = await runWith(where, 'york');
+  assert.equal(first.code, 0, first.stdout + first.stderr);
+  await rm(join(stateFolder(where.home), 'logs'), { recursive: true });
+  await writeFile(where.answersFile, JSON.stringify({ change: ['fullSkills'], fullSkills: 'no' }));
+
+  const second = await runWith(where, 'york');
+
+  assert.equal(second.code, 0, second.stdout + second.stderr);
+  assert.equal((await readSettings(where.home)).fullSkills, 'no');
+});
+
+test('Skills ticked along with Experience, then hidden by a first-time answer, takes its first-time No rather than last time\'s', async (t) => {
+  const where = await makeHome(t);
+  await seedYork(where.home, { aiExperience: 'dabbled', fullSkills: 'finished' });
+  await answerOnly(where.answersFile, { change: ['experience', 'fullSkills'], aiExperience: 'first-time' }, { asked: ['codingExperience'] });
+
+  const result = await runWith(where, 'york');
+
+  assert.equal(result.code, 0, result.stdout + result.stderr);
+  assert.equal((await readSettings(where.home)).fullSkills, 'no');
+  const { text } = await readOnlyLog(where.home);
+  assert.ok(!text.includes("Settings: fullSkills is to change, so it's asked again"), text);
+});
+
+test("a first-timer's re-run summary doesn't list the answers they were never asked", async (t) => {
+  const where = await makeHome(t);
+  await seedYork(where.home, { aiExperience: 'first-time', codingExperience: 'no' });
+  await answerOnly(where.answersFile, {});
+
+  const result = await runWith(where, 'york');
+
+  assert.equal(result.code, 0, result.stdout + result.stderr);
+  assert.ok(shows(result.stdout, 'AI tools This is my first time'), result.stdout);
+  assert.ok(!shows(result.stdout, 'Skills Just the usual ones'), result.stdout);
+  assert.ok(!/T3 Code\s+[│|]?\s*Stable/.test(result.stdout), result.stdout);
 });

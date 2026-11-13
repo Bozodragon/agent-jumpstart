@@ -15,7 +15,7 @@ import { existingTopWorkspaces, topWorkspaceIn } from './workspaces.js';
  *   lists teams. Saved for a later release: Jumpstart and the setup page don't read it yet.
  * @property {AiExperience} [aiExperience] How much the person has used AI tools (see askExperience,
  *   which asks it, rather than askQuestions).
- * @property {CodingExperience} [codingExperience] Whether the person has written code (the same).
+ * @property {CodingExperience} [codingExperience] Whether the person has written code (also asked by askExperience).
  * @property {string | null} googleDriveFolder The confirmed My Drive folder, or null when the profile doesn't use Drive.
  * @property {string} workspacesLocation The folder the top workspace is in.
  * @property {string} topWorkspace The top workspace: a new one, named by the profile, in Google
@@ -252,7 +252,7 @@ export function revealedBy(earlier, experience, log) {
   const hiddenBefore = hiddenFor({ aiExperience: before });
   const now = hiddenFor(experience);
   const revealed = hiddenBefore.filter((key) => !now.includes(key));
-  for (const key of revealed) log.write(`Experience: ${key} wasn't asked of someone who answered ${JSON.stringify(before)} about AI tools, and is now`);
+  for (const key of revealed) log.write(`Experience: last time's answer about AI tools (${JSON.stringify(before)}) hid ${key}, and these don't, so it isn't kept from last time`);
   return revealed;
 }
 
@@ -266,11 +266,14 @@ export function revealedBy(earlier, experience, log) {
  * Code's channel never are. Nothing ticked, the default, keeps everything. Settings never answer
  * it, and it isn't saved.
  * @param {import('./profile.js').Profile} profile @param {Record<string, unknown>} earlier
- * @param {Pick<Found, 'memoryInUse' | 'githubSignedIn'>} found @param {Asker} ask the person or the answers file, not the settings
+ * @param {Pick<Found, 'memoryInUse' | 'githubSignedIn'> & { olderAnswers?: boolean }} found `olderAnswers`: the answers
+ *   come from a file from before the experience questions, which answers Skills whatever it hides
+ *   (see fromBeforeExperience), so Skills is offered to it.
+ * @param {Asker} ask the person or the answers file, not the settings
  * @param {{ write(line: string): void }} log
  * @returns {Promise<string[]>} the keys of the answers to ask again
  */
-export async function askChange(profile, earlier, { memoryInUse, githubSignedIn }, ask, log) {
+export async function askChange(profile, earlier, { memoryInUse, githubSignedIn, olderAnswers = false }, ask, log) {
   /** Each entry's answer, its label, the keys of the answers it asks again, and whether it's offered. @type {[string, string, string[], boolean][]} */
   const offered = [
     ['team', 'Team', ['team'], Boolean(profile.teams?.length)],
@@ -279,7 +282,7 @@ export async function askChange(profile, earlier, { memoryInUse, githubSignedIn 
     ['connectors', 'Connectors', ['connectors'], true],
     ['extraTools', 'Extra tools', ['extraTools'], true],
     ['github', 'GitHub', ['github'], !githubSignedIn],
-    ['fullSkills', 'Skills', ['fullSkills'], earlier.aiExperience !== 'first-time'],
+    ['fullSkills', 'Skills', ['fullSkills'], olderAnswers || earlier.aiExperience !== 'first-time'],
     ['switchOffMemory', 'Memory', ['switchOffMemory'], memoryInUse || earlier.switchOffMemory === false],
   ];
   const held = offered.filter(([, , keys, shown]) => shown && keys.some((key) => key in earlier));
@@ -625,7 +628,12 @@ export function knownFrom(settings, ask, log, reused = new Set(), fresh = new Se
       log.write(`Settings: ${q.key} isn't taken from last time, so it's put as on a first run`);
       return put(q);
     }
-    if (changing.has(q.key)) return again(q, lastTime, put);
+    if (changing.has(q.key)) {
+      if (!/** @type {{ hidden?: boolean }} */ (q).hidden) return again(q, lastTime, put);
+      // Ticked to change, then hidden by new experience answers: it takes what this person gets.
+      log.write(`Settings: ${q.key} is to change, but these experience answers don't ask it, so it takes their default`);
+      return put(q);
+    }
     return either(q.key, fromSettings, otherwise);
   };
   return {
