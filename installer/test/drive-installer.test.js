@@ -151,8 +151,9 @@ for (const [what, options, line, logged] of failures) {
     const log = (await readOnlyLog(where.home)).text;
     assert.ok(log.split('\n').some((each) => each.includes('Google Drive for desktop: ') && each.includes(logged)), log);
     assert.ok(log.includes('Answer: softwareCenter: "documents"'), log);
-    // Whatever arrived whole, the wrong file or an installer that didn't install, is deleted.
+    // Whatever arrived, the wrong file, an installer that didn't install or a download that stopped partway, is deleted.
     assert.equal(await exists(join(where.home, 'Downloads', 'GoogleDriveFSSetup.exe')), false);
+    assert.equal(await exists(join(where.home, 'Downloads', 'GoogleDriveFSSetup.exe.crdownload')), false);
   });
 }
 

@@ -339,7 +339,12 @@ async function fromHostedInstaller(profile, places, offered, context) {
     );
   };
   if (downloaded.status === 'none') say(`no download appeared in ${folder} within ${downloadStarts / 1000} seconds`);
-  if (downloaded.status === 'stopped') say(`the download stopped growing for ${downloadStalls / 1000} seconds, at ${downloaded.size} bytes`);
+  if (downloaded.status === 'stopped') {
+    say(`the download stopped growing for ${downloadStalls / 1000} seconds, at ${downloaded.size} bytes`);
+    // The browser's unfinished download, which it may finish later (such as once the person
+    // agrees to keep an .exe), unless it's removed. A finished file of another size isn't ours.
+    if (unfinished(downloaded.file)) await tidy(downloaded.file);
+  }
   if (downloaded.status === 'mismatch') {
     say(`${downloaded.file} is the hosted installer's size, but its SHA-256 is ${downloaded.sha256}, not ${hosted.sha256}`);
     await tidy(downloaded.file);
@@ -408,13 +413,13 @@ const unfinished = (name) => /\.(crdownload|part|partial|tmp)$/i.test(name);
  * Watches Downloads for the hosted installer among the files that weren't there before: a
  * finished one of its size is it if its SHA-256 matches, and the wrong file if not. The largest
  * new file no bigger than it shows how far the download has got. With no new file after a
- * minute, or nothing new changing for two minutes once there is one, it's given up on. Only the
- * waits count.
+ * minute, or nothing new changing for two minutes once there is one, it's given up on, naming
+ * the largest new file. Only the waits count.
  * @param {string} folder @param {Set<string>} before the names already there
  * @param {HostedInstaller} hosted
  * @param {import('./machine.js').Machine} machine
  * @param {import('./front-end.js').Progress} progress
- * @returns {Promise<{ status: 'found', file: string } | { status: 'mismatch', file: string, sha256: string } | { status: 'stopped', size: number } | { status: 'none' }>}
+ * @returns {Promise<{ status: 'found', file: string } | { status: 'mismatch', file: string, sha256: string } | { status: 'stopped', file: string, size: number } | { status: 'none' }>}
  */
 async function watchDownloads(folder, before, hosted, machine, progress) {
   let waited = 0;
@@ -438,15 +443,15 @@ async function watchDownloads(folder, before, hosted, machine, progress) {
       progress(size, hosted.size);
       return { status: 'found', file };
     }
-    const largest = Math.max(0, ...fresh.map(({ size }) => size));
+    const largest = fresh.reduce((most, each) => (each.size > most.size ? each : most), { name: '', size: 0 });
     const now = fresh.map(({ name, size }) => `${name}:${size}`).sort().join('|');
     if (now !== seen) {
       seen = now;
       changedAt = waited;
     }
-    if (fresh.length > 0) progress(largest, hosted.size);
+    if (fresh.length > 0) progress(largest.size, hosted.size);
     if (fresh.length === 0 && waited >= downloadStarts) return { status: 'none' };
-    if (fresh.length > 0 && waited - changedAt >= downloadStalls) return { status: 'stopped', size: largest };
+    if (fresh.length > 0 && waited - changedAt >= downloadStalls) return { status: 'stopped', file: join(folder, largest.name), size: largest.size };
     await machine.wait(downloadEvery);
     waited += downloadEvery;
   }
