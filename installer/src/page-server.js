@@ -11,6 +11,7 @@
 //                            before }` (how many events the run had sent by then), then every
 //                            event so far, then each as it's sent
 //   POST /<secret>/answer    an answer, `{ question, answer }`, passed to `answer`
+//   POST /<secret>/back      going back to an earlier question, `{ to }`, passed to `back`
 //   POST /<secret>/seen      `{ connection, event }`: that page has every event up to `event`
 //   GET  /favicon.ico        answered with nothing, so the browser stops asking
 //
@@ -101,11 +102,12 @@ async function readPage(folder) {
 
 /**
  * Starts the server. It's open, and listening, once this resolves.
- * @param {{ answer: AnswerHandler, page?: string }} options `answer` is given every answer a page
- *   posts; `page` is the built page's folder (`builtPage`, if not given).
+ * @param {{ answer: AnswerHandler, back?: AnswerHandler, page?: string }} options `answer` is given
+ *   every answer a page posts, and `back` every going back (refused, if not given); `page` is the
+ *   built page's folder (`builtPage`, if not given).
  * @returns {Promise<PageServer>}
  */
-export async function openPageServer({ answer, page = builtPage }) {
+export async function openPageServer({ answer, back, page = builtPage }) {
   const files = await readPage(page);
   const secret = randomBytes(24).toString('base64url');
   /** @type {{ id: number, data: string }[]} */
@@ -196,8 +198,9 @@ export async function openPageServer({ answer, page = builtPage }) {
       } catch (error) {
         return reply(response, 400, { reason: `The answer couldn't be read: ${/** @type {Error} */ (error).message}.` });
       }
-      if (rest === 'answer') {
-        const { status, body } = await answer(posted);
+      if (rest === 'answer' || rest === 'back') {
+        const handler = rest === 'answer' ? answer : back;
+        const { status, body } = handler ? await handler(posted) : { status: 409, body: { ok: false, reason: "There's nothing to go back to." } };
         return reply(response, status, body);
       }
       if (rest === 'seen') {

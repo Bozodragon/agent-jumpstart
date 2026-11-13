@@ -9,6 +9,8 @@ import { messageOf } from './stop.js';
  * @param {{ machine: import('./machine.js').Machine, frontEnd: import('./front-end.js').FrontEnd, log: { write(line: string): void } }} context
  */
 export async function showPage(label, url, { machine, frontEnd, log }) {
+  // What the person does there (an install, a download) can't be undone by going back.
+  frontEnd.questions?.fix();
   frontEnd.step(`${label}: ${url}`);
   let opened = 'opened';
   try {

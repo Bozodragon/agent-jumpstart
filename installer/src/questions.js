@@ -73,6 +73,21 @@ import { existingTopWorkspaces, topWorkspaceIn } from './workspaces.js';
  */
 
 /**
+ * Thrown by a front end's asker, from the question it's waiting at, when the person goes back to
+ * an earlier question (Back, or Change from the page's Details panel). Only while the questions
+ * last (see FrontEnd's `questions`): `main` then asks them again from the start, and the front end
+ * gives the answers before the one gone back to again without asking, and asks it and the rest
+ * with the answers given before as their defaults. The terminal never throws it.
+ */
+export class GoBack extends Error {
+  /** @param {string} key the question gone back to */
+  constructor(key) {
+    super(`to ${key}: the answers before it are given again, and it and the rest are asked again`);
+    this.key = key;
+  }
+}
+
+/**
  * The asker for someone at the screen: their front end's, except that a hidden question isn't
  * put to them and takes its default.
  * @param {Asker} ask @returns {Asker}
