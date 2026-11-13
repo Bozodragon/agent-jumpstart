@@ -336,6 +336,28 @@ test("what a program prints goes with the newest screen, and is never a screen o
   assert.equal(onScreen(page).output, '! First copy your one-time code: ABCD-1234\nPress Enter to open github.com in your browser...\n');
 });
 
+test("the skills installer's output goes with its own source's busy screen, and once that has ended its terminal stays a little longer, to be looked at", () => {
+  const page = play([
+    [0, { type: 'busy', message: 'Installing 16 skills from mattpocock/skills' }],
+    [10, { type: 'output', busy: 1, text: '|\no  Source: https://github.com/mattpocock/skills.git\n' }],
+    [20, { type: 'output', busy: 1, text: 'o  Repository cloned\n' }],
+    [1000, { type: 'ended', busy: 1, text: 'Installed 16 skills from mattpocock/skills', ok: true }],
+    [1001, { type: 'busy', message: 'Installing the skill from anthropics/skills' }],
+    [1010, { type: 'output', busy: 5, text: 'o  Source: https://github.com/anthropics/skills.git\n' }],
+  ]);
+
+  assert.equal(page.screens.length, 2);
+  const [first, second] = /** @type {any[]} */ (page.screens);
+  assert.equal(first.terminal, '|\no  Source: https://github.com/mattpocock/skills.git\no  Repository cloned\n');
+  assert.equal(second.terminal, 'o  Source: https://github.com/anthropics/skills.git\n');
+  // Not the output any program on screen prints, which a sign-in reads from.
+  assert.equal(first.output, '');
+  assert.ok(holds.terminal > holds.done);
+  assert.equal(words(at(page, 1000 + holds.done)), 'Installed 16 skills from mattpocock/skills');
+  assert.equal(wakeAt(later(page, 1000 + holds.done)), 1000 + holds.terminal);
+  assert.equal(words(at(page, 1000 + holds.terminal)), 'Installing the skill from anthropics/skills');
+});
+
 test("the header's dashes: one per question, one per thing done, and the ending's, lit up to the screen that's showing", () => {
   let page = play([
     [0, choose(1, 'team', 'Which team are you in?')],

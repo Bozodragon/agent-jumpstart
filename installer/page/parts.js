@@ -105,9 +105,13 @@ export function Path({ path }) {
   );
 }
 
-/** Words with a slash command (/jumpstart) set as something to type. @param {{ text: string }} props */
+/**
+ * Words with a slash command (/jumpstart) set as something to type. Only a word that starts with
+ * the slash: the parts of a skill source (mattpocock/skills) aren't commands.
+ * @param {{ text: string }} props
+ */
 function Commands({ text }) {
-  const parts = text.split(/(\/[a-z][a-z-]*\b)/);
+  const parts = text.split(/((?<![\w/.-])\/[a-z][a-z-]*\b)/);
   return <>{parts.map((part, index) => (index % 2 === 1 ? <code key={index}>{part}</code> : part))}</>;
 }
 
