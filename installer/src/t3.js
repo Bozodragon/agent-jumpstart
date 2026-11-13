@@ -97,8 +97,11 @@ export async function installT3(profile, channel, found, open, context) {
     return { row: `${found.version ?? 'Version unknown'} (${state})`, installed: true, opened, shim };
   }
 
-  /** @returns {Promise<{ release: { version: string, url: string, sha512: string } } | { reason: string }>} */
-  const install = async () => {
+  /**
+   * @param {import('./front-end.js').Progress} progress how far the download has got
+   * @returns {Promise<{ release: { version: string, url: string, sha512: string } } | { reason: string }>}
+   */
+  const install = async (progress) => {
     try {
       const where = entry.channels[channel];
       if (!where) throw new NotInstalled(`the list of versions has no ${channel} channel`);
@@ -106,7 +109,7 @@ export async function installT3(profile, channel, found, open, context) {
       say(`${channel} is ${release.version}, ${basename(new URL(release.url).pathname)}`);
 
       const program = join(places.programs, entry.install.folder, where.program);
-      const file = await obtain({ url: release.url }, { downloads, saveIn: join(places.state, 'downloads'), say });
+      const file = await obtain({ url: release.url }, { downloads, saveIn: join(places.state, 'downloads'), say, progress });
       try {
         await checkSha512(file, release.sha512, say);
         // The install starts T3, which reads its settings only as it starts.

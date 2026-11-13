@@ -6,10 +6,32 @@ import { createHash } from 'node:crypto';
 import { access, mkdtemp, mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 export const repo = fileURLToPath(new URL('../..', import.meta.url));
 export const program = join(repo, 'installer', 'src', 'main.js');
+const fakeInternet = join(repo, 'installer', 'test', 'fake-internet.js');
+
+/**
+ * The internet, for a run that downloads rather than taking its downloads from a folder. Every
+ * address is answered from `folder`, by the file name it ends in (a 404 if it isn't there), in
+ * pieces of `chunk` bytes (64 KB if not given) with `pause` milliseconds between them.
+ * `cutShort` drops the connection after so many bytes of the named files; `stall` sends nothing
+ * more after so many bytes, and keeps the connection open, until the run is stopped. `unsized`
+ * names files sent without their size. `terminal` makes the run's output look like a terminal,
+ * so its spinner line shows.
+ * @typedef {{ folder: string, chunk?: number, pause?: number, cutShort?: Record<string, number>, stall?: Record<string, number>, unsized?: string[], terminal?: boolean }} Internet
+ */
+
+/**
+ * Runs the real installer with no downloads folder: its downloads come from `internet`. The
+ * home, fake machine and answers file are as for `runWith`.
+ * @param {{ home: string, answersFile: string }} where @param {string} profile @param {Internet} internet
+ * @param {{ stopWhen?: () => Promise<boolean> }} [options] as for `run`
+ */
+export function runOnline(where, profile, internet, { stopWhen } = {}) {
+  return run(['--profile', profile, '--home', where.home, '--answers', where.answersFile], { internet, stopWhen });
+}
 
 /** @param {string} name */
 export async function readProfile(name) {
@@ -94,19 +116,31 @@ export async function seedSettings(home, settings) {
  * console of its own (detached), so the title it sets for its window can't reach the console the
  * tests run in.
  * @param {string[]} args
- * @param {{ windowsTerminal?: boolean }} [options] `windowsTerminal`: start with `WT_SESSION` set (true) or unset (false, the default)
+ * @param {{ windowsTerminal?: boolean, internet?: Internet, stopWhen?: () => Promise<boolean> }} [options]
+ *   `windowsTerminal`: start with `WT_SESSION` set (true) or unset (false, the default).
+ *   `internet`: answer the run's downloads from a folder (fake-internet.js); a run given it has
+ *   no `--downloads`. `stopWhen`: checked every 50 ms while the run goes on; once it's true, the
+ *   run is ended at once, as closing its window would end it.
  * @returns {Promise<{ code: number, stdout: string, stderr: string }>}
  */
-export function run(args, { windowsTerminal = false } = {}) {
+export function run(args, { windowsTerminal = false, internet, stopWhen } = {}) {
   return new Promise((resolve) => {
     /** @type {NodeJS.ProcessEnv} */
     const env = { ...process.env, NO_COLOR: '1' };
     if (windowsTerminal) env.WT_SESSION = 'a-test-window';
     else delete env.WT_SESSION;
+    if (internet) env.AGENT_JUMPSTART_FAKE_INTERNET = JSON.stringify(internet);
+    else delete env.AGENT_JUMPSTART_FAKE_INTERNET;
+    const preload = internet ? ['--import', pathToFileURL(fakeInternet).href] : [];
     const options = { env, timeout: 30_000, detached: true, windowsHide: true };
-    execFile(process.execPath, [program, ...args], options, (error, stdout, stderr) => {
+    const child = execFile(process.execPath, [...preload, program, ...args], options, (error, stdout, stderr) => {
+      clearInterval(watching);
       resolve({ code: error ? Number(error.code ?? 1) : 0, stdout, stderr });
     });
+    // Ended the way closing its window ends it: at once, with nothing tidied up.
+    const watching = setInterval(async () => {
+      if (stopWhen && (await stopWhen())) child.kill();
+    }, 50);
   });
 }
 
@@ -303,16 +337,17 @@ export async function makeZip(folder, zipFile) {
  * Puts a stand-in T3 installer in the downloads folder with the release feed
  * (`latest.yml` or `nightly.yml`) that names it, as T3's releases publish them.
  * @param {string} downloads @param {string} feedName @param {string} version
- * @param {{ wrongHash?: boolean }} [options]
+ * @param {{ wrongHash?: boolean, size?: number }} [options] `size`: pad each stand-in out to
+ *   so many bytes, for a download that comes in many pieces
  * @returns {Promise<string>} the installer's file name, for this computer's processor
  */
-export async function supplyT3(downloads, feedName, version, { wrongHash = false } = {}) {
+export async function supplyT3(downloads, feedName, version, { wrongHash = false, size = 0 } = {}) {
   const arch = process.arch === 'arm64' ? 'arm64' : 'x64';
   const lines = [`version: '${version}'`, 'files:'];
   let ours = '';
   for (const kind of ['x64', 'arm64']) {
     const name = `T3-Code-${version}-${kind}.exe`;
-    const bytes = `stand-in for ${name}`;
+    const bytes = `stand-in for ${name}`.padEnd(size, '.');
     await writeFile(join(downloads, name), bytes);
     const sha512 = createHash('sha512').update(wrongHash ? 'something else' : bytes).digest('base64');
     lines.push(`  - url: ${name}`, `    sha512: ${sha512}`, `    size: ${bytes.length}`);
