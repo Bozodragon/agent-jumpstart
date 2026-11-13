@@ -12,8 +12,9 @@ import { soFar, split } from './words.js';
 /** @typedef {import('./pacing.js').Asked} Asked */
 
 /**
- * What the screens can do: answer the run's open question, or say the person has read a notice.
- * @typedef {{ answer: (question: number, value: unknown) => Promise<void>, carryOn: (screen: number) => void, shareLogLine?: string }} Actions
+ * What the screens can do: answer the run's open question, go back to the question before it
+ * (`goBack`, while there's one to go back to), or say the person has read a notice.
+ * @typedef {{ answer: (question: number, value: unknown) => Promise<void>, goBack?: () => Promise<boolean>, carryOn: (screen: number) => void, shareLogLine?: string }} Actions
  */
 
 /**
@@ -23,6 +24,17 @@ import { soFar, split } from './words.js';
  */
 export async function postAnswer(question, value) {
   await fetch('answer', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ question, answer: value }) }).catch(() => undefined);
+}
+
+/**
+ * Asks the run to go back to an earlier question. It says whether it has: once the questions are
+ * over, or someone has just answered, it won't, and the page carries on as it was.
+ * @param {number} to the question's id
+ * @returns {Promise<boolean>}
+ */
+export async function postBack(to) {
+  const response = await fetch('back', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ to }) }).catch(() => undefined);
+  return response?.ok ?? false;
 }
 
 /**
@@ -215,6 +227,16 @@ function Question({ screen, actions }) {
     setSending(true);
     actions.answer(question.question, value);
   };
+  const { goBack } = actions;
+  const back = goBack
+    ? () => {
+        if (sending) return;
+        setSending(true);
+        goBack().then((went) => {
+          if (!went) setSending(false);
+        });
+      }
+    : undefined;
 
   if (question.kind === 'done') {
     return (
@@ -244,7 +266,7 @@ function Question({ screen, actions }) {
           <Line text={split(question.message ?? '')[1]} />
         </p>
       )}
-      <Form question={question} refused={refused} sending={sending} onAnswer={answer} />
+      <Form question={question} refused={refused} sending={sending} onAnswer={answer} onBack={back} />
     </>
   );
 }
@@ -283,10 +305,10 @@ function Done({ title, text, what, sending, onDone }) {
 
 /**
  * The control for a question: options to choose one of, Yes or No, ticks, or a folder to type.
- * The question's default is chosen already.
- * @param {{ question: Asked, refused?: { answer: unknown, reason: string }, sending: boolean, onAnswer: (value: unknown) => void }} props
+ * The question's default is chosen already. Back, when there's a question to go back to.
+ * @param {{ question: Asked, refused?: { answer: unknown, reason: string }, sending: boolean, onAnswer: (value: unknown) => void, onBack?: () => void }} props
  */
-function Form({ question, refused, sending, onAnswer }) {
+function Form({ question, refused, sending, onAnswer, onBack }) {
   const { kind } = question;
   const options = kind === 'confirm' ? [{ value: 'yes', label: 'Yes' }, { value: 'no', label: 'No' }] : (question.options ?? []);
   const [chosen, setChosen] = useState(kind === 'confirm' ? (question.initial ? 'yes' : 'no') : String(question.initial ?? ''));
@@ -385,6 +407,12 @@ function Form({ question, refused, sending, onAnswer }) {
         <span className="hint is-key">
           or press <kbd>Enter</kbd>
         </span>
+        {onBack && (
+          <button className="back" type="button" disabled={sending} onClick={onBack}>
+            {icons.back}
+            <span>Back</span>
+          </button>
+        )}
       </div>
     </form>
   );

@@ -33,6 +33,8 @@
  * @property {unknown} [initial]
  * @property {string} [placeholder]
  * @property {string} [what] For `done`: what it's waiting for, which completes "once …".
+ * @property {boolean} [back] Asked while Back and Change last: it may be gone back to once
+ *   answered (until the run sends `fixed`).
  *
  * @typedef {{ title: string, rows: [string, string][] }} Summary
  *
@@ -43,9 +45,10 @@
  * @typedef {Shared & { kind: 'notice', title: string, text: string }} NoticeScreen
  * @typedef {Shared & { kind: 'summary', title: string, rows: [string, string][] }} SummaryScreen
  * @typedef {Shared & { kind: 'busy', message: string, received?: number, total?: number, ended?: { text: string, ok?: boolean }, endedBy?: number }} BusyScreen
- * @typedef {Shared & { kind: 'question', question: Asked, number?: number, answer?: { value: unknown }, refused?: { answer: unknown, reason: string }, problem?: string, notice?: { title: string, text: string } }} QuestionScreen
+ * @typedef {Shared & { kind: 'question', question: Asked, number?: number, answer?: { value: unknown }, refused?: { answer: unknown, reason: string }, problem?: string, notice?: { title: string, text: string }, again?: boolean }} QuestionScreen
  *   `problem` or `notice`: the call just before it, joined to it. `number`: which question this
  *   is, counting only the person's answers to the setup's questions (not Done, not Try again).
+ *   `again`: the first question asked after going back.
  * @typedef {Shared & { kind: 'ending' | 'problem', summaries: Summary[], problems: string[], lines: string[], next?: { title: string, text: string }, log?: string, closing?: string }} EndScreen
  *   The run's last screen, which gathers every call after it that isn't a question or a busy.
  *   `ending`: the checklist onwards. `problem`: a problem nothing is asked about, which only
@@ -152,7 +155,8 @@ export function reduce(page, action) {
  *   about, or `finish`, everything up to the end that isn't a question or a busy. Those that do
  *   come then (T3 Code that couldn't be opened, say) are shown before it.
  *
- * What a program prints goes with the newest screen.
+ * What a program prints goes with the newest screen. Going back (`back`) takes off the question
+ * gone back to and every screen since: the run asks them again, as new questions.
  * @param {PageEvent[]} events
  * @returns {Screen[]}
  */
@@ -169,6 +173,8 @@ export function screensOf(events) {
   const busies = new Map();
   /** A problem or notice the question coming next joins. @type {{ key: number, problem?: string, notice?: { title: string, text: string } } | undefined} */
   let joining;
+  /** Whether the person has just gone back, which the next question comes in as. */
+  let again = false;
 
   /** The next event, after `index`, that makes or joins a screen. @param {number} index */
   const nextCall = (index) => events.slice(index + 1).find((event) => makesAScreen.has(event.type));
@@ -237,8 +243,9 @@ export function screensOf(events) {
       case 'question': {
         const { id, type, ...asked } = event;
         /** @type {QuestionScreen} */
-        const screen = { kind: 'question', key: id, output: '', question: /** @type {Asked} */ (asked), ...joining };
+        const screen = { kind: 'question', key: id, output: '', question: /** @type {Asked} */ (asked), ...joining, ...(again ? { again } : {}) };
         joining = undefined;
+        again = false;
         add(screen);
         questions.set(event.question, screen);
         break;
@@ -259,6 +266,15 @@ export function screensOf(events) {
       case 'output':
         if (newest) newest.output += event.text;
         break;
+      case 'back': {
+        const from = screens.findIndex((screen) => screen.kind === 'question' && screen.question.question === event.to);
+        if (from < 0) break;
+        screens.length = from;
+        newest = screens.at(-1);
+        joining = undefined;
+        again = true;
+        break;
+      }
     }
   });
 
