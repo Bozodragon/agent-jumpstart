@@ -1,0 +1,12 @@
+# od -c style dump of piped-plain stdout from the first spinner frame (160 bytes). \033 is ESC.
+
+0000000    |  \n 342 200 242           C   l   o   n   i   n   g       r
+0000020    e   p   o   s   i   t   o   r   y 342 200 246\033   [   1   G
+0000040 \033   [   J   o           C   l   o   n   i   n   g       r   e
+0000060    p   o   s   i   t   o   r   y 342 200 246\033   [   1   G\033
+0000100    [   J   O           C   l   o   n   i   n   g       r   e   p
+0000120    o   s   i   t   o   r   y 342 200 246\033   [   1   G\033   [
+0000140    J   0           C   l   o   n   i   n   g       r   e   p   o
+0000160    s   i   t   o   r   y 342 200 246\033   [   1   G\033   [   J
+0000200  342 200 242           C   l   o   n   i   n   g       r   e   p
+0000220    o   s   i   t   o   r   y 342 200 246\033   [   1   G\033   [
