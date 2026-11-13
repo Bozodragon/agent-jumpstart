@@ -220,7 +220,7 @@ export async function askExperience(ask, log) {
   return { aiExperience, codingExperience };
 }
 
-/** Pretty confident with AI tools, or more. @param {Experience} experience */
+/** Pretty confident with AI tools, or more. @param {Pick<Experience, 'aiExperience'>} experience */
 const isConfidentWithAi = ({ aiExperience }) => aiExperience === 'confident' || aiExperience === 'teach';
 
 /** Has written a few small projects, or more. @param {Experience} experience */
@@ -229,12 +229,31 @@ const hasWrittenProjects = ({ codingExperience }) => codingExperience === 'small
 /**
  * The keys of the questions these experience answers hide, which take their defaults without
  * being asked: T3 Code's channel unless the person is pretty confident with AI tools or more
- * (Stable), and full skills from a first-timer (No).
- * @param {Experience} experience
+ * (Stable), and full skills from a first-timer (No). Only the AI answer hides anything.
+ * @param {Pick<Experience, 'aiExperience'>} experience
  * @returns {string[]}
  */
 export function hiddenFor(experience) {
   return [...(isConfidentWithAi(experience) ? [] : ['channel']), ...(experience.aiExperience === 'first-time' ? ['fullSkills'] : [])];
+}
+
+/**
+ * On a re-run, the questions last time's experience answers hid that these ones don't. Each is
+ * asked now, as on a first run, with its own default for these answers, rather than taking the
+ * default it was given without being asked. Settings without a saved AI answer that's still one
+ * of its options hid nothing.
+ * @param {Record<string, unknown>} earlier @param {Experience} experience
+ * @param {{ write(line: string): void }} log
+ * @returns {string[]}
+ */
+export function revealedBy(earlier, experience, log) {
+  const before = experienceOptions.aiExperience.find((option) => option.value === earlier.aiExperience)?.value;
+  if (before === undefined) return [];
+  const hiddenBefore = hiddenFor({ aiExperience: before });
+  const now = hiddenFor(experience);
+  const revealed = hiddenBefore.filter((key) => !now.includes(key));
+  for (const key of revealed) log.write(`Experience: ${key} wasn't asked of someone who answered ${JSON.stringify(before)} about AI tools, and is now`);
+  return revealed;
 }
 
 /**

@@ -275,3 +275,40 @@ test('settings from before this release get both experience questions asked once
   const { text } = await readOnlyLog(where.home);
   for (const key of ['aiExperience', 'codingExperience']) assert.ok(text.includes(`Known from settings: ${key}:`), text);
 });
+
+test('new experience answers that reveal T3 Code\'s channel ask it, and keep every other answer, even one whose default has changed', async (t) => {
+  const where = await makeHome(t);
+  await seedYork(where.home, { aiExperience: 'dabbled', codingExperience: 'no', channel: 'stable', fullSkills: 'no' });
+  // Full skills was asked last time, so it isn't now, though confident with work starts it at his finished skills.
+  await answerOnly(where.answersFile, { change: ['experience'], aiExperience: 'confident', codingExperience: 'work', channel: 'nightly' });
+
+  const result = await runWith(where, 'york');
+
+  assert.equal(result.code, 0, result.stdout + result.stderr);
+  const settings = await readSettings(where.home);
+  assert.deepEqual({ channel: settings.channel, fullSkills: settings.fullSkills, github: settings.github }, { channel: 'nightly', fullSkills: 'no', github: false });
+});
+
+test('new experience answers that reveal full skills ask it with its own default for those answers, not the No it was given last time', async (t) => {
+  const where = await makeHome(t);
+  await seedYork(where.home, { aiExperience: 'first-time', codingExperience: 'no', fullSkills: 'no' });
+  await answerOnly(where.answersFile, { change: ['experience'], aiExperience: 'teach', codingExperience: 'work' }, { asked: ['channel', 'fullSkills'] });
+
+  const result = await runWith(where, 'york');
+
+  assert.equal(result.code, 0, result.stdout + result.stderr);
+  const settings = await readSettings(where.home);
+  assert.deepEqual({ channel: settings.channel, fullSkills: settings.fullSkills }, { channel: 'stable', fullSkills: 'finished' });
+});
+
+test('new experience answers that hide a question keep its saved answer', async (t) => {
+  const where = await makeHome(t);
+  await seedYork(where.home, { aiExperience: 'teach', codingExperience: 'work', channel: 'nightly', fullSkills: 'finished' });
+  await answerOnly(where.answersFile, { change: ['experience'], aiExperience: 'first-time', codingExperience: 'no' });
+
+  const result = await runWith(where, 'york');
+
+  assert.equal(result.code, 0, result.stdout + result.stderr);
+  const settings = await readSettings(where.home);
+  assert.deepEqual({ channel: settings.channel, fullSkills: settings.fullSkills }, { channel: 'nightly', fullSkills: 'finished' });
+});
