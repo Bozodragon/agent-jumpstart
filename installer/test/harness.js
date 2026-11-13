@@ -392,7 +392,7 @@ export async function readOnlyLog(home) {
 }
 
 /** Every question a run can put, keyed as the answers file keys them. */
-const questions = ['team', 'topWorkspace', 'googleDriveFolder', 'workspacesLocation', 'channel', 'github', 'workspaces', 'connectors', 'extraTools', 'fullSkills', 'switchOffMemory'];
+const questions = ['team', 'aiExperience', 'codingExperience', 'topWorkspace', 'googleDriveFolder', 'workspacesLocation', 'channel', 'github', 'workspaces', 'connectors', 'extraTools', 'fullSkills', 'switchOffMemory'];
 
 /**
  * An answers file that gives these answers and stops the run if any other question is put to

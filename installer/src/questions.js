@@ -13,6 +13,9 @@ import { existingTopWorkspaces, topWorkspaceIn } from './workspaces.js';
  * @typedef {object} Answers
  * @property {string} [team] The chosen team's name, or `Another team`. Only under a profile that
  *   lists teams. Saved for a later release: Jumpstart and the setup page don't read it yet.
+ * @property {AiExperience} [aiExperience] How much the person has used AI tools (see askExperience,
+ *   which asks it, rather than askQuestions).
+ * @property {CodingExperience} [codingExperience] Whether the person has written code (the same).
  * @property {string | null} googleDriveFolder The confirmed My Drive folder, or null when the profile doesn't use Drive.
  * @property {string} workspacesLocation The folder the top workspace is in.
  * @property {string} topWorkspace The top workspace: a new one, named by the profile, in Google
@@ -48,16 +51,36 @@ import { existingTopWorkspaces, topWorkspaceIn } from './workspaces.js';
 /**
  * Something that answers questions: the person at the screen, or an answers
  * file. `key` names the answer in an answers file.
+ *
+ * `hidden` marks a question this person isn't asked (see theRest): someone at the screen gets
+ * `initial` without seeing it (see askingThePerson, which a front end's own asker is wrapped in),
+ * and so does an answers file that gives an experience answer. An answers file from before the
+ * experience questions, with neither key, still answers it, so it sets up what it did then.
+ * Settings from an earlier run answer a hidden question as they answer any other (see knownFrom).
  * @typedef {object} Asker
  * @property {(q: { key: string, message: string, initial: string | undefined, placeholder: string, validate: (value: string) => Promise<string | undefined> }) => Promise<string>} folder
- * @property {<T extends string>(q: { key: string, message: string, options: Option<T>[], initial: T, other?: T, inTurn?: boolean }) => Promise<T>} choose
+ * @property {<T extends string>(q: { key: string, message: string, options: Option<T>[], initial: T, other?: T, inTurn?: boolean, hidden?: boolean }) => Promise<T>} choose
  *   `other`, if given, is the option whose answer a follow-up `folder` question with the same key
  *   asks for; an answers file gives that folder's whole path in place of the option. `inTurn`
  *   marks a question that may be asked several times in a run: an answers file may give a list,
  *   which answers it one item at a time, and then the default.
- * @property {(q: { key: string, message: string, initial: boolean }) => Promise<boolean>} confirm
+ * @property {(q: { key: string, message: string, initial: boolean, hidden?: boolean }) => Promise<boolean>} confirm
  * @property {<T extends string>(q: { key: string, message: string, options: Option<T>[], initial: T[] }) => Promise<T[]>} pick
  */
+
+/**
+ * The asker for someone at the screen: their front end's, except that a hidden question isn't
+ * put to them and takes its default.
+ * @param {Asker} ask @returns {Asker}
+ */
+export function askingThePerson(ask) {
+  return {
+    folder: (q) => ask.folder(q),
+    choose: (q) => (q.hidden ? Promise.resolve(q.initial) : ask.choose(q)),
+    confirm: (q) => (q.hidden ? Promise.resolve(q.initial) : ask.confirm(q)),
+    pick: (q) => ask.pick(q),
+  };
+}
 
 /** @param {{ name: string, default: boolean }[]} choices */
 const optionsOf = (choices) => choices.map(({ name }) => ({ value: name, label: name }));
@@ -133,6 +156,61 @@ export async function askTeam(profile, ask, log) {
   });
   log.write(`Answer: team: ${JSON.stringify(team)}`);
   return team;
+}
+
+/**
+ * How much the person has used AI tools, as they said it, smallest first.
+ * @typedef {'first-time' | 'dabbled' | 'confident' | 'teach'} AiExperience
+ */
+
+/**
+ * Whether the person has written code, as they said it, smallest first.
+ * @typedef {'no' | 'a-little' | 'small-projects' | 'work'} CodingExperience
+ */
+
+/** @typedef {{ aiExperience: AiExperience, codingExperience: CodingExperience }} Experience */
+
+/** The experience questions' answers, in the person's words. */
+export const experienceOptions = {
+  /** @type {Option<AiExperience>[]} */
+  aiExperience: [
+    { value: 'first-time', label: 'This is my first time' },
+    { value: 'dabbled', label: "I've dabbled a bit" },
+    { value: 'confident', label: "I'm pretty confident" },
+    { value: 'teach', label: 'I could teach you a thing or two' },
+  ],
+  /** @type {Option<CodingExperience>[]} */
+  codingExperience: [
+    { value: 'no', label: 'No' },
+    { value: 'a-little', label: 'A little: spreadsheet formulas, mail merges' },
+    { value: 'small-projects', label: 'A few small projects: Apps Script, Python' },
+    { value: 'work', label: "Yes, it's part of my work" },
+  ],
+};
+
+/**
+ * The experience questions, asked under every profile straight after the team (or first, with
+ * no teams), the second whatever the first answer. Nothing is set up because of them: they
+ * decide only which later questions are asked and what those start with (see theRest).
+ * @param {Asker} ask @param {{ write(line: string): void }} log
+ * @returns {Promise<Experience>}
+ */
+export async function askExperience(ask, log) {
+  const aiExperience = await ask.choose({
+    key: 'aiExperience',
+    message: 'How much experience do you have using AI tools like ChatGPT, Claude, or Gemini?',
+    options: experienceOptions.aiExperience,
+    initial: 'first-time',
+  });
+  log.write(`Answer: aiExperience: ${JSON.stringify(aiExperience)}`);
+  const codingExperience = await ask.choose({
+    key: 'codingExperience',
+    message: 'Have you written code before?',
+    options: experienceOptions.codingExperience,
+    initial: 'no',
+  });
+  log.write(`Answer: codingExperience: ${JSON.stringify(codingExperience)}`);
+  return { aiExperience, codingExperience };
 }
 
 /**

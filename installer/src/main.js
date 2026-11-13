@@ -30,7 +30,7 @@ import { openMachine } from './machine.js';
 import { autoMemoryInUse, switchOffAutoMemory } from './memory.js';
 import { fullSkillsSizes, loadProfile, withFullSkills, withTeam } from './profile.js';
 import { logProxySetting } from './proxy.js';
-import { answersFrom, askChange, askQuestions, askTeam, knownFrom, teamTicksToAdd } from './questions.js';
+import { answersFrom, askChange, askExperience, askQuestions, askTeam, knownFrom, teamTicksToAdd } from './questions.js';
 import { installSkills } from './skills.js';
 import { findT3, installT3, openT3 } from './t3.js';
 import { End, messageOf, Stop } from './stop.js';
@@ -216,6 +216,7 @@ async function main() {
     let team = teamSaved ? undefined : await askTeam(offered, ask, log);
     if (earlier) for (const key of await askChange(offered, earlier, memoryInUse, asker, log)) changing.set(key, []);
     if (teamSaved) team = await askTeam(offered, ask, log);
+    const experience = await askExperience(ask, log);
     const profile = withTeam(offered, team);
     // A team joined or changed asks again each pick it ticks something new in, with its ticks added.
     if (earlier) for (const [key, ticks] of teamTicksToAdd(profile, earlier, team, log)) changing.set(key, ticks);
@@ -229,6 +230,7 @@ async function main() {
     const found = { earlier, memoryInUse, t3Channel: foundT3?.channel };
     const choices = {
       ...(team === undefined ? {} : { team }),
+      ...experience,
       ...(await askQuestions(profile, places, ask, log, found, { machine, frontEnd, attended: !unattended })),
     };
     if (earlier) {
