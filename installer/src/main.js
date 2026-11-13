@@ -236,7 +236,7 @@ async function main() {
     const found = { earlier, memoryInUse, t3Channel: foundT3?.channel };
     const choices = {
       ...(team === undefined ? {} : { team }),
-      ...(await askQuestions(profile, places, ask, log, found, { machine, frontEnd, attended: !unattended })),
+      ...(await askQuestions(profile, places, ask, log, found, { machine, frontEnd, attended: !unattended, keepDownloads: options.debug })),
     };
     if (earlier) {
       const rows = await reusedRows(earlier, choices, reused, options.downloads);

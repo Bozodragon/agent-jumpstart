@@ -45,6 +45,16 @@
 //                                         relative to the home, once it has waited that long in
 //                                         all (My Drive a while after Google Drive signs in).
 //                                         Every wait returns at once.
+//   <home>/fake-machine/browser.json      written by a test: what the browser downloads when an
+//                                         address is opened, standing in for Chrome's download,
+//                                         keyed by the address: { "from": a file of the bytes,
+//                                         "saves": where, relative to the home, "after": ms,
+//                                         "perSecond": bytes, "stopsAt": bytes }. Counted from
+//                                         when the address was opened, it appears `after` so
+//                                         long (at once if not given) as `<saves>.crdownload`,
+//                                         grows by `perSecond` bytes each counted second (all at
+//                                         once if not given), and is renamed to `saves` once
+//                                         whole. With `stopsAt` it grows no further than that.
 //
 // Every program is started with a PATH rebuilt at that moment, as a window opened then would
 // get it: the machine PATH, then the user PATH (both with their %VARIABLES% expanded), then any
@@ -67,7 +77,7 @@
 // given, each time it changes.
 import { spawn } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
-import { access, mkdir, readFile, writeFile } from 'node:fs/promises';
+import { access, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { basename, dirname, join, relative, resolve } from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
 
@@ -150,6 +160,8 @@ export async function keepTrying({ machine, every, patience = machine.patience }
 /** @typedef {{ code: number, output: string }} Ran */
 
 /** @typedef {Partial<Ran> & { creates?: string[], writes?: Record<string, string>, reads?: string[], takes?: number }} Reply What a fake run returns, leaves behind, and looks for as it starts, and how many milliseconds it really takes before it returns. */
+
+/** @typedef {{ from: string, saves: string, after?: number, perSecond?: number, stopsAt?: number }} BrowserDownload What the fake browser downloads when an address is opened (see browser.json above). */
 
 /** @typedef {{ machinePath: string[], userPath: string[] }} PathSources The two PATHs, unexpanded. */
 
@@ -337,6 +349,27 @@ function fakeMachine(folder, home, screen) {
   /** @type {{ patience?: number, appears?: { after: number, folders: string[] }[] }} */
   const waiting = existsSync(join(folder, 'waiting.json')) ? JSON.parse(readFileSync(join(folder, 'waiting.json'), 'utf8')) : {};
   let waited = 0;
+  /** The browser's downloads under way, each with the counted time its address was opened and how much of it is written. @type {{ download: BrowserDownload, opened: number, written: number }[]} */
+  const downloading = [];
+  /** @param {typeof downloading[number]} under @returns {Promise<boolean>} whether it's whole */
+  const grow = async (under) => {
+    const { from, saves, after = 0, perSecond, stopsAt } = under.download;
+    const elapsed = waited - under.opened - after;
+    if (elapsed < 0) return false;
+    const bytes = await readFile(from);
+    const due = perSecond === undefined ? bytes.length : Math.floor((elapsed / 1000) * perSecond);
+    const reached = Math.min(bytes.length, stopsAt ?? bytes.length, due);
+    const target = inside(home, saves);
+    await mkdir(dirname(target), { recursive: true });
+    if (reached === bytes.length) {
+      await writeFile(target, bytes);
+      await rm(`${target}.crdownload`, { force: true });
+      return true;
+    }
+    if (reached !== under.written) await writeFile(`${target}.crdownload`, bytes.subarray(0, reached));
+    under.written = reached;
+    return false;
+  };
 
   return {
     machine: {
@@ -348,6 +381,7 @@ function fakeMachine(folder, home, screen) {
           if (after <= before || after > waited) continue;
           for (const path of folders) await mkdir(inside(home, path), { recursive: true });
         }
+        for (const under of [...downloading]) if (await grow(under)) downloading.splice(downloading.indexOf(under), 1);
       },
       async userPath() {
         return splitPath((await environment()).Path ?? '');
@@ -371,6 +405,9 @@ function fakeMachine(folder, home, screen) {
       },
       async openPage(url) {
         await write('pages.json', [...(await read('pages.json', [])), url]);
+        /** @type {Record<string, BrowserDownload>} */
+        const downloads = await read('browser.json', {});
+        if (downloads[url]) downloading.push({ download: downloads[url], opened: waited, written: -1 });
       },
     },
     pathSources,

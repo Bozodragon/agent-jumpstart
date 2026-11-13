@@ -24,12 +24,16 @@ const profilesFolder = fileURLToPath(new URL('../../profiles/', import.meta.url)
  *   `top` is the top workspace's folder name, created in the confirmed location with the chosen
  *   workspaces inside it. `defaultLocation` is the folder, within the user's profile folder,
  *   offered for workspaces when they aren't in Google Drive.
- * @property {{ softwareCenter?: string, softwareCenterOffer?: string }} [googleDrive] Under a
+ * @property {{ softwareCenter?: string, softwareCenterOffer?: string, hostedInstaller?: import('./google-drive.js').HostedInstaller }} [googleDrive] Under a
  *   profile whose workspaces live in Google Drive: `softwareCenter` is the name (or part of it)
  *   that the laptop's Software Center lists Google Drive under. With it, a laptop without Drive
  *   is checked for a Software Center that offers Drive, and the person is offered to install it
  *   from there; without it, that check never runs. `softwareCenterOffer` is what's said then,
  *   in the organisation's words ("York's Software Center can install it for you...").
+ *   `hostedInstaller` is a copy of Google's Drive installer kept on the organisation's shared
+ *   drive: its Drive file `id`, the `version` it installs, its `size` in bytes and its `sha256`.
+ *   When Software Center offers that same version, it's downloaded through the browser and run
+ *   before Software Center is offered.
  * @property {{ defaultModel?: string, effort?: string, codex?: boolean }} [t3] What T3 Code's
  *   settings get, just before the installer installs it and on every run for a T3 already there
  *   (only what's missing: a key the person already has keeps its value): new threads use Claude

@@ -46,6 +46,8 @@ export async function readProfile(name) {
  * @typedef {'signed-in' | 'signed-out' | 'missing' | 'signed-in, no My Drive yet' | 'installed, never opened'} GoogleDriveState
  */
 
+/** @typedef {{ from: string, saves: string, after?: number, perSecond?: number, stopsAt?: number }} BrowserDownload See the fake machine's `setBrowser`. */
+
 /** @typedef {{ code?: number, output?: string, creates?: string[], writes?: Record<string, string>, reads?: string[], takes?: number }} Reply What a faked program run returns, leaves behind, and looks for as it starts (its record says which of `reads` it `found`), and how many milliseconds it really takes before it returns (`takes`, to watch a spinner over a fake run; only claude.test.js uses it, in its test of `takes` itself, over Claude Code's install). */
 
 /**
@@ -293,6 +295,16 @@ export function fakeMachine(home) {
      *   `folders` relative to the home
      */
     setWaiting: (waiting) => writeJson('waiting.json', waiting),
+    /**
+     * What the browser downloads when an address is opened, standing in for Chrome's download:
+     * the bytes of `from`, saved in the home at `saves`. It appears `after` milliseconds of
+     * counted time from when the address was opened (at once if not given) and grows by
+     * `perSecond` bytes each counted second (all at once if not given), as `<saves>.crdownload`
+     * until it's whole, when it's renamed to `saves`. With `stopsAt`, it grows no further than
+     * so many bytes, and is never renamed.
+     * @param {Record<string, BrowserDownload>} downloads by the address that starts each one
+     */
+    setBrowser: (downloads) => writeJson('browser.json', downloads),
     /**
      * Keyed by the program's file name, optionally followed by its first arguments
      * (`"node.exe --version"`, `"skills.cmd add"`); the longest key that matches wins. Runs with no reply succeed with no output.
