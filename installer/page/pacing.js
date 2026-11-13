@@ -277,6 +277,8 @@ const makesAScreen = new Set(['step', 'notice', 'problem', 'summary', 'finish', 
  * @param {Screen} screen @param {Page} page @param {number} now @param {number} behind
  */
 function isThrough(screen, page, now, behind) {
+  // Once the run is stopping, nothing from before is waited on: the stop screen comes next.
+  if (screen.kind !== 'ending' && screen.kind !== 'problem' && page.events.some((event) => event.type === 'stopping' && event.id > screen.key)) return true;
   switch (screen.kind) {
     case 'question':
       return screen.answer !== undefined;

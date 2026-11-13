@@ -194,6 +194,8 @@ async function main() {
   if (options.downloads) log.write(`Downloads from: ${options.downloads}`);
   if (options.profiles) log.write(`Profiles from: ${options.profiles}`);
   const machine = openMachine(places, log, frontEnd.screen);
+  // A page closed partway is waited for at the next question by the machine's clock, as above.
+  page?.use({ waitFor: machine.waitFor, say: (line) => log.write(`Installer page: ${line}`) });
   // Nothing happens until a page is there to show it. With none, the run stops before it has run
   // or changed anything, and the Bootstrap, seeing it end with no page, runs it in the window.
   /** Why no page can be counted on, if none can: the Bootstrap knows of one only from the connected file. @type {string | undefined} */

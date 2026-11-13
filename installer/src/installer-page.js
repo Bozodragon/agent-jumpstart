@@ -19,9 +19,19 @@
 //   refused  { question, answer, reason }   a folder that won't do; the question is still open
 //   output   { text }                       what a program on screen printed
 //   finish   { text }                       the run's last words
+//   stopping {}                             the run is stopping (Stop was pressed, or the page was
+//                                            closed and none came back): nothing before this is
+//                                            waited on any more, and the stop screen follows
+//
+// Stopping: Stop on the page throws `Stop('Stopped at your request.')` from whichever call the
+// run is waiting on (a question, or a busy, whose task is left to itself), or from the next one
+// it makes, if it's waiting on none. A run whose every page has gone finishes the step it's on,
+// then waits at the next question about 10 minutes for a page to come back (a reload, the
+// Bootstrap reopening it, a second window), and stops the same way if none does.
 import { mkdir, rename, rm, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { openPageServer } from './page-server.js';
+import { Stop } from './stop.js';
 
 /**
  * How often, at most, a busy's progress is sent: a download reports every piece it gets, far
@@ -29,11 +39,21 @@ import { openPageServer } from './page-server.js';
  */
 const progressEvery = 200;
 
+/** How long a run with no page open waits at a question for one to come back, before it stops. */
+const comeBackWithin = 10 * 60_000;
+
+/**
+ * Waits for something from outside the Installer for at most `ms`, and says whether it happened:
+ * the machine's `waitFor`, once `use` has given it.
+ * @typedef {(happens: Promise<unknown>, ms: number) => Promise<boolean>} WaitFor
+ */
+
 /**
  * @typedef {object} OpenQuestion
  * @property {(answer: unknown) => Promise<{ value: unknown } | { refused: string }>} check What
  *   the answer means, or why it won't do.
  * @property {(value: unknown) => void} resolve
+ * @property {(error: Stop) => void} reject Ends the wait for it, as the run stops.
  * @property {boolean} checking Whether an answer to it is being checked now.
  */
 
@@ -57,15 +77,55 @@ export async function writeWhole(path, text) {
  * close the window. `connected` resolves once it's written, and rejects if it can't be.
  * @param {{ addressFile: string, connectedFile: string, page?: string }} options `page`: the built
  *   page's folder, for tests
- * @returns {Promise<import('./front-end.js').FrontEnd & { address: string, connected: Promise<void> }>}
+ * @returns {Promise<import('./front-end.js').FrontEnd & { address: string, connected: Promise<void>, use: (tools: { waitFor: WaitFor, say: (line: string) => void }) => void }>}
+ *   `use` gives it the machine's clock, which counts the wait for a page to come back, and a
+ *   way to log, once `main` has them.
  */
 export async function openInstallerPage({ addressFile, connectedFile, page }) {
   /** @type {Map<number, OpenQuestion>} */
   const open = new Map();
   let nextQuestion = 1;
+  /** @type {WaitFor} */
+  let waitFor = (happens, ms) =>
+    new Promise((resolve) => {
+      const timer = setTimeout(() => resolve(false), ms);
+      happens.then(() => {
+        clearTimeout(timer);
+        resolve(true);
+      });
+    });
+  /** @type {(line: string) => void} */
+  let say = () => {};
+  /** Why the run is stopping, once it is: every call that waits throws it from then on. @type {Stop | undefined} */
+  let stopped;
+  /** @type {(error: Stop) => void} */
+  let stopNow = () => {};
+  /** Rejects as the run stops, for whatever it's waiting on then. @type {Promise<never>} */
+  const stopping = new Promise((_, reject) => (stopNow = reject));
+  stopping.catch(() => {});
+  /** Whether the run has had its last words, after which there's nothing to stop. */
+  let over = false;
+
+  /**
+   * Stops the run: whatever it's waiting on throws `why`, and so does whatever it waits on next.
+   * @param {Stop} why
+   */
+  const stop = (why) => {
+    if (stopped || over) return;
+    stopped = why;
+    server.send({ type: 'stopping' });
+    for (const asked of open.values()) asked.reject(why);
+    open.clear();
+    stopNow(why);
+  };
 
   const server = await openPageServer({
     page,
+    stop() {
+      if (stopped || over) return;
+      say('Stop was pressed');
+      stop(new Stop('Stopped at your request.'));
+    },
     async answer(posted) {
       const { question, answer } = /** @type {{ question?: unknown, answer?: unknown }} */ (posted ?? {});
       const asked = typeof question === 'number' ? open.get(question) : undefined;
@@ -78,6 +138,8 @@ export async function openInstallerPage({ addressFile, connectedFile, page }) {
       } finally {
         asked.checking = false;
       }
+      // Stopped while it was being checked: the question isn't asked any more.
+      if (!open.has(question)) return { status: 409, body: { ok: false, reason: 'The Installer has stopped.' } };
       if ('refused' in checked) {
         server.send({ type: 'refused', question, answer, reason: checked.refused });
         return { status: 422, body: { ok: false, reason: checked.refused } };
@@ -107,12 +169,51 @@ export async function openInstallerPage({ addressFile, connectedFile, page }) {
    * @param {OpenQuestion['check']} check
    * @returns {Promise<any>}
    */
-  const ask = (question, check) =>
-    new Promise((resolve) => {
+  const ask = (question, check) => {
+    if (stopped) return Promise.reject(stopped);
+    return new Promise((resolve, reject) => {
       const id = nextQuestion++;
-      open.set(id, { check, resolve, checking: false });
+      /** @type {() => void} */
+      let settle = () => {};
+      /** Resolves once it's answered, or the run stops. @type {Promise<void>} */
+      const settled = new Promise((done) => (settle = () => done(undefined)));
+      open.set(id, {
+        check,
+        checking: false,
+        resolve(value) {
+          settle();
+          resolve(value);
+        },
+        reject(error) {
+          settle();
+          reject(error);
+        },
+      });
       server.send({ type: 'question', question: id, ...question });
+      waitForAPage(id, settled);
     });
+  };
+
+  /**
+   * While question `id` is open: whenever no page is, waits for one to come back, and stops the
+   * run if none does within `comeBackWithin`.
+   * @param {number} id @param {Promise<void>} settled
+   */
+  const waitForAPage = async (id, settled) => {
+    const minutes = comeBackWithin / 60_000;
+    for (;;) {
+      await Promise.race([server.whenNone(), settled]);
+      if (!open.has(id)) return;
+      say(`no page is open, so the run waits at this question, up to ${minutes} minutes, for one to come back`);
+      const back = await waitFor(Promise.race([server.whenConnected(), settled]), comeBackWithin);
+      if (!open.has(id)) return;
+      if (!back) {
+        say(`no page came back within ${minutes} minutes`);
+        return stop(new Stop(`The Installer page was closed, and wasn't opened again within ${minutes} minutes.`));
+      }
+      say('a page is open again');
+    }
+  };
 
   /** @param {string} reason */
   const refuse = async (reason) => ({ refused: reason });
@@ -145,6 +246,9 @@ export async function openInstallerPage({ addressFile, connectedFile, page }) {
   return {
     address: server.address,
     connected,
+    use(tools) {
+      ({ waitFor, say } = tools);
+    },
     start(title, links) {
       server.send({ type: 'start', title, ...links });
     },
@@ -152,11 +256,13 @@ export async function openInstallerPage({ addressFile, connectedFile, page }) {
       server.send({ type: 'step', text });
     },
     async busy(message, task, ended) {
+      if (stopped) throw stopped;
       const busy = server.send({ type: 'busy', message });
       let last = -Infinity;
       let shownReceived = -1;
       /** @type {import('./front-end.js').Progress} */
       const progress = (received, total) => {
+        if (stopped) return;
         const now = performance.now();
         const whole = total !== undefined && received >= total;
         if (received === shownReceived || (!whole && now - last < progressEvery)) return;
@@ -166,9 +272,11 @@ export async function openInstallerPage({ addressFile, connectedFile, page }) {
       };
       let result;
       try {
-        result = await task(progress);
+        // A stop doesn't wait for the task: what it started is left to finish by itself.
+        result = await Promise.race([task(progress), stopping]);
       } catch (error) {
-        server.send({ type: 'ended', busy, text: message, ok: false });
+        // Stopped, it simply ended, with no mark of failure.
+        server.send({ type: 'ended', busy, text: message, ...(error === stopped ? {} : { ok: false }) });
         throw error;
       }
       const { text, ok } = ended?.(result) ?? { text: message, ok: true };
@@ -213,9 +321,11 @@ export async function openInstallerPage({ addressFile, connectedFile, page }) {
     screen,
     description: `Front end: the Installer page, on 127.0.0.1 port ${server.port}`,
     finish(text) {
+      over = true;
       server.send({ type: 'finish', text });
     },
     async close() {
+      over = true;
       await server.close();
       await connectedWritten;
       await rm(addressFile, { force: true });

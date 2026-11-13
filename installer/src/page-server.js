@@ -9,9 +9,12 @@
 //   GET  /<secret>/          the page (index.html), and its files beside it (app.js, fonts/...)
 //   GET  /<secret>/events    the event stream: first a named `connection` event, `{ connection,
 //                            before }` (how many events the run had sent by then), then every
-//                            event so far, then each as it's sent
+//                            event so far, then each as it's sent; and once the run is over, a
+//                            named `closing` event, after which nothing more comes and the page
+//                            stops listening (rather than keep reconnecting to a closed server)
 //   POST /<secret>/answer    an answer, `{ question, answer }`, passed to `answer`
 //   POST /<secret>/seen      `{ connection, event }`: that page has every event up to `event`
+//   POST /<secret>/stop      the person pressed Stop, passed to `stop`
 //   GET  /favicon.ico        answered with nothing, so the browser stops asking
 //
 // The page's files are read into memory as it opens, so nothing can change them under a running
@@ -74,8 +77,10 @@ const largestPost = 64 * 1024;
  * @property {() => number} connections How many pages are connected now.
  * @property {() => Promise<void>} whenConnected Resolves once a page is connected: at once if
  *   one is now, otherwise when the next one connects.
- * @property {() => Promise<void>} close Waits until each connected page says it has the last
- *   event, or about 2 seconds, then closes the server and every connection.
+ * @property {() => Promise<void>} whenNone Resolves once no page is connected: at once if none
+ *   is now, otherwise when the last one goes.
+ * @property {() => Promise<void>} close Tells each connected page the run is over, waits until
+ *   each says it has the last event, or about 2 seconds, then closes the server and every connection.
  */
 
 /**
@@ -101,11 +106,12 @@ async function readPage(folder) {
 
 /**
  * Starts the server. It's open, and listening, once this resolves.
- * @param {{ answer: AnswerHandler, page?: string }} options `answer` is given every answer a page
- *   posts; `page` is the built page's folder (`builtPage`, if not given).
+ * @param {{ answer: AnswerHandler, stop?: () => void, page?: string }} options `answer` is given
+ *   every answer a page posts; `stop`, each press of Stop; `page` is the built page's folder
+ *   (`builtPage`, if not given).
  * @returns {Promise<PageServer>}
  */
-export async function openPageServer({ answer, page = builtPage }) {
+export async function openPageServer({ answer, stop = () => {}, page = builtPage }) {
   const files = await readPage(page);
   const secret = randomBytes(24).toString('base64url');
   /** @type {{ id: number, data: string }[]} */
@@ -117,6 +123,10 @@ export async function openPageServer({ answer, page = builtPage }) {
   let changed = () => {};
   /** Those waiting for a page to connect. @type {(() => void)[]} */
   let awaitingPage = [];
+  /** Those waiting for the last page to go. @type {(() => void)[]} */
+  let awaitingNone = [];
+  /** Whether the run is over and the server closing. */
+  let closing = false;
   let port = 0;
 
   /** @param {import('node:http').ServerResponse} response @param {number} status @param {object} [body] */
@@ -124,6 +134,9 @@ export async function openPageServer({ answer, page = builtPage }) {
     response.writeHead(status, { ...sharedHeaders, 'Content-Type': 'application/json; charset=utf-8' });
     response.end(body === undefined ? undefined : JSON.stringify(body));
   };
+
+  /** Told to every page as the server closes: the run is over, so the page stops listening. */
+  const closingEvent = 'event: closing\ndata: {}\n\n';
 
   /** @param {{ id: number, data: string }} event */
   const framed = (event) => `id: ${event.id}\ndata: ${event.data}\n\n`;
@@ -163,12 +176,17 @@ export async function openPageServer({ answer, page = builtPage }) {
     // pausing on it, and pace only what happens from now on.
     response.write(`event: connection\ndata: ${JSON.stringify({ connection, before: events.length })}\n\n`);
     for (const event of events) if (event.id > from) response.write(framed(event));
+    if (closing) response.write(closingEvent);
     streams.set(connection, { response, seen: from });
     for (const wake of awaitingPage) wake();
     awaitingPage = [];
     response.once('close', () => {
       streams.delete(connection);
       changed();
+      if (streams.size === 0) {
+        for (const wake of awaitingNone) wake();
+        awaitingNone = [];
+      }
     });
   };
 
@@ -209,6 +227,10 @@ export async function openPageServer({ answer, page = builtPage }) {
         }
         return reply(response, 200, { ok: true });
       }
+      if (rest === 'stop') {
+        stop();
+        return reply(response, 200, { ok: true });
+      }
       return reply(response, 404, { reason: 'Not found.' });
     }
     if (request.method !== 'GET') return reply(response, 405, { reason: 'Not allowed.' });
@@ -243,7 +265,10 @@ export async function openPageServer({ answer, page = builtPage }) {
     },
     connections: () => streams.size,
     whenConnected: () => (streams.size > 0 ? Promise.resolve() : new Promise((resolve) => awaitingPage.push(() => resolve()))),
+    whenNone: () => (streams.size === 0 ? Promise.resolve() : new Promise((resolve) => awaitingNone.push(() => resolve()))),
     async close() {
+      closing = true;
+      for (const { response } of streams.values()) response.write(closingEvent);
       const last = events.length;
       const allSeen = () => [...streams.values()].every(({ seen }) => seen >= last);
       const deadline = performance.now() + patienceAtTheEnd;
