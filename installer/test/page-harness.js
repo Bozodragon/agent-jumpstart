@@ -17,10 +17,18 @@ import { program, repo, stateFolder } from './harness.js';
 
 /**
  * The file the Installer writes the page's address to, in its own folder in local AppData, where
- * the Bootstrap looks for it. It holds one line.
+ * the Bootstrap looks for it. It's also the lock that says an Installer is running: its first line
+ * is the address, its second the Installer's process id, and it's removed as the run ends.
  * @param {string} home
  */
 export const addressFile = (home) => join(stateFolder(home), 'page-address.txt');
+
+/**
+ * The file the Installer writes once a page has connected, holding that page's address, so the
+ * Bootstrap knows it can close the window.
+ * @param {string} home
+ */
+export const connectedFile = (home) => join(stateFolder(home), 'page-connected.txt');
 
 /**
  * Starts the real Installer with the page front end: `--home`, `--downloads` and no answers file.
@@ -64,7 +72,7 @@ export async function runOnPage(where, profile, extra = [], { internet } = {}) {
   /** @type {string | undefined} */
   let address;
   while (address === undefined) {
-    address = await readFile(addressFile(where.home), 'utf8').then((text) => text.trim() || undefined, () => undefined);
+    address = await readFile(addressFile(where.home), 'utf8').then((text) => text.split(/\r?\n/)[0].trim() || undefined, () => undefined);
     if (address === undefined) {
       if (gone) throw new Error(`the run ended without writing the page's address:\n${stdout}\n${stderr}`);
       await new Promise((resolve) => setTimeout(resolve, 25));
@@ -78,6 +86,8 @@ export async function runOnPage(where, profile, extra = [], { internet } = {}) {
     address: page,
     /** How the run ended, once it has. */
     ended,
+    /** The Installer's process id. */
+    pid: child.pid,
     /** Ends the run at once, with nothing tidied up. */
     kill: () => child.kill(),
     /**

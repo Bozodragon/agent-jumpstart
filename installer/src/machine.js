@@ -44,7 +44,11 @@
 //                                         [{ "after": ms, "folders": [...] }] makes folders,
 //                                         relative to the home, once it has waited that long in
 //                                         all (My Drive a while after Google Drive signs in).
-//                                         Every wait returns at once.
+//                                         Every wait returns at once, except a wait for something
+//                                         from outside the Installer (`waitFor`, such as a test
+//                                         connecting as the page), which is given "outside": ms
+//                                         of real time (10 seconds if not written) to happen in
+//                                         before the rest of the wait is counted.
 //   <home>/fake-machine/browser.json      written by a test: what the browser downloads when an
 //                                         address is opened, standing in for Chrome's download,
 //                                         keyed by the address: { "from": a file of the bytes,
@@ -117,6 +121,10 @@ import { setTimeout as sleep } from 'node:timers/promises';
  *   program has returned, such as an app it started opening. None for the fake, which does
  *   everything a program does before the run returns, unless a test gives it some.
  * @property {(ms: number) => Promise<void>} wait Waits this long. The fake only counts it.
+ * @property {(happens: Promise<unknown>, ms: number) => Promise<boolean>} waitFor Waits for
+ *   something from outside the Installer, such as a page connecting, for at most this long, and
+ *   says whether it happened. The fake gives it a little real time (waiting.json's `outside`), then
+ *   only counts the rest.
  */
 
 /**
@@ -346,7 +354,7 @@ function fakeMachine(folder, home, screen) {
   /** @returns {Promise<PathSources>} */
   const pathSources = async () => ({ machinePath: await read('machine-path.json', []), userPath: splitPath((await environment()).Path ?? '') });
   // Read once, when the run starts: patience is a number, not a promise.
-  /** @type {{ patience?: number, appears?: { after: number, folders: string[] }[] }} */
+  /** @type {{ patience?: number, appears?: { after: number, folders: string[] }[], outside?: number }} */
   const waiting = existsSync(join(folder, 'waiting.json')) ? JSON.parse(readFileSync(join(folder, 'waiting.json'), 'utf8')) : {};
   let waited = 0;
   /** The browser's downloads under way, each with the counted time its address was opened and how much of it is written. @type {{ download: BrowserDownload, opened: number, written: number }[]} */
@@ -371,17 +379,29 @@ function fakeMachine(folder, home, screen) {
     return false;
   };
 
+  /** @param {number} ms */
+  const wait = async (ms) => {
+    const before = waited;
+    waited += ms;
+    for (const { after, folders } of waiting.appears ?? []) {
+      if (after <= before || after > waited) continue;
+      for (const path of folders) await mkdir(inside(home, path), { recursive: true });
+    }
+    for (const under of [...downloading]) if (await grow(under)) downloading.splice(downloading.indexOf(under), 1);
+  };
+
   return {
     machine: {
       patience: waiting.patience ?? 0,
-      async wait(ms) {
-        const before = waited;
-        waited += ms;
-        for (const { after, folders } of waiting.appears ?? []) {
-          if (after <= before || after > waited) continue;
-          for (const path of folders) await mkdir(inside(home, path), { recursive: true });
-        }
-        for (const under of [...downloading]) if (await grow(under)) downloading.splice(downloading.indexOf(under), 1);
+      wait,
+      // A test standing in for the outside (a page) acts in real time, so it's given some before
+      // the wait is counted out.
+      async waitFor(happens, ms) {
+        let happened = false;
+        happens.then(() => (happened = true), () => {});
+        if (await withinRealTime(happens, waiting.outside ?? 10_000)) return true;
+        await wait(ms);
+        return happened;
       },
       async userPath() {
         return splitPath((await environment()).Path ?? '');
@@ -465,6 +485,21 @@ function fakeMachine(folder, home, screen) {
     }
     if (found.takes) await sleep(found.takes);
     return { code: found.code ?? 0, output: found.output ?? '' };
+  }
+}
+
+/**
+ * Whether something happens within this many milliseconds of real time. The timer goes as soon
+ * as it does, so it never holds the Installer open.
+ * @param {Promise<unknown>} happens @param {number} ms
+ * @returns {Promise<boolean>}
+ */
+async function withinRealTime(happens, ms) {
+  const timer = new AbortController();
+  try {
+    return await Promise.race([happens.then(() => true), sleep(ms, false, { signal: timer.signal })]);
+  } finally {
+    timer.abort();
   }
 }
 
@@ -567,6 +602,7 @@ function realMachine(loggedRun, screen) {
       },
       patience: 120_000,
       wait: (ms) => sleep(ms),
+      waitFor: withinRealTime,
       openPage(url) {
         return new Promise((resolve, reject) => {
           const child = spawn(system32('rundll32.exe'), ['url.dll,FileProtocolHandler', url], { detached: true, stdio: 'ignore' });

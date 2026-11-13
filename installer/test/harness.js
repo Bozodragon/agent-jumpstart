@@ -313,8 +313,10 @@ export function fakeMachine(home) {
     /**
      * Time, which the fake only counts: how long the installer may wait for something (its
      * patience; none unless set), and what appears once it has waited so long in all, such as
-     * My Drive a few seconds after Google Drive signs in. Each wait returns at once.
-     * @param {{ patience: number, appears?: { after: number, folders: string[] }[] }} waiting
+     * My Drive a few seconds after Google Drive signs in. Each wait returns at once, except that
+     * something from outside the Installer, such as a page connecting, is given `outside`
+     * milliseconds of real time (10 seconds if not set) before a wait for it is counted out.
+     * @param {{ patience?: number, appears?: { after: number, folders: string[] }[], outside?: number }} waiting
      *   `folders` relative to the home
      */
     setWaiting: (waiting) => writeJson('waiting.json', waiting),

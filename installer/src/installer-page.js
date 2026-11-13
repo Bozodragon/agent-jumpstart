@@ -38,12 +38,28 @@ const progressEvery = 200;
  */
 
 /**
- * Opens the page front end: starts the page's server and writes its address to `addressFile`,
- * where the Bootstrap finds it. The file is removed again as the front end closes.
- * @param {{ addressFile: string, page?: string }} options `page`: the built page's folder, for tests
- * @returns {Promise<import('./front-end.js').FrontEnd & { address: string }>}
+ * Writes a file under another name and renames it, so whoever looks for it (the Bootstrap, a
+ * test) never reads it empty or half-written.
+ * @param {string} path @param {string} text
  */
-export async function openInstallerPage({ addressFile, page }) {
+async function writeWhole(path, text) {
+  await mkdir(dirname(path), { recursive: true });
+  const writing = `${path}.${process.pid}.partial`;
+  await writeFile(writing, text);
+  await rename(writing, path);
+}
+
+/**
+ * Opens the page front end: starts the page's server and writes its address to `addressFile`,
+ * where the Bootstrap finds it, with this process's id on the line after. That file is the lock
+ * that says an Installer is running, and it's removed again as the front end closes. Once a page
+ * first connects, its address is written to `connectedFile`, which tells the Bootstrap it can
+ * close the window.
+ * @param {{ addressFile: string, connectedFile: string, page?: string }} options `page`: the built
+ *   page's folder, for tests
+ * @returns {Promise<import('./front-end.js').FrontEnd & { address: string, whenConnected: () => Promise<void> }>}
+ */
+export async function openInstallerPage({ addressFile, connectedFile, page }) {
   /** @type {Map<number, OpenQuestion>} */
   const open = new Map();
   let nextQuestion = 1;
@@ -72,12 +88,13 @@ export async function openInstallerPage({ addressFile, page }) {
       return { status: 200, body: { ok: true } };
     },
   });
-  // Written under another name and renamed, so whoever looks for it (the Bootstrap, a test)
-  // never reads it empty or half-written.
-  await mkdir(dirname(addressFile), { recursive: true });
-  const writing = `${addressFile}.${process.pid}.partial`;
-  await writeFile(writing, `${server.address}\n`);
-  await rename(writing, addressFile);
+  await writeWhole(addressFile, `${server.address}\n${process.pid}\n`);
+  // For the first page only: the Bootstrap waits for it once. A file that can't be written leaves
+  // the Bootstrap to fall back to the window, which is all it would do without one.
+  let connectedWritten = Promise.resolve();
+  server.whenConnected().then(() => {
+    connectedWritten = writeWhole(connectedFile, `${server.address}\n`).catch(() => {});
+  });
 
   /**
    * Sends a question and waits for its first answer that `check` accepts.
@@ -122,6 +139,7 @@ export async function openInstallerPage({ addressFile, page }) {
 
   return {
     address: server.address,
+    whenConnected: server.whenConnected,
     start(title) {
       server.send({ type: 'start', title });
     },
@@ -194,6 +212,7 @@ export async function openInstallerPage({ addressFile, page }) {
     },
     async close() {
       await server.close();
+      await connectedWritten;
       await rm(addressFile, { force: true });
     },
   };

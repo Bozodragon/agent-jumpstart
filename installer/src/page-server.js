@@ -70,6 +70,8 @@ const largestPost = 64 * 1024;
  * @property {(event: Record<string, unknown>) => number} send Adds an event to the run's events
  *   and sends it to every connected page. Its id, which numbers the events from 1, is returned.
  * @property {() => number} connections How many pages are connected now.
+ * @property {() => Promise<void>} whenConnected Resolves once a page is connected: at once if
+ *   one is now, otherwise when the next one connects.
  * @property {() => Promise<void>} close Waits until each connected page says it has the last
  *   event, or about 2 seconds, then closes the server and every connection.
  */
@@ -111,6 +113,8 @@ export async function openPageServer({ answer, page = builtPage }) {
   let nextConnection = 1;
   /** Woken whenever a page says what it has seen, or goes away. @type {() => void} */
   let changed = () => {};
+  /** Those waiting for a page to connect. @type {(() => void)[]} */
+  let awaitingPage = [];
   let port = 0;
 
   /** @param {import('node:http').ServerResponse} response @param {number} status @param {object} [body] */
@@ -156,6 +160,8 @@ export async function openPageServer({ answer, page = builtPage }) {
     response.write(`event: connection\ndata: ${JSON.stringify({ connection })}\n\n`);
     for (const event of events) if (event.id > from) response.write(framed(event));
     streams.set(connection, { response, seen: from });
+    for (const wake of awaitingPage) wake();
+    awaitingPage = [];
     response.once('close', () => {
       streams.delete(connection);
       changed();
@@ -232,6 +238,7 @@ export async function openPageServer({ answer, page = builtPage }) {
       return id;
     },
     connections: () => streams.size,
+    whenConnected: () => (streams.size > 0 ? Promise.resolve() : new Promise((resolve) => awaitingPage.push(() => resolve()))),
     async close() {
       const last = events.length;
       const allSeen = () => [...streams.values()].every(({ seen }) => seen >= last);
