@@ -3,9 +3,9 @@
 // input. The Bootstrap's own side is checked in pasted-lines.test.js.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
-import { claudeProgram, exists, fakeMachine, makeHome, readOnlyLog, run, runWith, stateFolder, supplyT3, t3Leaves } from './harness.js';
+import { claudeProgram, exists, fakeMachine, makeHome, readOnlyLog, repo, run, runWith, stateFolder, supplyT3, t3Leaves } from './harness.js';
 import { addressFile, answerEverything, connectedFile, runOnPage } from './page-harness.js';
 
 /** @param {string} path @returns {Promise<string[] | undefined>} its lines, or nothing if it isn't there */
@@ -95,4 +95,13 @@ test("on the page, every program the Installer starts gets piped input, never th
     "in the window, a program on screen reads the person's window",
   );
   assert.deepEqual(windowRuns.filter((ran) => !ran.onScreen && ran.input !== 'pipe'), [], 'and every other program a pipe');
+});
+
+test("the page never tells an app window from a tab by the browser's toolbar, which is visible in an app window too (display-mode: standalone says)", async () => {
+  // Found on a York laptop (#90): window.toolbar.visible is true in Chrome's --app window as well.
+  const folder = join(repo, 'installer', 'page');
+  for (const name of await readdir(folder)) {
+    if (!/\.(js|css|html)$/.test(name)) continue;
+    assert.doesNotMatch(await readFile(join(folder, name), 'utf8'), /\btoolbar\b/, name);
+  }
 });
