@@ -35,7 +35,8 @@ import { installSkills } from './skills.js';
 import { findT3, installT3, openT3 } from './t3.js';
 import { End, messageOf, Stop } from './stop.js';
 import { installTools, isRecord } from './tools.js';
-import * as ui from './ui.js';
+import { openTerminal } from './terminal.js';
+import { inWords } from './text.js';
 import { setWindowTitle } from './window.js';
 import { addToT3, createWorkspaces } from './workspaces.js';
 
@@ -105,7 +106,7 @@ async function readEarlierSettings(path, profile, log) {
  */
 async function reusedRows(earlier, choices, reused, downloads) {
   /** @param {string[]} names */
-  const list = (names) => (names.length === 0 ? 'None' : ui.inWords(names));
+  const list = (names) => (names.length === 0 ? 'None' : inWords(names));
   /** @type {[string, string][]} */
   const rows = [];
   if (reused.has('team') && choices.team !== undefined) rows.push(['Team', choices.team]);
@@ -151,17 +152,20 @@ async function main() {
     return 2;
   }
 
+  // Everything the person sees and answers from here on goes through it: steps are given it in
+  // their context, as they're given the machine.
+  const frontEnd = await openTerminal();
   const places = findPlaces(options.home);
   const log = openLog(places.logs, { debug: options.debug });
   log.write(`Installer started with Node ${process.version}`);
   log.write(`Profile: ${options.profile}`);
   log.write(`Debug: ${options.debug ? 'on' : 'off'}`);
   log.write(`Home: ${places.home}`);
-  log.write(`Window: ${ui.inWindowsTerminal ? 'Windows Terminal' : 'not Windows Terminal, most likely the old console'}`);
+  log.write(frontEnd.description);
   if (options.answers) log.write(`Answers from: ${options.answers}`);
   if (options.downloads) log.write(`Downloads from: ${options.downloads}`);
   if (options.profiles) log.write(`Profiles from: ${options.profiles}`);
-  const machine = openMachine(places, log);
+  const machine = openMachine(places, log, frontEnd.screen);
   if (options.debug) await logUserPath(machine, log, 'before');
   await logProxySetting(machine, log);
   /**
@@ -186,11 +190,11 @@ async function main() {
     const unattended = answers !== undefined;
 
     // The setup page isn't opened: the person has just pasted its line into this window.
-    ui.start(`Agent Jumpstart · ${offered.name}`);
+    frontEnd.start(`Agent Jumpstart · ${offered.name}`);
 
     // A re-run asks nothing an earlier run already wrote down, unless the person chooses to change it.
     const earlier = await readEarlierSettings(places.settings, offered.id, log);
-    const asker = unattended ? answersFrom(answers) : ui.ask;
+    const asker = unattended ? answersFrom(answers) : frontEnd.ask;
     /** @type {Set<string>} */
     const reused = new Set();
     /**
@@ -201,7 +205,7 @@ async function main() {
     const changing = new Map();
     const ask = earlier ? knownFrom(earlier, asker, log, reused, changing) : asker;
     /** @type {import('./tools.js').Context} */
-    const context = { places, machine, downloads: options.downloads, keepDownloads: options.debug, log, attended: !unattended };
+    const context = { places, machine, frontEnd, downloads: options.downloads, keepDownloads: options.debug, log, attended: !unattended };
     // What's already on the laptop decides what's asked. Memory's sign is looked for before
     // what to change, which offers Memory only when there's a sign of it or it was left on.
     const memoryInUse = await autoMemoryInUse(context);
@@ -225,11 +229,11 @@ async function main() {
     const found = { earlier, memoryInUse, t3Channel: foundT3?.channel };
     const choices = {
       ...(team === undefined ? {} : { team }),
-      ...(await askQuestions(profile, places, ask, log, found, { machine, attended: !unattended })),
+      ...(await askQuestions(profile, places, ask, log, found, { machine, frontEnd, attended: !unattended })),
     };
     if (earlier) {
       const rows = await reusedRows(earlier, choices, reused, options.downloads);
-      if (rows.length > 0) ui.summary(rows, 'Using your answers from last time');
+      if (rows.length > 0) frontEnd.summary(rows, 'Using your answers from last time');
     }
 
     // Keys this run doesn't write (another program's, or a later version's) are kept.
@@ -313,11 +317,11 @@ async function main() {
       ['Connectors', connectors],
       ['GitHub', github],
     ];
-    if (skills.rows.length > 0) ui.summary(skills.rows, 'Skills');
-    ui.summary(workspaces.rows, 'Workspaces');
-    ui.summary(checklist, 'Checklist');
+    if (skills.rows.length > 0) frontEnd.summary(skills.rows, 'Skills');
+    frontEnd.summary(workspaces.rows, 'Workspaces');
+    frontEnd.summary(checklist, 'Checklist');
     for (const [label, value] of [...skills.rows, ...workspaces.rows, ...checklist]) log.write(`Checklist: ${label}: ${value}`);
-    ui.step(`Log: ${log.path}`);
+    frontEnd.step(`Log: ${log.path}`);
 
     // T3 Code is opened at the end of every run that has it, so the person ends up where they
     // work, unless this run's install has just started it (its installer does, and it has opened).
@@ -325,34 +329,38 @@ async function main() {
     else if (!t3.installed) log.write("Ending: T3 Code isn't opened: it isn't installed");
     else if (!foundT3 && t3.opened) log.write("Ending: T3 Code isn't opened again: its install just started it");
     else await openT3(foundT3?.channel ?? choices.channel, context);
-    showEnding(ending, { top: basename(choices.topWorkspace), t3Installed: t3.installed, tools: named, log });
+    showEnding(ending, { top: basename(choices.topWorkspace), t3Installed: t3.installed, tools: named, log, frontEnd });
     log.write('Installer finished');
     return 0;
   } catch (error) {
     if (error instanceof End) {
       log.write(`Ended early, as the person chose: ${error.message}`);
-      ui.finish(error.message);
+      frontEnd.finish(error.message);
       log.write('Installer finished');
       return 0;
     }
     if (!(error instanceof Stop)) {
       log.write(`Failed: ${error instanceof Error ? error.stack : String(error)}`);
+      // Said in plain words first; Node then prints the stack, as it always has.
+      frontEnd.problem(`Something went wrong that the Installer didn't expect: ${messageOf(error)}`);
+      frontEnd.finish(`The Installer has stopped. The log says more: ${log.path}`);
       throw error;
     }
     log.write(`Stopped: ${error.message}`);
     // Only here is the person told what a stop left behind, so it's never claimed that nothing
     // changed after something did.
     if (done.length === 0) {
-      ui.problem(`${error.message} Nothing has been changed.`);
+      frontEnd.problem(`${error.message} Nothing has been changed.`);
     } else {
-      ui.problem(error.message);
-      ui.summary(done, 'Done before it stopped');
+      frontEnd.problem(error.message);
+      frontEnd.summary(done, 'Done before it stopped');
       for (const [label, value] of done) log.write(`Done before it stopped: ${label}: ${value}`);
-      ui.step('Running the same line again carries on from here, without asking your answers again.');
+      frontEnd.step('Running the same line again carries on from here, without asking your answers again.');
     }
     return 1;
   } finally {
     if (options.debug) await logUserPath(machine, log, 'after');
+    await frontEnd.close();
   }
 }
 

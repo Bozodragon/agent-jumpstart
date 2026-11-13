@@ -1,5 +1,5 @@
 // The window the person pasted the line into: the log says whether it was Windows Terminal, and
-// every notice that ends with pressing Enter names the window the same way. The window's title
+// every notice that sends the person back to it names it the same way. The window's title
 // can't be seen from here, so a person checks that on a York laptop.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -40,7 +40,7 @@ test("Google Drive's notice to sign in ends with the same come-back sentence as 
 
   const flowing = result.stdout.replace(/[│|]/g, ' ').replace(/\s+/g, ' ');
   assert.ok(
-    flowing.includes("Once you're done in the browser, come back to the Agent Jumpstart window, where you pasted the line, and press Enter."),
+    flowing.includes("Once you're done in the browser, come back to the Agent Jumpstart window, where you pasted the line."),
     result.stdout,
   );
   assert.doesNotMatch(result.stdout + result.stderr, /blue PowerShell window/);

@@ -17,7 +17,7 @@ import { join } from 'node:path';
 import { system32 } from './machine.js';
 import { loadManifest, toolEntry } from './manifest.js';
 import { exists } from './tools.js';
-import * as ui from './ui.js';
+import { bullet } from './text.js';
 
 /** Anthropic's own installer, run as Anthropic says to, in Windows PowerShell from System32. */
 const anthropicsInstaller = {
@@ -43,7 +43,7 @@ const anthropicsInstaller = {
  *   Claude Code line, the signed-in email, if any, and, when the person skipped the sign-in for
  *   now, Claude's own reason it failed.
  */
-export async function setUpClaude({ places, machine, downloads, log, attended }, ask) {
+export async function setUpClaude({ places, machine, frontEnd, downloads, log, attended }, ask) {
   const entry = toolEntry(await loadManifest(downloads), 'claude');
   if (!entry) return { row: 'Not checked: the list of versions has no entry for it', email: null };
   const say = (/** @type {string} */ line) => log.write(`${entry.name}: ${line}`);
@@ -54,7 +54,7 @@ export async function setUpClaude({ places, machine, downloads, log, attended },
 
   // Claude Code takes a few seconds to answer each time, with nothing on screen of its own.
   const look = () =>
-    ui.busy(`Checking ${entry.name}`, async () => {
+    frontEnd.busy(`Checking ${entry.name}`, async () => {
       const state = await lookAt(program, machine);
       say(describe(state, program));
       return state;
@@ -64,7 +64,7 @@ export async function setUpClaude({ places, machine, downloads, log, attended },
   if (!state.present) {
     // Whether claude.exe is there afterwards is checked inside the spinner, which shows nothing
     // else while it runs, so "Checking Claude Code" starts only once this spinner has ended.
-    const { ran, there } = await ui.busy(
+    const { ran, there } = await frontEnd.busy(
       `Installing ${entry.name}. It's over 300 MB, so this can take several minutes`,
       async () => {
         const ran = await machine.run(anthropicsInstaller.file, anthropicsInstaller.args);
@@ -85,13 +85,13 @@ export async function setUpClaude({ places, machine, downloads, log, attended },
   /** @type {string | undefined} */
   let skipped;
   if (state.present && state.runs && !state.signedIn) {
-    ui.notice(
+    frontEnd.notice(
       [
         `${entry.name} signs you in next, in your browser.`,
         '',
-        `  ${ui.bullet} A browser window opens at Claude's sign-in page. Sign in there, then come back here: this window carries on by itself.`,
-        `  ${ui.bullet} If no window opens, copy the link below into your browser: select it with the mouse, then right-click to copy it.`,
-        `  ${ui.bullet} If the page shows a code, copy it, come back here and right-click to paste it. Nothing appears when you paste. Paste once, then press Enter.`,
+        `  ${bullet} A browser window opens at Claude's sign-in page. Sign in there. ${frontEnd.comeBack()} It carries on by itself.`,
+        `  ${bullet} If no window opens, copy the link below into your browser: select it with the mouse, then right-click to copy it.`,
+        `  ${bullet} If the page shows a code, copy it, come back here and right-click to paste it. Nothing appears when you paste. Paste once, then press Enter.`,
       ].join('\n'),
       `Sign in to ${entry.name}`,
     );
@@ -104,7 +104,7 @@ export async function setUpClaude({ places, machine, downloads, log, attended },
       state = await look();
       if (state.signedIn) break;
       const reason = reasonFrom(output) ?? `${entry.name}'s sign-in ended with code ${code}`;
-      ui.problem(reason);
+      frontEnd.problem(reason);
       const choice = await ask.choose({
         key: 'claudeSignIn',
         message: `${entry.name} isn't signed in yet.`,

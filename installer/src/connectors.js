@@ -3,7 +3,7 @@
 // page, names the connectors they ticked, and waits for Enter.
 import { showPage } from './open-page.js';
 import { Stop } from './stop.js';
-import * as ui from './ui.js';
+import { bullet, inWords } from './text.js';
 
 /**
  * Walks the person through connecting the connectors they ticked. With none
@@ -17,45 +17,45 @@ import * as ui from './ui.js';
  *   `connectedBefore`: the same connectors came from an earlier run's settings.
  * @returns {Promise<string>} The checklist's Connectors line.
  */
-export async function walkThroughConnectors(profile, connectors, { attended, connectedBefore = false, machine, log }) {
+export async function walkThroughConnectors(profile, connectors, { attended, connectedBefore = false, machine, frontEnd, log }) {
   if (connectors.length === 0) {
     log.write('Connectors: none chosen, so the walkthrough was skipped');
     return 'None chosen';
   }
   if (connectedBefore) {
     log.write('Connectors: walked through on an earlier run, so skipped');
-    return `You said you connected ${ui.inWords(connectors)} last time`;
+    return `You said you connected ${inWords(connectors)} last time`;
   }
   const page = profile.connectorsPage;
   if (typeof page !== 'string') throw new Stop(`The "${profile.id}" profile needs a connectors page address.`);
 
-  await showPage('Connectors page', page, { machine, log });
+  await showPage('Connectors page', page, { machine, frontEnd, log });
   /** @param {string} name */
   const whatItDoes = (name) => profile.connectors.find((connector) => connector.name === name)?.what;
   // A ticked connector's note, such as which Asana workspace to choose, goes under the list.
   const notes = connectors.flatMap((name) => profile.connectors.find((connector) => connector.name === name)?.note ?? []);
-  ui.notice(
+  frontEnd.notice(
     [
       // The page's own heading reads Customize, which can look like the wrong page.
       "This opens claude.ai's Customize page, on Connectors. Click Connect next to each of these and sign in when asked:",
       '',
-      ...connectors.map((name) => `  ${ui.bullet} ${name}${whatItDoes(name) ? `: ${whatItDoes(name)}` : ''}`),
+      ...connectors.map((name) => `  ${bullet} ${name}${whatItDoes(name) ? `: ${whatItDoes(name)}` : ''}`),
       '',
       ...notes.flatMap((note) => [note, '']),
       'The agent uses them as you, and only for what you ask it to do. You can disconnect any of them on the same page.',
       '',
       "If one isn't there or won't connect, carry on. Jumpstart checks each one later.",
       '',
-      ui.comeBack,
+      frontEnd.comeBack(),
     ].join('\n'),
     'Connect these',
   );
 
   if (attended) {
-    await ui.pressEnter("Press Enter once you've connected them.");
+    await frontEnd.waitForDone("you've connected them");
     log.write('Connectors: the person pressed Enter');
   } else {
     log.write('Connectors: taken as connected from the answers file');
   }
-  return `You said you connected ${ui.inWords(connectors)}`;
+  return `You said you connected ${inWords(connectors)}`;
 }

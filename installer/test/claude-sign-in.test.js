@@ -64,7 +64,7 @@ test('before the sign-in starts, the notice says what really happens, word for w
   const notice = [
     'Sign in to Claude Code',
     'Claude Code signs you in next, in your browser.',
-    "• A browser window opens at Claude's sign-in page. Sign in there, then come back here: this window carries on by itself.",
+    "• A browser window opens at Claude's sign-in page. Sign in there. Once you're done in the browser, come back to the Agent Jumpstart window, where you pasted the line. It carries on by itself.",
     '• If no window opens, copy the link below into your browser: select it with the mouse, then right-click to copy it.',
     '• If the page shows a code, copy it, come back here and right-click to paste it. Nothing appears when you paste. Paste once, then press Enter.',
   ];

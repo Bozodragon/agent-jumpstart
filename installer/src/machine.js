@@ -12,7 +12,8 @@
 //                                         given none), and
 //                                         `onScreen: true` for one run in the person's window
 //                                         (one whose output is kept also prints its reply's
-//                                         output, as the program would have),
+//                                         output to the front end's screen, as the program
+//                                         would have),
 //                                         `leftRunning: true` for one started and not waited for
 //   <home>/fake-machine/pages.json        every address it was asked to open in the browser
 //   <home>/fake-machine/replies.json      written by a test: what a run returns, keyed by the
@@ -69,7 +70,6 @@ import { existsSync, readFileSync } from 'node:fs';
 import { access, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { basename, dirname, join, relative, resolve } from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
-import { setWindowTitle } from './window.js';
 
 /**
  * @typedef {object} Machine
@@ -90,8 +90,8 @@ import { setWindowTitle } from './window.js';
  *   the program for real, even on the fake machine. Only for programs that change nothing but
  *   the installer's own folders, such as tar.exe unpacking a download into its scratch folder.
  * @property {(file: string, args: string[], how?: WindowOptions) => Promise<number>} runOnScreen Runs
- *   a program in the person's window, so they see what it prints and can answer it, and waits for
- *   it. Returns its exit code, or -1 if it couldn't start.
+ *   a program on the front end's screen (for the terminal, the person's window), so they see what
+ *   it prints and can answer it, and waits for it. Returns its exit code, or -1 if it couldn't start.
  * @property {(file: string, args: string[], how?: WindowOptions) => Promise<Ran>} runOnScreenAndKeep Like `runOnScreen`,
  *   but what the program prints also comes back, for the caller to log. What the person types
  *   still goes straight from the window to the program; only what the program prints passes
@@ -170,9 +170,11 @@ export async function keepTrying({ machine, every, patience = machine.patience }
 /**
  * @param {import('./places.js').Places} places
  * @param {import('./log.js').Log} log
+ * @param {import('./front-end.js').Screen} screen The front end's screen, which every program run
+ *   on screen (`runOnScreen`, `runOnScreenAndKeep`) is started for and attached to.
  * @returns {Machine}
  */
-export function openMachine(places, log) {
+export function openMachine(places, log, screen) {
   // In a debug run, logged before it starts as well as after, so a program that never returns
   // still shows. In any run, a program that fails is logged once it has, with its output.
   /** @param {Runner} run @returns {Runner} */
@@ -210,8 +212,8 @@ export function openMachine(places, log) {
     return ran;
   };
   const { machine, pathSources, start, startOnScreen, startOnScreenAndKeep, startAndLeave } = places.fakeMachine
-    ? fakeMachine(places.fakeMachine, places.home)
-    : realMachine(logged((file, args) => runProgram(file, args)));
+    ? fakeMachine(places.fakeMachine, places.home, screen)
+    : realMachine(logged((file, args) => runProgram(file, args)), screen);
   /** @type {string | undefined} */
   let pathLogged;
   const environment = async () => {
@@ -309,9 +311,10 @@ async function foldersHolding(entries, name) {
 /**
  * @param {string} folder
  * @param {string} home Where a reply's `creates` paths are, and the only place they may be.
+ * @param {import('./front-end.js').Screen} screen
  * @returns {Parts}
  */
-function fakeMachine(folder, home) {
+function fakeMachine(folder, home, screen) {
   /** @param {string} name @param {unknown} empty */
   const read = async (name, empty) => {
     try {
@@ -373,10 +376,10 @@ function fakeMachine(folder, home) {
     pathSources,
     start: (file, args, env) => reply(file, args, { file, args, path: env.Path ?? '' }),
     startOnScreen: async (file, args, env, extra) => (await reply(file, args, { file, args, path: env.Path ?? '', ...recordOf(extra), onScreen: true })).code,
-    // The reply's output is what the program prints, so it's printed, as it would be in the window.
+    // The reply's output is what the program prints, so it's shown on the screen, as it would be.
     async startOnScreenAndKeep(file, args, env, extra) {
       const ran = await reply(file, args, { file, args, path: env.Path ?? '', ...recordOf(extra), onScreen: true });
-      process.stdout.write(ran.output);
+      screen.write(ran.output);
       return ran;
     },
     async startAndLeave(file, args, env) {
@@ -458,9 +461,10 @@ export const system32 =(name) => join(process.env.SystemRoot ?? 'C:\\Windows', '
  * calls PowerShell would need, and these are ordinary programs in System32.
  * @param {Runner} loggedRun runs a program with this process's environment, logged, so reg.exe
  *   and setx.exe are logged too
+ * @param {import('./front-end.js').Screen} screen
  * @returns {Parts}
  */
-function realMachine(loggedRun) {
+function realMachine(loggedRun, screen) {
   const reg = system32('reg.exe');
   const machineKey = 'HKLM\\SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Environment';
 
@@ -539,18 +543,16 @@ function realMachine(loggedRun) {
     },
     pathSources,
     start: runProgram,
-    // The real machine's two in-window runners set the window's title again once the program
-    // returns, since a program may have retitled the window while it ran.
+    // The screen decides where an on-screen program's input and output go; the machine only
+    // starts it, and keeps what it prints when asked to.
     startOnScreen(file, args, env) {
       const how = startable(file, args);
       if ('refused' in how) return Promise.resolve(-1);
       return new Promise((resolve) => {
-        const child = spawn(how.file, how.args, { ...how.options, env, stdio: 'inherit' });
+        const child = spawn(how.file, how.args, { ...how.options, env, stdio: screen.stdio(false) });
+        screen.attach(child);
         child.once('error', () => resolve(-1));
-        child.once('close', (code) => {
-          setWindowTitle();
-          resolve(code ?? -1);
-        });
+        child.once('close', (code) => resolve(code ?? -1));
       });
     },
     startOnScreenAndKeep(file, args, env) {
@@ -558,23 +560,18 @@ function realMachine(loggedRun) {
       if ('refused' in how) return Promise.resolve({ code: -1, output: how.refused });
       return new Promise((resolve) => {
         let output = '';
-        // The window stays the program's input, so its prompt reads what the person types (a
-        // paste shows nothing in the window, and nothing passes through the installer); what it
-        // prints is passed on to the window as it comes, and kept. Decoded as it comes, so a character split between two
-        // chunks isn't broken.
-        const child = spawn(how.file, how.args, { ...how.options, env, stdio: ['inherit', 'pipe', 'pipe'] });
-        for (const [from, to] of /** @type {const} */ ([[child.stdout, process.stdout], [child.stderr, process.stderr]])) {
-          from.setEncoding('utf8');
-          from.on('data', (/** @type {string} */ chunk) => {
-            output += chunk;
-            to.write(chunk);
-          });
+        // On the terminal's screen, the window stays the program's input, so its prompt reads what
+        // the person types (a paste shows nothing in the window, and nothing passes through the
+        // installer); what it prints is passed on to the window as it comes, and kept. Decoded as
+        // it comes, so a character split between two chunks isn't broken.
+        const child = spawn(how.file, how.args, { ...how.options, env, stdio: screen.stdio(true) });
+        for (const from of [child.stdout, child.stderr]) {
+          from?.setEncoding('utf8');
+          from?.on('data', (/** @type {string} */ chunk) => (output += chunk));
         }
+        screen.attach(child);
         child.once('error', (error) => resolve({ code: -1, output: error.message }));
-        child.once('close', (code) => {
-          setWindowTitle();
-          resolve({ code: code ?? -1, output });
-        });
+        child.once('close', (code) => resolve({ code: code ?? -1, output }));
       });
     },
     startAndLeave(file, args, env) {

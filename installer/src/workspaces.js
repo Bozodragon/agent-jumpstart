@@ -9,7 +9,6 @@ import { basename, dirname, join } from 'node:path';
 import { isFolder } from './google-drive.js';
 import { keepTrying } from './machine.js';
 import { messageOf } from './stop.js';
-import * as ui from './ui.js';
 
 /**
  * @typedef {object} Workspaces
@@ -94,10 +93,10 @@ export async function createWorkspaces(top, chosen, log) {
  * @param {Workspaces} workspaces @param {import('./t3.js').T3Result} t3
  * @param {boolean} open Whether T3 Code may open this run. If not (Claude Code's sign-in was skipped),
  * a T3 that hasn't opened yet isn't asked for: the row says the workspace is added on the next run.
- * @param {{ machine: import('./machine.js').Machine, log: import('./log.js').Log }} context
+ * @param {{ machine: import('./machine.js').Machine, frontEnd: import('./front-end.js').FrontEnd, log: import('./log.js').Log }} context
  * @returns {Promise<string>} the checklist's Workspaces line
  */
-export async function addToT3(workspaces, t3, open, { machine, log }) {
+export async function addToT3(workspaces, t3, open, { machine, frontEnd, log }) {
   const { top, topReady, notCreated } = workspaces;
   if (!topReady) return notCreated ?? 'Not created';
   const name = basename(top);
@@ -124,7 +123,7 @@ export async function addToT3(workspaces, t3, open, { machine, log }) {
       (ran) => !stillStarting(ran),
       () => say(`T3 Code is still starting, so adding ${top} is tried again in 2 seconds`),
     );
-  const { result: ran, waited } = await ui.busy(`Adding ${name} to T3 Code`, add, ({ result }) =>
+  const { result: ran, waited } = await frontEnd.busy(`Adding ${name} to T3 Code`, add, ({ result }) =>
     result.code === 0 ? { text: `Added ${name} to T3 Code`, ok: true } : { text: `${name} isn't added to T3 Code yet`, ok: /already exists/i.test(result.output) },
   );
   if (stillStarting(ran)) {

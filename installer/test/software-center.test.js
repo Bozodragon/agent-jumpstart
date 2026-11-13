@@ -93,7 +93,7 @@ test('a york run that installs Google Drive from Software Center opens it at Dri
   assert.equal(result.code, 0, result.stdout + result.stderr);
   assert.ok((await machine.pagesOpened()).includes(`softwarecenter:SoftwareID=${driveId}`));
   const text = flowing(result.stdout);
-  const steps = ['Click Install in Software Center, then come back to this window.', 'Waiting until Google Drive is installed', 'Open Google Drive from the Start menu and sign in'];
+  const steps = ["Click Install in Software Center. Once you're done in Software Center, come back to the Agent Jumpstart window, where you pasted the line.", 'Waiting until Google Drive is installed', 'Open Google Drive from the Start menu and sign in'];
   const at = steps.map((step) => text.indexOf(step));
   assert.ok(at.every((place) => place !== -1) && at[0] < at[1] && at[1] < at[2], result.stdout);
   const settings = await readSettings(where.home);
