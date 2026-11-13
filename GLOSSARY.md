@@ -55,6 +55,10 @@ _Avoid_: config, organisation settings
 A group within the department or organisation a profile serves, chosen by the Installer's first question. It adds connectors, extra tools and skills to its profile's, and can tick ones the profile leaves unticked.
 _Avoid_: department, area of work
 
+**Experience questions**:
+The Installer's questions, after the team, about how used a team member is to AI tools and to writing code. They decide which later questions are asked and what those questions start with.
+_Avoid_: level, skill level
+
 **Connector**:
 A claude.ai connection to another service, such as Gmail or Asana, which a team member connects themselves on claude.ai.
 
