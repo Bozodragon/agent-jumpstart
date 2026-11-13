@@ -350,11 +350,16 @@ async function addToPath(tool, folder, machine, say) {
 }
 
 /**
+ * Downloads a file into `saveIn`, or copies it from the downloads folder, by the file name its
+ * address ends in. A download reports how far it has got through `progress`, against the size
+ * the server gives (when it sends the file as it is, not compressed); a copy reports nothing.
+ * Nothing about how far it has got is logged. A download is written as `<name>.partial` and
+ * renamed once it's whole; a copy is made as it always was.
  * @param {{ url: string }} download
- * @param {{ downloads?: string, saveIn: string, say: (line: string) => void }} where
+ * @param {{ downloads?: string, saveIn: string, say: (line: string) => void, progress?: import('./front-end.js').Progress }} where
  * @returns {Promise<string>} the file
  */
-export async function obtain({ url }, { downloads, saveIn, say }) {
+export async function obtain({ url }, { downloads, saveIn, say, progress = () => {} }) {
   const name = basename(new URL(url).pathname);
   const file = join(saveIn, name);
   if (downloads) {
@@ -369,20 +374,53 @@ export async function obtain({ url }, { downloads, saveIn, say }) {
     say(`downloaded to ${file}`);
     return file;
   }
+  // Written under a name of its own until it's whole, so a download cut short, even by the run
+  // ending partway, is never taken for the file, and antivirus doesn't lock it half-written. One
+  // left from an earlier run is replaced, as is the file itself, kept by a debug run.
+  const partial = `${file}.partial`;
   await mkdir(saveIn, { recursive: true });
+  await rm(file, { force: true });
+  await rm(partial, { force: true });
   say(`downloading ${url}`);
   try {
     const response = await fetch(url);
     if (!response.ok || !response.body) throw new Error(`the server said ${response.status} ${response.statusText}`);
-    await pipeline(Readable.fromWeb(/** @type {any} */ (response.body)), createWriteStream(file));
+    const total = sizeOf(response);
+    let received = 0;
+    progress(received, total);
+    await pipeline(
+      Readable.fromWeb(/** @type {any} */ (response.body)),
+      async function* (/** @type {AsyncIterable<Buffer>} */ pieces) {
+        for await (const piece of pieces) {
+          received += piece.length;
+          progress(received, total);
+          yield piece;
+        }
+      },
+      createWriteStream(partial),
+    );
+    await rename(partial, file);
   } catch (error) {
-    await rm(file, { force: true });
+    await rm(partial, { force: true });
     const cause = error instanceof Error && error.cause ? error.cause : error;
     say(`download failed: ${messageOf(cause)}`);
     throw new NotInstalled(`it couldn't be downloaded (${messageOf(cause)})`);
   }
   say(`downloaded to ${file}`);
   return file;
+}
+
+/**
+ * The file's size as the server gives it, unless it's compressed on the way: then the size
+ * given is the compressed one, while what's counted is what arrives once fetch has unpacked it.
+ * @param {Response} response
+ * @returns {number | undefined}
+ */
+function sizeOf(response) {
+  const encoding = response.headers.get('content-encoding');
+  if (encoding && encoding !== 'identity') return undefined;
+  const length = Number(response.headers.get('content-length') ?? NaN);
+  return Number.isSafeInteger(length) && length > 0 ? length : undefined;
 }
 
 /** @param {string} file @param {string} expected @param {(line: string) => void} say */

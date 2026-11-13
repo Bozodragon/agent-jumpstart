@@ -24,12 +24,21 @@
  */
 
 /**
+ * How far something slow has got, such as a download: `received` bytes so far, of `total` when
+ * the total is known. It may be called very often (once per piece of a download), with the same
+ * figures more than once, so a front end shows only what has changed. Nothing it's told is logged.
+ * @typedef {(received: number, total?: number) => void} Progress
+ */
+
+/**
  * @typedef {object} FrontEnd
  * @property {(title: string) => void} start The run's first words.
  * @property {(text: string) => void} step A line saying what's happening.
- * @property {<T>(message: string, task: () => Promise<T>, ended?: (result: T) => { text: string, ok: boolean }) => Promise<T>} busy
+ * @property {<T>(message: string, task: (progress: Progress) => Promise<T>, ended?: (result: T) => { text: string, ok: boolean }) => Promise<T>} busy
  *   Shows that something slow is under way while `task` runs, then how it ended (`ended`, or
- *   the message, if not given). Nothing else may be shown while it runs.
+ *   the message, if not given). Nothing else may be shown while it runs. The task may report
+ *   how far it has got through `progress` (the terminal shows a percentage beside the message,
+ *   or the amount so far when the total isn't known); it needn't.
  * @property {(text: string) => void} problem Something that didn't work, or why the run stopped.
  * @property {(rows: [string, string][], title: string) => void} summary Labelled rows, such as the checklist.
  * @property {(text: string, title: string) => void} notice Something to read before what comes next.
