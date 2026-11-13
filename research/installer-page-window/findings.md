@@ -31,7 +31,7 @@ In all three, Claude, GitHub and clasp sign-ins open in the person's default bro
 - **confirmed.** Node.exe, by contrast, is signed by the OpenJS Foundation. Checked on this PC's Node 24 install. The pinned Node 26.12.1 in %LOCALAPPDATA% was not checked.
   - Evidence: Get-AuthenticodeSignature 'C:\Program Files\nodejs\node.exe' -> Valid CN=OpenJS Foundation
 - **confirmed.** Unsigned electron.exe ran without admin from a folder under %LOCALAPPDATA% (the Temp scratch folder) on this unmanaged PC. Not tested on a York laptop.
-  - Evidence: ELECTRON_RUN_AS_NODE=1 electron.exe -e ... ran and printed versions; path was under C:\Users\jacob\AppData\Local\Temp\...; Get-AppLockerPolicy -Effective on this PC -> 0 rule collections
+  - Evidence: ELECTRON_RUN_AS_NODE=1 electron.exe -e ... ran and printed versions; path was under C:\Users\<you>\AppData\Local\Temp\...; Get-AppLockerPolicy -Effective on this PC -> 0 rule collections
 - **confirmed.** Neither curl.exe nor Invoke-WebRequest -UseBasicParsing in Windows PowerShell 5.1 writes Mark-of-the-Web (a Zone.Identifier stream). So SmartScreen's downloaded-file prompt does not fire on what the bootstrap downloads.
   - Evidence: powershell.exe 5.1.26100.9818: Invoke-WebRequest -UseBasicParsing -OutFile iwr.txt and System32\curl.exe -o curl.txt; Get-Item -Stream * and dir /r show only :$DATA on both. Background: https://textslashplain.com/2016/04/04/downloads-and-the-mark-of-the-web/
 - **confirmed.** AppLocker's default executable rules allow everyone to run programs only from %windir% and %programfiles% (admins can run anything). A policy built from those defaults blocks any exe in AppData, signed or not.
