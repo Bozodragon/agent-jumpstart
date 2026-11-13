@@ -2,7 +2,7 @@
 
 Gathered on 12 November 2026 while grilling [Spec the small release before Monday's York session](https://github.com/Bozodragon/agent-jumpstart/issues/59). Two researchers each answered one question, and a skeptic then tried to refute each researcher's decision-relevant claims against primary sources. All four were Opus 5.5 at high effort. Where a skeptic corrected a claim, the correction sits next to it.
 
-**Read this first.** Every Google route below needs a Google Cloud project with an OAuth client. The research couldn't tell whether York staff can create one, and it treated that as a blocker for Monday. Staff can. A colleague, Dmitriy, has already set Google Analytics up this way, with the same kind of Cloud console clicks clasp needs and no extra permissions. Read the "not by Monday" judgements below with that in mind.
+**Read this first.** Every Google route below needs a Google Cloud project with an OAuth client. The research couldn't tell whether York staff can create one, and it treated that as a blocker for Monday. Staff can. A colleague has already set Google Analytics up this way, with the same kind of Cloud console clicks clasp needs and no extra permissions. Read the "not by Monday" judgements below with that in mind.
 
 Follow-ups on the map: [How Marketing gets Google Analytics](https://github.com/Bozodragon/agent-jumpstart/issues/71) and [How the Azure and Dataverse CLIs are offered, and to which teams](https://github.com/Bozodragon/agent-jumpstart/issues/72).
 
