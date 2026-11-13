@@ -42,7 +42,7 @@
  * @typedef {Shared & { kind: 'step', text: string }} StepScreen
  * @typedef {Shared & { kind: 'notice', title: string, text: string }} NoticeScreen
  * @typedef {Shared & { kind: 'summary', title: string, rows: [string, string][] }} SummaryScreen
- * @typedef {Shared & { kind: 'busy', message: string, received?: number, total?: number, ended?: { text: string, ok: boolean }, endedBy?: number }} BusyScreen
+ * @typedef {Shared & { kind: 'busy', message: string, received?: number, total?: number, ended?: { text: string, ok?: boolean }, endedBy?: number }} BusyScreen
  * @typedef {Shared & { kind: 'question', question: Asked, number?: number, answer?: { value: unknown }, refused?: { answer: unknown, reason: string }, problem?: string, notice?: { title: string, text: string } }} QuestionScreen
  *   `problem` or `notice`: the call just before it, joined to it. `number`: which question this
  *   is, counting only the person's answers to the setup's questions (not Done, not Try again).

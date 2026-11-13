@@ -165,7 +165,8 @@ function Busy({ screen }) {
   if (ended) {
     return (
       <>
-        <Status kind={ended.ok ? 'tick' : 'warn'} />
+        {/* An end that's neither done nor failed (Claude Code's download falling back quietly) keeps the ring: the Installer is still at it. */}
+        <Status kind={ended.ok === undefined ? 'ring' : ended.ok ? 'tick' : 'warn'} />
         <Heading text={ended.text} />
       </>
     );
