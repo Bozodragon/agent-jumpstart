@@ -40,8 +40,9 @@ test('a run with no answers file serves the Installer page on 127.0.0.1, at an a
 
 /**
  * A York laptop on which every step works: Node.js, Git and the GitHub CLI already on the machine
- * PATH, the skills CLI installable and each skill arriving, Claude Code there and signed in, and
- * T3 Code's stable release in the downloads, its first start leaving its shim.
+ * PATH (the GitHub CLI not signed in yet, so GitHub is asked), the skills CLI installable and each
+ * skill arriving, Claude Code there and signed in, and T3 Code's stable release in the downloads,
+ * its first start leaving its shim.
  * @param {import('node:test').TestContext} t @param {Record<string, unknown>} [answers]
  */
 async function aLaptopWhereEverythingWorks(t, answers = {}) {
@@ -68,6 +69,7 @@ async function aLaptopWhereEverythingWorks(t, answers = {}) {
     'node.exe --version': { output: 'v26.12.1\r\n' },
     'git.exe --version': { output: 'git version 2.56.0.windows.4\n' },
     'gh.exe --version': { output: 'gh version 2.103.1 (2026-10-01)\n' },
+    'gh.exe auth status --hostname github.com': { code: 1, output: 'You are not logged into any GitHub hosts.' },
     'claude.exe --version': { output: '2.1.311 (Claude Code)\n' },
     'claude.exe auth status': { output: JSON.stringify({ loggedIn: true, authMethod: 'claude.ai', email: 'jo.bloggs@york.ac.uk' }) },
     'T3-Code-0.0.30-x64.exe': { creates: [t3Leaves.program, t3Leaves.shim] },
@@ -103,7 +105,18 @@ async function leftBehind(where) {
 }
 
 test('a whole setup done through the page conversation sets up exactly what the same answers in an answers file do', async (t) => {
-  const answers = { team: 'Marketing', channel: 'stable', github: false, workspaces: ['Thinking space'], connectors: ['Gmail', 'Asana'], extraTools: [] };
+  // With the experience answers, as a person on the page gives them, so the answers-file run looks
+  // for a signed-in GitHub CLI before the questions too (one from before them deliberately doesn't).
+  const answers = {
+    team: 'Marketing',
+    aiExperience: 'first-time',
+    codingExperience: 'no',
+    channel: 'stable',
+    github: false,
+    workspaces: ['Thinking space'],
+    connectors: ['Gmail', 'Asana'],
+    extraTools: [],
+  };
   const fromFile = await aLaptopWhereEverythingWorks(t, answers);
   const onPage = await aLaptopWhereEverythingWorks(t);
 
@@ -121,7 +134,9 @@ test('a whole setup done through the page conversation sets up exactly what the 
   // waited for them to connect the connectors.
   const keys = asked.filter((question) => question.kind !== 'done').map((question) => question.key);
   assert.equal(keys[0], 'team');
-  for (const key of ['topWorkspace', 'googleDriveFolder', 'workspaces', 'connectors']) assert.ok(keys.includes(key), `${key} wasn't asked: ${keys}`);
+  for (const key of ['aiExperience', 'codingExperience', 'topWorkspace', 'googleDriveFolder', 'github', 'workspaces', 'connectors']) assert.ok(keys.includes(key), `${key} wasn't asked: ${keys}`);
+  // A first-timer isn't sent the questions their experience answers hide.
+  for (const key of ['channel', 'fullSkills']) assert.ok(!keys.includes(key), `${key} was asked: ${keys}`);
   assert.equal(new Set(keys).size, keys.length, `a question was asked twice: ${keys}`);
   assert.ok(asked.some((question) => question.kind === 'done' && question.what === "you've connected them"));
   const finish = await page.next((event) => event.type === 'finish');
@@ -233,6 +248,8 @@ test("a folder the Installer won't take goes back to the page with the reason, a
     return { question, reply: await run.answer(question.question, value) };
   };
   await answer('team', 'Marketing');
+  await answer('aiExperience', 'first-time');
+  await answer('codingExperience', 'no');
   await answer('topWorkspace', 'new');
 
   const missing = join(where.home, 'Not My Drive');
