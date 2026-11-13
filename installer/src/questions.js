@@ -174,6 +174,9 @@ export async function askTeam(profile, ask, log) {
 
 /** @typedef {{ aiExperience: AiExperience, codingExperience: CodingExperience }} Experience */
 
+/** The experience answers' keys, in the order they're asked. */
+const experienceKeys = ['aiExperience', 'codingExperience'];
+
 /** The experience questions' answers, in the person's words. */
 export const experienceOptions = {
   /** @type {Option<AiExperience>[]} */
@@ -236,36 +239,40 @@ export function hiddenFor(experience) {
 
 /**
  * On a re-run, which of last time's answers to ask again. Only answers the settings hold are
- * offered: Team only under a profile with teams, GitHub only while the GitHub CLI isn't signed
- * in (once it is, GitHub is Yes without asking), and Memory only when a first run would ask it
- * (`memoryInUse`) or last time it was left on. The top workspace and T3 Code's channel never
- * are. Nothing ticked, the default, keeps everything. Settings never answer it, and it isn't saved.
+ * offered: Team only under a profile with teams; Experience, which stands for both experience
+ * answers, after it; GitHub only while the GitHub CLI isn't signed in (once it is, GitHub is Yes
+ * without asking); Skills unless last time's AI answer was a first time, which it isn't asked of
+ * (new experience answers that reveal it ask it anyway, see revealedBy); and Memory only when a
+ * first run would ask it (`memoryInUse`) or last time it was left on. The top workspace and T3
+ * Code's channel never are. Nothing ticked, the default, keeps everything. Settings never answer
+ * it, and it isn't saved.
  * @param {import('./profile.js').Profile} profile @param {Record<string, unknown>} earlier
  * @param {Pick<Found, 'memoryInUse' | 'githubSignedIn'>} found @param {Asker} ask the person or the answers file, not the settings
  * @param {{ write(line: string): void }} log
  * @returns {Promise<string[]>} the keys of the answers to ask again
  */
 export async function askChange(profile, earlier, { memoryInUse, githubSignedIn }, ask, log) {
-  /** @type {[string, string, boolean][]} */
+  /** Each entry's answer, its label, the keys of the answers it asks again, and whether it's offered. @type {[string, string, string[], boolean][]} */
   const offered = [
-    ['team', 'Team', Boolean(profile.teams?.length)],
-    ['workspaces', 'Workspaces', true],
-    ['connectors', 'Connectors', true],
-    ['extraTools', 'Extra tools', true],
-    ['github', 'GitHub', !githubSignedIn],
-    ['fullSkills', 'Skills', true],
-    ['switchOffMemory', 'Memory', memoryInUse || earlier.switchOffMemory === false],
+    ['team', 'Team', ['team'], Boolean(profile.teams?.length)],
+    ['experience', 'Experience', experienceKeys, true],
+    ['workspaces', 'Workspaces', ['workspaces'], true],
+    ['connectors', 'Connectors', ['connectors'], true],
+    ['extraTools', 'Extra tools', ['extraTools'], true],
+    ['github', 'GitHub', ['github'], !githubSignedIn],
+    ['fullSkills', 'Skills', ['fullSkills'], earlier.aiExperience !== 'first-time'],
+    ['switchOffMemory', 'Memory', ['switchOffMemory'], memoryInUse || earlier.switchOffMemory === false],
   ];
-  const options = offered.filter(([key, , shown]) => shown && key in earlier).map(([value, label]) => ({ value, label }));
-  if (options.length === 0) return [];
+  const held = offered.filter(([, , keys, shown]) => shown && keys.some((key) => key in earlier));
+  if (held.length === 0) return [];
   const change = await ask.pick({
     key: 'change',
     message: "Anything to change from last time? Tick what to change, or nothing to keep it all. Unticking something later doesn't remove it.",
-    options,
+    options: held.map(([value, label]) => ({ value, label })),
     initial: [],
   });
   log.write(`Answer: change: ${JSON.stringify(change)}`);
-  return change;
+  return held.filter(([value]) => change.includes(value)).flatMap(([, , keys]) => keys);
 }
 
 /**

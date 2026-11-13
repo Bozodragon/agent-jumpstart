@@ -3,9 +3,9 @@
 // only which later questions are asked and what those start with.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { answerOnly, checklistSays, fakeMachine, ghAlreadyInstalled, makeHome, readOnlyLog, readSettings, runWith, seedSettings, t3Leaves } from './harness.js';
+import { answerOnly, checklistSays, fakeMachine, ghAlreadyInstalled, makeHome, readOnlyLog, readSettings, runWith, seedSettings, stateFolder, t3Leaves } from './harness.js';
 
 /** The keys of the log's `Answer:` lines, in the order they were written. @param {string} log */
 const answered = (log) => [...log.matchAll(/Answer: (\w+):/g)].map((match) => match[1]);
@@ -211,4 +211,67 @@ test('a re-run with gh signed in leaves GitHub out of "Anything to change?"', as
   const offered = changeOffered(result.stdout);
   assert.ok(!offered.includes('github'), offered.join(', '));
   assert.ok(offered.includes('workspaces'), offered.join(', '));
+});
+
+test('"Anything to change?" offers Experience straight after Team', async (t) => {
+  const where = await makeHome(t);
+  await seedYork(where.home);
+  await answerOnly(where.answersFile, { change: ['nothing'] });
+
+  const result = await runWith(where, 'york');
+
+  assert.equal(result.code, 1, result.stdout + result.stderr);
+  assert.deepEqual(changeOffered(result.stdout).slice(0, 3), ['team', 'experience', 'workspaces']);
+});
+
+test('ticking Experience asks both again, each starting at last time\'s answer', async (t) => {
+  const where = await makeHome(t);
+  // The code question's own default is No, so only last time's answer gives "a little".
+  await seedYork(where.home, { aiExperience: 'dabbled', codingExperience: 'a-little' });
+  await answerOnly(where.answersFile, { change: ['experience'], aiExperience: 'first-time' }, { asked: ['codingExperience'] });
+
+  const result = await runWith(where, 'york');
+
+  assert.equal(result.code, 0, result.stdout + result.stderr);
+  const settings = await readSettings(where.home);
+  assert.deepEqual([settings.aiExperience, settings.codingExperience], ['first-time', 'a-little']);
+  const { text } = await readOnlyLog(where.home);
+  for (const key of ['aiExperience', 'codingExperience']) assert.ok(text.includes(`Settings: ${key} is to change, so it's asked again`), text);
+});
+
+test('"Anything to change?" leaves out Skills when last time\'s AI answer was a first time, which Skills isn\'t asked of', async (t) => {
+  const where = await makeHome(t);
+  await seedYork(where.home, { aiExperience: 'first-time' });
+  await answerOnly(where.answersFile, { change: ['nothing'] });
+
+  const result = await runWith(where, 'york');
+
+  assert.equal(result.code, 1, result.stdout + result.stderr);
+  const offered = changeOffered(result.stdout);
+  assert.ok(!offered.includes('fullSkills'), offered.join(', '));
+  assert.ok(offered.includes('experience'), offered.join(', '));
+});
+
+test('settings from before this release get both experience questions asked once', async (t) => {
+  const where = await makeHome(t);
+  const { aiExperience, codingExperience, ...older } = await seedYork(where.home);
+  await seedSettings(where.home, older);
+  await answerOnly(where.answersFile, { aiExperience: 'confident', codingExperience: 'work' });
+
+  const first = await runWith(where, 'york');
+
+  assert.equal(first.code, 0, first.stdout + first.stderr);
+  const settings = await readSettings(where.home);
+  assert.deepEqual([settings.aiExperience, settings.codingExperience], ['confident', 'work']);
+  const asked = (await readOnlyLog(where.home)).text;
+  for (const key of ['aiExperience', 'codingExperience']) assert.ok(!asked.includes(`Known from settings: ${key}:`), asked);
+
+  // The next run knows them, and asks neither.
+  await rm(join(stateFolder(where.home), 'logs'), { recursive: true });
+  await answerOnly(where.answersFile, {});
+  const second = await runWith(where, 'york');
+
+  assert.equal(second.code, 0, second.stdout + second.stderr);
+  const { text } = await readOnlyLog(where.home);
+  for (const key of ['aiExperience', 'codingExperience']) assert.ok(text.includes(`Known from settings: ${key}:`), text);
 });
