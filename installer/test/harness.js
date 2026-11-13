@@ -208,6 +208,21 @@ export async function readManifest() {
 }
 
 /**
+ * Puts the pinned gh where the installer installs it, so it's taken as already installed. With
+ * no reply for `gh.exe auth status`, it says it's signed in, as any run with no reply succeeds.
+ * @param {string} home
+ * @returns {Promise<{ gh: string, replies: Record<string, { code?: number, output?: string }> }>}
+ */
+export async function ghAlreadyInstalled(home) {
+  const { tools } = await readManifest();
+  const tool = tools.find((/** @type {any} */ entry) => entry.id === 'gh');
+  const gh = join(programsFolder(home), tool.install.folder, tool.install.check);
+  await mkdir(join(gh, '..'), { recursive: true });
+  await writeFile(gh, 'stand-in');
+  return { gh, replies: { 'gh.exe --version': { output: `gh version ${tool.version} (2026-10-01)\n` } } };
+}
+
+/**
  * With `--home`, whatever would change the real machine lands in `<home>/fake-machine/`:
  * `environment.json` stands for the user's environment variables (the user PATH is its
  * `Path`, entries joined with `;`), `runs.json` lists every program it was asked to run,

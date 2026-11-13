@@ -23,14 +23,14 @@ import { endAfterSkippedSignIn, setUpClaude } from './claude.js';
 import { walkThroughConnectors } from './connectors.js';
 import { newEnding, note, showEnding } from './ending.js';
 import { setUpExtraTools } from './extra-tools.js';
-import { setUpGitHub } from './github.js';
+import { setUpGitHub, signedInBefore } from './github.js';
 import { loadManifest, toolEntry } from './manifest.js';
 import { findPlaces } from './places.js';
 import { openMachine } from './machine.js';
 import { autoMemoryInUse, switchOffAutoMemory } from './memory.js';
 import { fullSkillsSizes, loadProfile, withFullSkills, withTeam } from './profile.js';
 import { logProxySetting } from './proxy.js';
-import { answersFrom, askChange, askExperience, askingThePerson, askQuestions, askTeam, experienceOptions, knownFrom, teamTicksToAdd } from './questions.js';
+import { answersFrom, askChange, askExperience, askingThePerson, askQuestions, askTeam, experienceOptions, fromBeforeExperience, knownFrom, teamTicksToAdd } from './questions.js';
 import { installSkills } from './skills.js';
 import { findT3, installT3, openT3 } from './t3.js';
 import { End, messageOf, Stop } from './stop.js';
@@ -202,24 +202,30 @@ async function main() {
     const asker = unattended ? answersFrom(answers) : askingThePerson(frontEnd.ask);
     /** @type {Set<string>} */
     const reused = new Set();
+    /** The keys of the answers the settings no longer give, which are put as on a first run. @type {Set<string>} */
+    const fresh = new Set();
     /**
      * The keys of the answers to ask again, which the settings no longer answer, each with the
      * ticks a team adds to a pick's default.
      * @type {Map<string, string[]>}
      */
     const changing = new Map();
-    const ask = earlier ? knownFrom(earlier, asker, log, reused, changing) : asker;
+    const ask = earlier ? knownFrom(earlier, asker, log, reused, fresh, changing) : asker;
     /** @type {import('./tools.js').Context} */
     const context = { places, machine, frontEnd, downloads: options.downloads, keepDownloads: options.debug, log, attended: !unattended };
     // What's already on the laptop decides what's asked. Memory's sign is looked for before
     // what to change, which offers Memory only when there's a sign of it or it was left on.
     const memoryInUse = await autoMemoryInUse(context);
+    // So is whether GitHub's own tool is signed in, which leaves nothing to ask about GitHub. An
+    // answers file from before the experience questions doesn't look, so it sets up what it did.
+    const githubSignedIn = answers && fromBeforeExperience(answers) ? undefined : await signedInBefore(context);
+    if (githubSignedIn) fresh.add('github');
     // The team first, and on a re-run, what to change from last time. With a team saved, what
     // to change comes first, so a ticked Team is asked next, in its usual place. From here on
     // the run works from the profile with the team's entries merged in.
     const teamSaved = earlier !== undefined && 'team' in earlier;
     let team = teamSaved ? undefined : await askTeam(offered, ask, log);
-    if (earlier) for (const key of await askChange(offered, earlier, memoryInUse, asker, log)) changing.set(key, []);
+    if (earlier) for (const key of await askChange(offered, earlier, { memoryInUse, githubSignedIn }, asker, log)) changing.set(key, []);
     if (teamSaved) team = await askTeam(offered, ask, log);
     const experience = await askExperience(ask, log);
     const profile = withTeam(offered, team);
@@ -232,7 +238,7 @@ async function main() {
       log.write(`T3 Code: couldn't look for an earlier install: ${error.message}`);
       return undefined;
     });
-    const found = { earlier, memoryInUse, t3Channel: foundT3?.channel, experience };
+    const found = { earlier, memoryInUse, t3Channel: foundT3?.channel, experience, githubSignedIn };
     const choices = {
       ...(team === undefined ? {} : { team }),
       ...experience,
@@ -255,7 +261,7 @@ async function main() {
 
     const { rows: tools, programs } = await installTools(context);
     record(tools);
-    const github = await setUpGitHub(profile, choices.github, programs, context);
+    const github = await setUpGitHub(profile, choices.github, programs, context, githubSignedIn);
     record([['GitHub', github]]);
     const ours = Array.isArray(earlier?.skillsInstalled) ? earlier.skillsInstalled.filter((name) => typeof name === 'string') : [];
     const installedFrom = /** @type {Record<string, string>} */ (

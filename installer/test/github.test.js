@@ -4,28 +4,12 @@
 // and sees what was run in runs.json.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdir, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
-import { fakeMachine, makeHome, programsFolder, readManifest, readOnlyLog, readProfile, runWith } from './harness.js';
+import { fakeMachine, ghAlreadyInstalled, makeHome, readOnlyLog, readProfile, runWith } from './harness.js';
 
 /** @param {string} stdout @param {string} label @param {string} value */
 function checklistSays(stdout, label, value) {
   const escaped = value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   assert.match(stdout, new RegExp(`${label}\\s+${escaped}`), stdout);
-}
-
-/**
- * Puts the pinned gh where the installer installs it, so it's taken as already installed.
- * @param {string} home
- * @returns {Promise<{ gh: string, replies: Record<string, { code?: number, output?: string }> }>}
- */
-async function ghAlreadyInstalled(home) {
-  const { tools } = await readManifest();
-  const tool = tools.find((/** @type {any} */ entry) => entry.id === 'gh');
-  const gh = join(programsFolder(home), tool.install.folder, tool.install.check);
-  await mkdir(join(gh, '..'), { recursive: true });
-  await writeFile(gh, 'stand-in');
-  return { gh, replies: { 'gh.exe --version': { output: `gh version ${tool.version} (2026-10-01)\n` } } };
 }
 
 /** @param {{ file: string, args: string[] }[]} runs @param {string} gh */

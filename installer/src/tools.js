@@ -124,6 +124,23 @@ export async function installTool(tool, { places, machine, frontEnd, downloads, 
 }
 
 /**
+ * The copy of a tool already in place, as installTool would find it before installing anything:
+ * the one in its folder here, or, when that folder has none and the installer hasn't put it
+ * there, the person's own on the PATH. Changes nothing.
+ * @param {import('./manifest.js').Tool} tool
+ * @param {Pick<Context, 'places' | 'machine'>} context
+ * @returns {Promise<Command | undefined>}
+ */
+export async function findTool(tool, { places, machine }) {
+  const folder = join(places.programs, tool.install.folder);
+  const here = await commandIn(tool, folder);
+  if (here || (await exists(join(folder, installedMarker))) || tool.install.path.length === 0) return here;
+  const name = basename(tool.install.check);
+  const elsewhere = (await machine.findOnPath(name)).filter((found) => !isInside(found, folder));
+  return elsewhere.length > 0 ? { file: join(elsewhere[0], name), args: [] } : undefined;
+}
+
+/**
  * Why a tool isn't installed, logged, as its result.
  * @param {unknown} error @param {(line: string) => void} say
  * @returns {Installed}
