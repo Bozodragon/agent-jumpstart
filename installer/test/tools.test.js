@@ -127,8 +127,8 @@ test('a download that fails its pinned checksum, or is missing, leaves that tool
   checklistSays(result.stdout, 'GitHub CLI', "Not installed: it wasn't in the downloads folder");
   assert.equal(await exists(join(programsFolder(where.home), 'nodejs')), false);
   // No tool's installer or check runs. Only the registry is read, for a T3 already installed, and
-  // Anthropic's installer runs for Claude Code, which isn't one of these pinned tools.
-  const ran = (await machine.runs()).filter((run) => !(basename(run.file) === 'reg.exe' && run.args[0] === 'query') && basename(run.file) !== 'powershell.exe');
+  // Claude Code, which isn't one of these pinned tools, is installed and checked.
+  const ran = (await machine.runs()).filter((run) => !(basename(run.file) === 'reg.exe' && run.args[0] === 'query') && basename(run.file) !== 'claude.exe');
   assert.deepEqual(ran, [], 'nothing was run');
   assert.deepEqual(await machine.userPath(), [claudeFolder(where.home)], "no tool's folder, only Claude Code's");
   const log = await readOnlyLog(where.home);

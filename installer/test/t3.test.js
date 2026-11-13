@@ -105,7 +105,6 @@ test("a T3 download that doesn't match the hash T3 published is never run, and t
 
   assert.equal(result.code, 0, result.stderr);
   checklistSays(result.stdout, 'T3 Code', "Not installed: the download didn't match T3's checksum");
-  checklistSays(result.stdout, 'Claude Code', 'Not installed');
   assert.equal((await machine.runs()).some((run) => basename(run.file) === installer), false, 'the installer was not run');
   assert.equal(await exists(join(where.home, t3Program('Beta'))), false);
 });
