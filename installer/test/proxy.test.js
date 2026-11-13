@@ -3,6 +3,7 @@
 // with it: no proxy is followed or passed to the programs the Installer runs.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { dirname } from 'node:path';
 import { fakeMachine, makeHome, readOnlyLog, runWith } from './harness.js';
 
 const internetSettings = 'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings';
@@ -95,22 +96,30 @@ test('connection settings never saved are logged as Windows\' default, auto-dete
   ]);
 });
 
-test('a proxy that is set is only logged: only the registry is read for it, and no program is given it', async (t) => {
-  const where = await makeHome(t);
-  const machine = fakeMachine(where.home);
-  await machine.setReplies({
-    [keys.settings]: listing(internetSettings, ['ProxyEnable    REG_DWORD    0x1', 'ProxyServer    REG_SZ    proxy.example.ac.uk:8080']),
-    [keys.connections]: connectionSettings(0x03),
+test('a proxy that is set is only logged: every program is run and every page opened just as with none', async (t) => {
+  /** A York run's programs and pages, with this reply to the proxy setting, its temporary folders named alike. @param {Parameters<ReturnType<typeof fakeMachine>['setReplies']>[0]} replies */
+  async function runsWith(replies) {
+    const where = await makeHome(t);
+    const machine = fakeMachine(where.home);
+    await machine.setReplies(replies);
+    const result = await runWith(where, 'york');
+    assert.equal(result.code, 0, result.stdout + result.stderr);
+    const root = JSON.stringify(dirname(where.home)).slice(1, -1);
+    /** @type {{ runs: { file: string, args: string[] }[], pages: string[] }} */
+    const seen = JSON.parse(JSON.stringify({ runs: await machine.runs(), pages: await machine.pagesOpened() }).replaceAll(root, '<root>'));
+    return seen;
+  }
+  const proxy = 'proxy.example.ac.uk:8080';
+
+  const withProxy = await runsWith({
+    [keys.settings]: listing(internetSettings, ['ProxyEnable    REG_DWORD    0x1', `ProxyServer    REG_SZ    ${proxy}`, 'AutoConfigURL    REG_SZ    http://wpad.example.ac.uk/proxy.pac']),
+    [keys.connections]: connectionSettings(0x0f),
   });
+  const withNone = await runsWith({});
 
-  const result = await runWith(where, 'default');
-
-  assert.equal(result.code, 0, result.stdout + result.stderr);
-  const runs = await machine.runs();
-  const touchingProxy = runs.filter((run) => JSON.stringify(run).includes('Internet Settings'));
-  assert.deepEqual(touchingProxy.map((run) => run.args), [
+  assert.deepEqual(withProxy, withNone);
+  assert.deepEqual(withProxy.runs.filter((run) => JSON.stringify(run).includes('Internet Settings')).map((run) => run.args), [
     ['query', internetSettings],
     ['query', connections, '/v', 'DefaultConnectionSettings'],
-  ]);
-  assert.deepEqual(runs.filter((run) => /proxy/i.test(JSON.stringify(run.env ?? {}))), [], 'no run is given a proxy');
+  ], 'the setting is only read');
 });
