@@ -81,8 +81,19 @@ const pinned = fileURLToPath(new URL('../../manifest.json', import.meta.url));
  */
 
 /**
- * Claude Code's entry in the manifest. `folder` is relative to the home.
- * @typedef {{ id: string, name: string, install: { folder: string, check: string } }} ClaudeEntry
+ * Claude Code's entry in the manifest. Like T3's, it pins nothing: the version is read from
+ * `{releases}/{channel}`, each platform's checksum and size from `{releases}/{version}/manifest.json`,
+ * and the program is `{releases}/{version}/{platform}/claude.exe`, installed with
+ * `claude.exe install {channel}`, which is what records the channel Claude Code updates itself on.
+ * @typedef {object} ClaudeEntry
+ * @property {string} id
+ * @property {string} name
+ * @property {string} releases Anthropic's release server, with no slash at the end.
+ * @property {string} channel `latest`.
+ * @property {Partial<Record<string, string>>} files By processor: Anthropic's name for the platform (`win32-x64`).
+ * @property {{ script: string }} fallback Anthropic's install script, run when the Installer's own
+ *   download of Claude Code fails before `claude install`.
+ * @property {{ folder: string, check: string }} install `folder` is relative to the home.
  */
 
 /**

@@ -351,19 +351,20 @@ async function addToPath(tool, folder, machine, say) {
 
 /**
  * Downloads a file into `saveIn`, or copies it from the downloads folder, by the file name its
- * address ends in. A download reports how far it has got through `progress`, against the size
- * the server gives (when it sends the file as it is, not compressed); a copy reports nothing.
+ * address ends in (or by `from`, its path inside the downloads folder). A download reports how far
+ * it has got through `progress`, against `size` when the caller knows it, or else the size the
+ * server gives (when it sends the file as it is, not compressed); a copy reports nothing.
  * Nothing about how far it has got is logged. A download is written as `<name>.partial` and
  * renamed once it's whole; a copy is made as it always was.
- * @param {{ url: string }} download
+ * @param {{ url: string, size?: number, from?: string }} download
  * @param {{ downloads?: string, saveIn: string, say: (line: string) => void, progress?: import('./front-end.js').Progress }} where
  * @returns {Promise<string>} the file
  */
-export async function obtain({ url }, { downloads, saveIn, say, progress = () => {} }) {
+export async function obtain({ url, size, from }, { downloads, saveIn, say, progress = () => {} }) {
   const name = basename(new URL(url).pathname);
   const file = join(saveIn, name);
   if (downloads) {
-    const source = join(downloads, name);
+    const source = join(downloads, from ?? name);
     if (!(await exists(source))) {
       say(`${source} isn't there`);
       throw new NotInstalled("it wasn't in the downloads folder");
@@ -385,7 +386,9 @@ export async function obtain({ url }, { downloads, saveIn, say, progress = () =>
   try {
     const response = await fetch(url);
     if (!response.ok || !response.body) throw new Error(`the server said ${response.status} ${response.statusText}`);
-    const total = sizeOf(response);
+    // Bytes are counted once fetch has unpacked them, so a size the caller knows (Claude Code's,
+    // from Anthropic's manifest) is the right total even when the server compresses the file.
+    const total = size ?? sizeOf(response);
     let received = 0;
     progress(received, total);
     await pipeline(

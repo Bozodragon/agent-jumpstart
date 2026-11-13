@@ -34,9 +34,11 @@
  * @typedef {object} FrontEnd
  * @property {(title: string) => void} start The run's first words.
  * @property {(text: string) => void} step A line saying what's happening.
- * @property {<T>(message: string, task: (progress: Progress) => Promise<T>, ended?: (result: T) => { text: string, ok: boolean }) => Promise<T>} busy
+ * @property {<T>(message: string, task: (progress: Progress) => Promise<T>, ended?: (result: T) => { text: string, ok?: boolean }) => Promise<T>} busy
  *   Shows that something slow is under way while `task` runs, then how it ended (`ended`, or
- *   the message, if not given). Nothing else may be shown while it runs. The task may report
+ *   the message, if not given): done (`ok` true), failed (false), or, with no `ok`, simply over,
+ *   with no mark either way (a step that gave way quietly to another, such as Claude Code's own
+ *   download to Anthropic's script). Nothing else may be shown while it runs. The task may report
  *   how far it has got through `progress` (the terminal shows a percentage beside the message,
  *   or the amount so far when the total isn't known); it needn't.
  * @property {(text: string) => void} problem Something that didn't work, or why the run stopped.
