@@ -63,7 +63,11 @@ _Avoid_: level, skill level
 A claude.ai connection to another service, such as Gmail or Asana, which a team member connects themselves on claude.ai.
 
 **Extra tool**:
-An optional command-line tool the Installer installs and signs in to, such as clasp for Apps Script.
+An optional tool the Installer installs and signs in to, such as clasp for Apps Script, or the MCP servers that read Google Analytics and Search Console.
+
+**MCP server**:
+A program the Installer installs and adds to Claude Code's settings so the agent can read another service, such as Google Analytics. Nobody connects it on claude.ai, and it reaches Claude Code and T3 Code but not claude.ai.
+_Avoid_: connector, local connector
 
 **Workspace**:
 A folder the agent works in for one area of work, with its own agent instructions.
