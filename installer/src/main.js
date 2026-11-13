@@ -29,6 +29,7 @@ import { findPlaces } from './places.js';
 import { openMachine } from './machine.js';
 import { autoMemoryInUse, switchOffAutoMemory } from './memory.js';
 import { fullSkillsSizes, loadProfile, withFullSkills, withTeam } from './profile.js';
+import { logProxySetting } from './proxy.js';
 import { answersFrom, askChange, askQuestions, askTeam, knownFrom, teamTicksToAdd } from './questions.js';
 import { installSkills } from './skills.js';
 import { findT3, installT3, openT3 } from './t3.js';
@@ -162,6 +163,7 @@ async function main() {
   if (options.profiles) log.write(`Profiles from: ${options.profiles}`);
   const machine = openMachine(places, log);
   if (options.debug) await logUserPath(machine, log, 'before');
+  await logProxySetting(machine, log);
   /**
    * What this run has changed so far, step by step, for a run that stops partway.
    * @type {[string, string][]}
