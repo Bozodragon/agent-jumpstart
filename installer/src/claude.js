@@ -296,7 +296,15 @@ async function ownRoute(entry, program, { places, machine, frontEnd, downloads, 
     );
   } finally {
     if (keepDownloads) say(`kept ${file}`);
-    else await rm(file, { force: true });
+    else {
+      // A program that has only just run can still be held open for a moment (by antivirus, say).
+      // A download that can't be deleted is logged, and never changes how the install went.
+      try {
+        await rm(file, { force: true, maxRetries: 5, retryDelay: 200 });
+      } catch (error) {
+        say(`couldn't delete ${file}: ${messageOf(error)}`);
+      }
+    }
   }
 }
 
