@@ -1,0 +1,307 @@
+/* PROTOTYPE, throwaway. Variant C, "The checklist fills in".
+   Tokens and components are the setup page's (page/template.html), so the two read as one family. */
+:root {
+  --bg: #000000;
+  --panel: #0b0c0e;
+  --hover: #131417;
+  --selected: #1b1d21;
+  --hairline: #1f2126;
+  --outline: #2b2e35;
+  --text: #ecedef;
+  --secondary: #9b9ea7;
+  --muted: #666973;
+  --accent: #5b95ff;
+  --lit: inset 0 1px 0 rgba(255, 255, 255, .055);
+  --mono: "JetBrains Mono", Consolas, monospace;
+  /* This page's own: a value written in before the work is done, a value once it is, and trouble. */
+  --pencil: #787b85;
+  --ink: #c6c8ce;
+  --warn: #f0a656;
+  --warn-text: #fad8b0;
+}
+*, *::before, *::after { box-sizing: border-box; }
+html { background: var(--bg); }
+body {
+  margin: 0;
+  font-family: "Instrument Sans", "Segoe UI", system-ui, sans-serif;
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+}
+#stage a { color: var(--accent); text-decoration: none; border-bottom: 1px solid rgba(91, 149, 255, .35); }
+#stage a:hover { border-bottom-color: var(--accent); }
+#stage :focus { outline: none; }
+#stage :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+#stage a:focus-visible { border-radius: 4px; }
+#stage .c-closing:focus-visible { outline: none; } /* focused only so a screen reader lands on it */
+
+.c-vh { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.c-mono, .c-path { font-family: var(--mono); font-size: .9em; letter-spacing: -.01em; }
+#stage code, #stage kbd {
+  font-family: var(--mono); font-size: 12.5px; color: var(--text);
+  background: var(--selected); border: 1px solid var(--outline); border-radius: 6px; padding: 1px 6px;
+}
+
+/* ---- The two regions ---- */
+.c-app {
+  display: grid; grid-template-columns: 432px minmax(0, 1fr);
+  max-width: 1240px; min-height: 100vh; margin: 0 auto;
+  padding: 28px 28px 84px; /* the bottom keeps clear of the prototype's bar */
+}
+.c-rail { position: sticky; top: 28px; align-self: start; min-width: 0; }
+.c-stage { min-width: 0; padding: 78px 0 0 clamp(40px, 6.5vw, 104px); view-transition-name: c-stage; }
+
+.c-brand { display: flex; align-items: center; gap: 10px; height: 28px; margin: 0 4px 18px; font-size: 14px; font-weight: 600; }
+.c-logo {
+  width: 28px; height: 28px; border-radius: 9px; background: var(--selected);
+  border: 1px solid var(--outline); box-shadow: var(--lit); display: grid; place-items: center;
+}
+.c-logo svg { width: 15px; height: 15px; stroke: var(--accent); }
+
+.c-head { display: flex; align-items: baseline; justify-content: space-between; padding: 0 4px 10px; }
+.c-head h2 { font-size: 15px; font-weight: 600; margin: 0; line-height: 22px; }
+.c-head span { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.c-panel {
+  background: var(--panel); border: 1px solid var(--hairline);
+  border-radius: 16px; box-shadow: var(--lit); padding: 8px; margin: 0;
+}
+
+/* ---- About you: the answers with no row of their own ---- */
+.c-about { margin-bottom: 22px; }
+.c-about-list { padding: 10px 8px; }
+.c-about-row { display: grid; grid-template-columns: 128px minmax(0, 1fr); column-gap: 12px; padding: 2px 10px; font-size: 13.5px; line-height: 22px; }
+.c-about-row dt { color: var(--secondary); font-weight: 500; }
+.c-about-row dd { margin: 0; color: var(--ink); overflow-wrap: anywhere; }
+.c-about-row dd:empty::before { content: ""; display: block; width: 28px; height: 11px; border-bottom: 1px solid var(--outline); }
+
+/* ---- The checklist ---- */
+.c-check { view-transition-name: c-check; }
+.c-rows { list-style: none; }
+.c-row {
+  display: grid; grid-template-columns: 18px 98px minmax(0, 1fr); column-gap: 12px; align-items: start;
+  padding: 7px 10px; border-radius: 10px;
+  transition: background-color .2s ease, box-shadow .2s ease;
+}
+.c-row .c-mk { margin-top: 2px; }
+.c-row-label { font-size: 14px; line-height: 22px; font-weight: 500; color: var(--secondary); transition: color .2s ease; }
+.c-row-value { font-size: 13.5px; line-height: 20px; padding-top: 1px; color: var(--pencil); overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.c-row-bar { grid-column: 3; display: none; height: 2px; margin: 6px 0 3px; border-radius: 2px; background: var(--outline); overflow: hidden; }
+.c-row-bar::after { content: ""; display: block; height: 100%; width: var(--pct, 0%); background: var(--accent); }
+.c-row--bar .c-row-bar { display: block; }
+
+.c-row[data-s="work"] .c-row-value, .c-row[data-s="you"] .c-row-value { color: var(--secondary); }
+.c-row[data-s="done"] .c-row-label, .c-row[data-s="bad"] .c-row-label { color: var(--text); }
+.c-row[data-s="done"] .c-row-value { color: var(--ink); }
+.c-row[data-s="bad"] .c-row-value { color: var(--warn-text); }
+/* The row the stage is about. */
+.c-row.c-row--live { background: var(--selected); box-shadow: inset 0 0 0 1px var(--outline); }
+.c-row.c-row--live .c-row-label { color: var(--text); font-weight: 600; }
+.c-pop { animation: c-pop .32s ease-out; }
+@keyframes c-pop { from { opacity: 0; transform: translateX(-4px); } }
+
+/* ---- One marker, two sizes: 18px in the rail, the setup page's 28px step circle on the stage ---- */
+.c-mk, .c-badge {
+  --sz: 18px;
+  flex: none; position: relative; width: var(--sz); height: var(--sz); border-radius: 999px;
+  border: 1px solid var(--outline); color: var(--secondary); display: grid; place-items: center;
+}
+.c-badge { --sz: 28px; font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.c-mk svg, .c-badge svg { width: 68%; height: 68%; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+.c-mk[data-s="planned"]::after { content: ""; width: 4px; height: 4px; border-radius: 50%; background: var(--muted); }
+.c-mk[data-s="work"], .c-badge[data-s="work"] { border-width: 1.5px; border-top-color: var(--accent); border-right-color: var(--accent); animation: c-spin .9s linear infinite; }
+.c-mk[data-s="you"], .c-badge[data-s="you"] { border-color: var(--accent); animation: c-you 2.2s ease-out infinite; }
+.c-mk[data-s="you"]::after, .c-badge[data-s="you"]::after { content: ""; width: 36%; height: 36%; border-radius: 50%; background: var(--accent); }
+.c-mk[data-s="done"], .c-badge[data-s="done"] { background: var(--selected); color: var(--text); }
+.c-mk[data-s="done"] path, .c-badge[data-s="done"] path { stroke-dasharray: 14; animation: c-draw .34s ease-out; }
+.c-mk[data-s="bad"], .c-badge[data-s="bad"] { border-color: rgba(240, 166, 86, .58); background: rgba(240, 166, 86, .14); color: var(--warn); }
+@keyframes c-spin { to { transform: rotate(360deg); } }
+@keyframes c-you { 0% { box-shadow: 0 0 0 0 rgba(91, 149, 255, .5); } 70%, 100% { box-shadow: 0 0 0 7px rgba(91, 149, 255, 0); } }
+@keyframes c-draw { from { stroke-dashoffset: 14; } to { stroke-dashoffset: 0; } }
+
+/* ---- The stage ---- */
+.c-card { max-width: 600px; animation: c-in .18s ease-out; }
+@keyframes c-in { from { opacity: 0; } }
+.c-lead { display: flex; align-items: flex-start; gap: 10px; min-height: 28px; }
+.c-lead-note { font-size: 13.5px; line-height: 20px; padding-top: 4px; color: var(--secondary); font-variant-numeric: tabular-nums; }
+.c-card--problem .c-lead-note { color: var(--warn-text); }
+.c-title {
+  font-size: 28px; line-height: 1.2; font-weight: 600; letter-spacing: -.02em;
+  margin: 16px 0 22px; max-width: 21em; text-wrap: balance;
+}
+.c-title.c-title--long { font-size: 22px; line-height: 1.32; letter-spacing: -.012em; }
+.c-title .c-path { font-size: .8em; letter-spacing: -.02em; overflow-wrap: anywhere; }
+
+/* Options: one from a few (radios), yes or no (a pair), several from a list (ticks). */
+.c-opts {
+  display: grid; gap: 2px; padding: 6px;
+  background: var(--panel); border: 1px solid var(--hairline); border-radius: 16px; box-shadow: var(--lit);
+}
+.c-opts.c-opts--pair { grid-template-columns: 1fr 1fr; max-width: 320px; }
+.c-opt {
+  display: grid; grid-template-columns: 18px minmax(0, 1fr); column-gap: 12px; align-items: start;
+  padding: 10px 12px; border-radius: 11px; cursor: pointer; user-select: none;
+  box-shadow: inset 0 0 0 1px transparent;
+}
+.c-opt:hover { background: var(--hover); }
+.c-opt[aria-checked="true"] { background: var(--selected); box-shadow: inset 0 0 0 1px var(--outline); }
+.c-opt-text { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 10px; min-width: 0; }
+.c-opt-label { font-weight: 500; }
+.c-opt-hint { font-size: 13.5px; color: var(--secondary); }
+.c-opt[aria-checked="false"] .c-opt-label, .c-opt[aria-selected="false"] .c-opt-label { color: var(--secondary); }
+.c-radio { width: 18px; height: 18px; margin-top: 3px; border-radius: 50%; border: 1.5px solid #454853; display: grid; place-items: center; }
+.c-opt[aria-checked="true"] .c-radio { border-color: var(--accent); }
+.c-opt[aria-checked="true"] .c-radio::after { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
+
+/* Ticks read as a small table: the name, then what it lets the agent do. */
+.c-card:has(.c-opts--pick) { max-width: 690px; }
+.c-opts--pick .c-opt { padding: 8px 12px; }
+.c-opts--pick .c-opt-text { display: grid; grid-template-columns: 128px minmax(0, 1fr); column-gap: 14px; }
+.c-opts--pick .c-opt-hint { line-height: 1.45; padding-top: 2px; }
+.c-box { width: 18px; height: 18px; margin-top: 3px; border-radius: 5px; border: 1.5px solid #454853; display: grid; place-items: center; color: transparent; }
+.c-box svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+.c-opt[aria-selected="true"] .c-box { background: var(--accent); border-color: var(--accent); color: #000; }
+
+/* Buttons are the setup page's pills. */
+.c-btn {
+  display: inline-flex; align-items: center; justify-content: center; flex: none;
+  height: 40px; padding: 0 22px; border-radius: 999px; border: 1px solid transparent;
+  font: inherit; font-size: 14.5px; font-weight: 600; line-height: 1; cursor: pointer; white-space: nowrap;
+}
+.c-btn.c-btn--primary { background: var(--accent); color: #000; }
+.c-btn.c-btn--primary:hover { background: #79a9ff; }
+#stage a.c-btn--quiet, .c-btn.c-btn--quiet { background: var(--panel); color: var(--text); border: 1px solid var(--outline); box-shadow: var(--lit); font-weight: 500; }
+#stage a.c-btn--quiet:hover, .c-btn.c-btn--quiet:hover { background: var(--hover); border-color: #3a3e47; }
+#stage a.c-btn:focus-visible { border-radius: 999px; }
+.c-btn:disabled { opacity: .45; cursor: default; }
+.c-actions { display: flex; align-items: center; gap: 14px; margin-top: 24px; }
+.c-hint { font-size: 13px; color: var(--muted); }
+
+/* Typing: a folder, a code. */
+.c-input {
+  width: 100%; height: 46px; padding: 0 14px; border-radius: 12px;
+  background: var(--bg); border: 1px solid var(--outline); color: var(--text);
+  font-family: var(--mono); font-size: 14px;
+}
+.c-input::placeholder { color: var(--muted); }
+#stage .c-input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; border-color: transparent; }
+.c-input[aria-invalid="true"] { border-color: rgba(240, 166, 86, .7); }
+.c-input:disabled { color: var(--secondary); }
+.c-error { margin: 10px 2px 0; font-size: 13.5px; color: var(--warn-text); }
+.c-label { display: block; margin: 22px 2px 8px; font-size: 14px; font-weight: 500; }
+.c-field { display: flex; gap: 10px; align-items: center; }
+.c-field .c-input { flex: 1 1 auto; min-width: 0; }
+
+/* Work the laptop is doing. */
+.c-prog { height: 6px; border-radius: 6px; background: var(--selected); box-shadow: inset 0 0 0 1px var(--hairline); overflow: hidden; }
+.c-prog-fill { display: block; height: 100%; width: 0; border-radius: 6px; background: var(--accent); transition: width .12s linear; }
+.c-prog-read { margin: 12px 0 0; font-size: 14px; color: var(--secondary); font-variant-numeric: tabular-nums; }
+.c-prog-pct { color: var(--text); font-weight: 500; }
+
+/* Something to read, then act on. */
+.c-prose { color: var(--secondary); max-width: 34em; }
+.c-prose p { margin: 0; }
+.c-prose p + p, .c-prose ul { margin-top: 12px; }
+.c-prose ul { margin-bottom: 0; padding: 0; list-style: none; }
+.c-prose li { position: relative; padding-left: 18px; }
+.c-prose li + li { margin-top: 6px; }
+.c-prose li::before { content: ""; position: absolute; left: 5px; top: .72em; width: 4px; height: 4px; border-radius: 50%; background: var(--muted); }
+.c-elsewhere { margin: 20px 0 0; }
+.c-card--settled .c-prose, .c-card--settled .c-elsewhere, .c-card--settled .c-actions { opacity: .5; transition: opacity .2s ease; }
+
+.c-linkbox {
+  display: flex; align-items: center; justify-content: space-between; gap: 14px;
+  padding: 10px 10px 10px 16px; background: var(--panel); border: 1px solid var(--hairline); border-radius: 14px; box-shadow: var(--lit);
+}
+.c-linkbox-text { display: flex; flex-direction: column; min-width: 0; line-height: 1.35; }
+.c-linkbox-text b { font-size: 14px; font-weight: 500; }
+.c-url { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.c-linkbox .c-btn { height: 34px; padding: 0 16px; font-size: 13.5px; }
+
+/* ---- The ending: the checklist takes the page ---- */
+.c-closing { font-size: 32px; line-height: 1.15; font-weight: 600; letter-spacing: -.02em; margin: 30px 4px 26px; text-wrap: balance; view-transition-name: c-closing; }
+.c-app.c-app--ending { grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); column-gap: clamp(32px, 5vw, 72px); max-width: 1160px; }
+.c-app--ending .c-rail { position: static; }
+.c-app--ending .c-about, .c-app--ending .c-strip { display: none; }
+.c-app--ending .c-stage { padding: 121px 0 0; }
+.c-app--ending .c-row { grid-template-columns: 20px 124px minmax(0, 1fr); column-gap: 14px; padding: 10px 12px; }
+.c-app--ending .c-row .c-mk { --sz: 20px; margin-top: 1px; }
+.c-app--ending .c-row-label { font-size: 15px; font-weight: 600; }
+.c-app--ending .c-row-value { font-size: 14.5px; line-height: 22px; padding-top: 0; }
+.c-next { padding: 16px 18px; }
+.c-next p { margin: 0; color: var(--secondary); }
+.c-back { margin: 18px 4px 0; font-size: 14px; }
+.c-log { margin: 28px 4px 0; padding-top: 16px; border-top: 1px solid var(--hairline); font-size: 12.5px; color: var(--muted); }
+.c-log dt { font-family: inherit; }
+.c-log dd { margin: 2px 0 0; font-size: 12px; color: var(--secondary); overflow-wrap: anywhere; }
+.c-trouble {
+  display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: 12px; align-items: start;
+  padding: 14px 16px; margin-bottom: 24px; border-radius: 16px;
+  background: rgba(240, 166, 86, .07); border: 1px solid rgba(240, 166, 86, .3);
+}
+.c-trouble p { margin: 2px 0 0; color: var(--warn-text); font-size: 14.5px; }
+::view-transition-group(c-check), ::view-transition-group(c-stage), ::view-transition-group(c-closing) { animation-duration: .5s; animation-timing-function: cubic-bezier(.2, .7, .2, 1); }
+
+/* ---- A short window (a 768px-tall laptop with the browser's own bars): the rail tightens so the whole checklist stays in view ---- */
+@media (min-width: 901px) and (max-height: 720px) {
+  .c-app { padding-top: 20px; }
+  .c-rail { top: 20px; }
+  .c-brand { margin-bottom: 14px; }
+  .c-stage { padding-top: 74px; }
+  .c-about { margin-bottom: 16px; }
+  .c-about-row { line-height: 20px; }
+  .c-row { padding-top: 5px; padding-bottom: 5px; }
+  .c-app--ending .c-row { padding-top: 7px; padding-bottom: 7px; }
+  .c-closing { margin-top: 22px; margin-bottom: 20px; }
+  .c-app--ending .c-stage { padding-top: 103px; }
+}
+
+/* ---- The strip the checklist becomes in a narrow window ---- */
+.c-strip { display: none; }
+@media (max-width: 900px) {
+  .c-app, .c-app.c-app--ending { display: block; padding: 0 16px 88px; }
+  .c-rail {
+    top: 0; z-index: 5; margin: 0 -16px; padding: 14px 16px 12px;
+    background: var(--bg); border-bottom: 1px solid var(--hairline);
+  }
+  .c-brand { margin: 0 0 12px; }
+  .c-strip {
+    display: flex; align-items: center; gap: 12px; width: 100%; height: 40px; padding: 0 10px 0 14px;
+    background: var(--panel); border: 1px solid var(--hairline); border-radius: 12px; box-shadow: var(--lit);
+    color: var(--text); font: inherit; font-size: 13.5px; cursor: pointer; text-align: left;
+  }
+  .c-dots { display: flex; gap: 5px; flex: none; }
+  .c-dots i { width: 8px; height: 8px; border-radius: 50%; border: 1px solid #454853; }
+  .c-dots i[data-s="planned"] { border-color: var(--muted); background: #33363d; }
+  .c-dots i[data-s="work"], .c-dots i[data-s="you"] { border-color: var(--accent); background: var(--accent); box-shadow: 0 0 0 3px rgba(91, 149, 255, .22); }
+  .c-dots i[data-s="done"] { border-color: var(--text); background: var(--text); }
+  .c-dots i[data-s="bad"] { border-color: var(--warn); background: var(--warn); }
+  .c-strip-now { flex: 1 1 auto; min-width: 0; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .c-strip-count { flex: none; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .c-strip-chevron { flex: none; display: grid; place-items: center; color: var(--muted); }
+  .c-strip-chevron svg { width: 16px; height: 16px; transition: transform .15s ease; }
+  .c-rail--open .c-strip-chevron svg { transform: rotate(180deg); }
+  .c-rail-body { display: none; padding-top: 16px; max-height: calc(100vh - 190px); overflow-y: auto; }
+  .c-rail--open .c-rail-body { display: block; }
+  .c-head .c-count { display: none; }
+  .c-stage, .c-app--ending .c-stage { padding: 28px 0 0; }
+  .c-title { font-size: 24px; margin: 14px 0 20px; }
+  .c-title.c-title--long { font-size: 20px; }
+  .c-row { grid-template-columns: 18px 92px minmax(0, 1fr); }
+  .c-opts--pick .c-opt-text { display: flex; flex-direction: column; }
+  .c-opts--pick .c-opt-hint { padding-top: 0; }
+  .c-about-row { grid-template-columns: 122px minmax(0, 1fr); }
+  .c-actions { flex-wrap: wrap; }
+
+  /* At the ending there's nothing to fold away: the whole checklist, then what to do next. */
+  .c-app--ending .c-rail { border-bottom: 0; padding-bottom: 0; }
+  .c-app--ending .c-rail-body { display: block; max-height: none; padding-top: 0; }
+  .c-app--ending .c-head .c-count { display: inline; }
+  .c-closing { font-size: 28px; margin: 22px 2px 22px; }
+  .c-app--ending .c-row { grid-template-columns: 20px 100px minmax(0, 1fr); column-gap: 12px; padding: 9px 10px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #stage *, #stage *::before, #stage *::after { animation: none !important; transition: none !important; }
+  /* A still spinner still has to read as "working": keep the two-tone ring. */
+}
