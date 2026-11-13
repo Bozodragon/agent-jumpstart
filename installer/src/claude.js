@@ -32,7 +32,7 @@ import { system32 } from './machine.js';
 import { loadManifest, toolEntry } from './manifest.js';
 import { messageOf } from './stop.js';
 import { exists, isRecord, NotInstalled, obtain } from './tools.js';
-import { bullet } from './text.js';
+import { bullet, plainLines, wholeLines } from './text.js';
 
 /**
  * Anthropic's own install script, run as Anthropic says to, in Windows PowerShell from System32.
@@ -114,20 +114,12 @@ export async function setUpClaude(context, ask) {
   /** @type {Skipped | undefined} */
   let skipped;
   if (state.present && state.runs && !state.signedIn) {
-    frontEnd.notice(
-      [
-        `${entry.name} signs you in next, in your browser.`,
-        '',
-        `  ${bullet} A browser window opens at Claude's sign-in page. Sign in there. ${frontEnd.comeBack()} It carries on by itself.`,
-        `  ${bullet} If no window opens, copy the link below into your browser: select it with the mouse, then right-click to copy it.`,
-        `  ${bullet} If the page shows a code, copy it, come back here and right-click to paste it. Nothing appears when you paste. Paste once, then press Enter.`,
-      ].join('\n'),
-      `Sign in to ${entry.name}`,
-    );
+    const login = frontEnd.inWindow ? inTheWindow(entry.name, program, context) : onThePage(entry.name, program, context, say);
+    frontEnd.notice(login.notice, `Sign in to ${entry.name}`);
     // One rejected code ends Claude's sign-in, so a failed one is offered again, as often as it
     // fails. Each try is a fresh `claude auth login`, with a new link and code.
     for (;;) {
-      const { code, output } = await machine.runOnScreenAndKeep(program, ['auth', 'login'], { env: { BROWSER: 'explorer.exe' } });
+      const { code, output } = await login.run();
       for (const line of withoutWhatWasTyped(output)) say(`sign-in said: ${line}`);
       say(`sign-in finished with code ${code}`);
       state = await look();
@@ -155,6 +147,84 @@ export async function setUpClaude(context, ask) {
   }
 
   return { row: rowFor(state), email: state.signedIn ? (state.email ?? null) : null, ...(skipped !== undefined && { skipped }) };
+}
+
+/**
+ * Claude's sign-in: what's said before it, and one try at it. Either way it runs as `claude auth
+ * login`, with BROWSER=explorer.exe for that run only, and what it prints comes back for the log.
+ * @typedef {{ notice: string, run: () => Promise<import('./machine.js').Ran> }} Login
+ */
+
+/** For BROWSER: Claude runs it with the address as its only argument, which opens the default browser. */
+const authLogin = { args: ['auth', 'login'], env: { BROWSER: 'explorer.exe' } };
+
+/**
+ * In the person's window: Claude reads a pasted code from the window itself, and nothing shows
+ * as it's pasted, which the notice says.
+ * @param {string} name @param {string} program @param {import('./tools.js').Context} context
+ * @returns {Login}
+ */
+function inTheWindow(name, program, { machine, frontEnd }) {
+  return {
+    notice: [
+      `${name} signs you in next, in your browser.`,
+      '',
+      `  ${bullet} A browser window opens at Claude's sign-in page. Sign in there. ${frontEnd.comeBack()} It carries on by itself.`,
+      `  ${bullet} If no window opens, copy the link below into your browser: select it with the mouse, then right-click to copy it.`,
+      `  ${bullet} If the page shows a code, copy it, come back here and right-click to paste it. Nothing appears when you paste. Paste once, then press Enter.`,
+    ].join('\n'),
+    run: () => machine.runOnScreenAndKeep(program, authLogin.args, { env: authLogin.env }),
+  };
+}
+
+/**
+ * On the page: Claude runs piped. Its paste-a-code link, taken from what it prints, goes to the
+ * page with a box for the code, which the page writes into Claude's input.
+ * @param {string} name @param {string} program @param {import('./tools.js').Context} context @param {(line: string) => void} say
+ * @returns {Login}
+ */
+function onThePage(name, program, { machine, frontEnd }, say) {
+  /** Claude's own check: a code is its two parts, with a # between them. @param {string} code */
+  const checkCode = (code) => {
+    if (!/^[^#\s]+#[^#\s]+$/.test(code)) return "That isn't the whole code. Copy all of it from Claude's page, then paste it again.";
+    say('a code was pasted on the page, for the sign-in');
+    return undefined;
+  };
+  return {
+    notice: [
+      `${name} signs you in next, in your browser.`,
+      '',
+      `  ${bullet} A new tab opens at Claude's sign-in page. Sign in there. ${frontEnd.comeBack()} It carries on by itself.`,
+      `  ${bullet} If no tab opens, use the link below.`,
+      `  ${bullet} If the page shows a code, copy it, then paste it into the box below.`,
+    ].join('\n'),
+    run: () =>
+      frontEnd.signIn((show) => {
+        let shown = false;
+        return machine.runOnScreenAndKeep(program, authLogin.args, {
+          env: authLogin.env,
+          watch(printed) {
+            const link = pasteLinkIn(printed);
+            if (shown || link === undefined) return;
+            shown = true;
+            show({ link: { url: link, label: 'If no tab opens, use this link' }, codeBox: checkCode });
+          },
+        });
+      }),
+  };
+}
+
+/**
+ * The paste-a-code address `claude auth login` prints ("If the browser didn't open, visit: …"),
+ * once it has printed the whole line.
+ * @param {string} printed
+ */
+function pasteLinkIn(printed) {
+  for (const line of wholeLines(printed)) {
+    const link = /visit:\s*(https:\/\/\S+)/.exec(line)?.[1];
+    if (link) return link;
+  }
+  return undefined;
 }
 
 /**
@@ -443,20 +513,6 @@ function withoutWhatWasTyped(output) {
     const after = line.slice(prompt.length).trim();
     return /^Login (successful\.|failed:)/.test(after) ? [prompt, after] : [prompt];
   });
-}
-
-/**
- * What a program printed, as lines of plain text: without the colours and links a terminal
- * would draw, and without the blank lines.
- * @param {string} output
- */
-function plainLines(output) {
-  return output
-    .replace(/\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g, '')
-    .replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '')
-    .split(/\r?\n/)
-    .map((line) => line.trimEnd())
-    .filter((line) => line.trim() !== '');
 }
 
 /** @param {string} program @param {import('./machine.js').Machine} machine @returns {Promise<ClaudeState>} */

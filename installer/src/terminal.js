@@ -247,6 +247,15 @@ export async function openTerminal() {
       stop(text, ok);
       return result;
     },
+    // The terminal's sign-ins run in the window (`inWindow`), which shows the program itself, so
+    // nothing calls this here; were anything to, the link and code would be steps, with no code
+    // box, since the program reads the window.
+    signIn(task) {
+      return task(({ link, code }) => {
+        if (link) step(`${link.label}: ${link.url}`);
+        if (code) step(`Your code: ${code}`);
+      });
+    },
     problem(line) {
       log.message(line, { symbol: styleText('red', 'x') });
     },
