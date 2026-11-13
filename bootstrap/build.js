@@ -3,16 +3,21 @@
 //
 //   york.ps1, install.ps1, york-debug.ps1, share-log.ps1  the pasted lines, copied as they are
 //   installer.zip  the Node program with everything it reads at run time and its
-//                  production dependencies, which the bootstrap unpacks and runs
+//                  production dependencies, which the bootstrap unpacks and runs, and the
+//                  Installer page built from installer/page (installer/page/build.js) as
+//                  installer/page/built: its bundle, style sheet and fonts, never its source
+//                  or the packages it's built from
 //
 //   node bootstrap/build.js [<folder>]     (default: dist/portall)
 //
 // The zip is laid out like the repo, so the program finds `profiles/` and `manifest.json`
 // where it does in a checkout. Anything new the program reads at run time goes in `shipped`.
-import { cp, mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { cp, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { join, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { crc32, deflateRawSync } from 'node:zlib';
+import { buildPage } from '../installer/page/build.js';
 
 const repo = fileURLToPath(new URL('..', import.meta.url));
 const out = process.argv[2] ?? join(repo, 'dist', 'portall');
@@ -111,5 +116,15 @@ const files = (await Promise.all(roots.map(filesUnder))).flat().sort();
 const entries = await Promise.all(
   files.map(async (file) => ({ name: relative(repo, file).split(sep).join('/'), data: await readFile(file) })),
 );
+// Built away from the checkout's own installer/page/built, which a running Installer (or test)
+// may be serving, and zipped where the Installer looks for it.
+const staging = await mkdtemp(join(tmpdir(), 'agent-jumpstart-page-'));
+try {
+  const page = await buildPage(staging);
+  const pageFiles = (await filesUnder(page)).sort();
+  for (const file of pageFiles) entries.push({ name: `installer/page/built/${relative(page, file).split(sep).join('/')}`, data: await readFile(file) });
+} finally {
+  await rm(staging, { recursive: true, force: true });
+}
 await writeFile(join(out, 'installer.zip'), zip(entries));
 console.log(`Built ${out}: ${pastedLines.join(', ')} and installer.zip (${entries.length} files)`);
