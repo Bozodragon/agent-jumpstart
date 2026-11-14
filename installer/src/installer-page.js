@@ -47,8 +47,9 @@
 // Stopping: Stop on the page throws `Stop('Stopped at your request.')` from whichever call the
 // run is waiting on (a question; a program on the screen, such as a sign-in, which is ended), or
 // from the next one it makes, if it's waiting on none. A busy that changes something (an
-// install) is waited for: it finishes, and the next call that waits throws. One that changes
-// nothing (a look, a wait for the person, a download) throws at once, its task left to itself. A
+// install) is waited for, up to 10 minutes: it ends as its task ended, then throws the Stop, so
+// nothing after it starts. One that changes nothing (a look, a wait for the person, a download)
+// throws at once, its task left to itself. A
 // run whose every page has gone finishes the step it's on, then waits at the next question (or
 // program on the screen, which needs the page) about 10 minutes for a page to come back (a
 // reload, the Bootstrap reopening it, a second window), and stops the same way if none does.
@@ -67,6 +68,12 @@ const progressEvery = 200;
 
 /** How long a run with no page open waits at a question for one to come back, before it stops. */
 const comeBackWithin = 10 * 60_000;
+
+/**
+ * How long, after Stop, the run waits for a step that's installing something to finish, before it
+ * stops without it: an installer that has hung mustn't keep the run from stopping.
+ */
+const finishWithin = 10 * 60_000;
 
 /**
  * Waits for something from outside the Installer for at most `ms`, and says whether it happened:
@@ -450,9 +457,21 @@ export async function openInstallerPage({ addressFile, connectedFile, page }) {
       let result;
       if (!changesNothing) finishing.set(busy, message);
       try {
+        const running = task(progress, output);
         // A stop waits for a task that changes something, so what it started is done, and
-        // counted, before the run stops. One that changes nothing is left to itself.
-        result = await (changesNothing ? Promise.race([task(progress, output), stopping]) : task(progress, output));
+        // counted, before the run stops; but not for ever. One that changes nothing is left to itself.
+        const minutes = finishWithin / 60_000;
+        const givenUp = stopping.catch(async (why) => {
+          if (changesNothing) throw why;
+          const settled = running.then(
+            () => undefined,
+            () => undefined,
+          );
+          if (await waitFor(settled, finishWithin)) return running;
+          say(`the step wasn't done within ${minutes} minutes of the stop, so it's left to finish by itself: ${message}`);
+          throw why;
+        });
+        result = await Promise.race([running, givenUp]);
       } catch (error) {
         gone = true;
         // Stopped, it simply ended, with no mark of failure.
@@ -464,6 +483,8 @@ export async function openInstallerPage({ addressFile, connectedFile, page }) {
       gone = true;
       const { text, ok } = ended?.(result) ?? { text: message, ok: true };
       server.send({ type: 'ended', busy, text, ok });
+      // Stopped while it ran: the run stops now that it's done, before anything else is started.
+      if (stopped) throw stopped;
       return result;
     },
     async signIn(task) {

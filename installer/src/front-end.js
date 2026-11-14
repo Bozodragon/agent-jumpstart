@@ -53,8 +53,9 @@
  * @property {boolean} [changesNothing] The task only looks, waits for something outside the
  *   Installer (the person, another program), or downloads what a later step installs. A stop
  *   during it doesn't wait for it, as there's nothing to finish: the page leaves it to itself.
- *   A stop during any other busy waits for its task to finish, so what it started (winget, `claude
- *   install`) is done, and listed, before the run stops.
+ *   A stop during any other busy waits for its task to finish (up to 10 minutes), so what it
+ *   started (winget, `claude install`) is done, and listed, then throws the stop, so nothing
+ *   after it starts.
  */
 
 /**

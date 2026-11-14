@@ -17,10 +17,11 @@ let answers = { team: 'Marketing', aiExperience: 'first-time', codingExperience:
  * ms of real time to, so a test can act while that step is under way. After the skills, the run
  * walks through the connectors and waits for the person to say they're done.
  * @param {import('node:test').TestContext} t
- * @param {{ skillsTake?: number, replies?: Record<string, import('../src/machine.js').Reply>, claudeThere?: boolean }} [options] `replies`: more of the fake machine's.
- *   `claudeThere`: whether Claude Code is already installed (it is, unless this says not)
+ * @param {{ skillsTake?: number, replies?: Record<string, import('../src/machine.js').Reply>, claudeThere?: boolean, skillsArrive?: boolean }} [options] `replies`: more of the fake machine's.
+ *   `claudeThere`: whether Claude Code is already installed (it is, unless this says not).
+ *   `skillsArrive`: whether the skills CLI, which always says it worked, leaves the skills in place
  */
-async function aLaptop(t, { skillsTake = 0, replies = {}, claudeThere = true } = {}) {
+async function aLaptop(t, { skillsTake = 0, replies = {}, claudeThere = true, skillsArrive = true } = {}) {
   const where = await makeHome(t);
   const profile = await readProfile('york');
   await supplyDownloads(where, ['skills']);
@@ -39,7 +40,7 @@ async function aLaptop(t, { skillsTake = 0, replies = {}, claudeThere = true } =
   await machine.setMachinePath([theirs]);
   await machine.setReplies({
     ...cli.install,
-    [cli.key('add')]: { writes: skillFiles, ...(skillsTake > 0 ? { takes: skillsTake } : {}) },
+    [cli.key('add')]: { ...(skillsArrive ? { writes: skillFiles } : {}), ...(skillsTake > 0 ? { takes: skillsTake } : {}) },
     'node.exe --version': { output: 'v26.12.1\r\n' },
     'git.exe --version': { output: 'git version 2.56.0.windows.4\n' },
     'gh.exe --version': { output: 'gh version 2.103.1 (2026-10-01)\n' },
@@ -144,6 +145,70 @@ test('Stop, pressed while a step installs something, waits for it to finish, the
   assert.match(log.text, new RegExp(`Installer page: the run stops once this step is done: Installing ${line}`));
   assert.match(log.text, /Stopped: Stopped at your request\./);
   assert.match(log.text, new RegExp(`Done before it stopped: Skills: Installed ${line}`));
+});
+
+test("Stop, pressed while the last skills install, stops as that install ends: the steps after it, which make no call that waits at first, don't run", async (t) => {
+  const { where, machine } = await aLaptop(t, { skillsTake: 1_500 });
+  const run = await runOnPage(where, 'york');
+  t.after(run.kill);
+  const page = run.connect();
+  const sources = (await readProfile('york')).skills.map((/** @type {{ source: string }} */ { source }) => source);
+  const busy = await answerUntil(page, run, (event) => event.type === 'busy' && event.message.endsWith(` from ${sources.at(-1)}`));
+
+  assert.equal((await run.stop()).status, 200);
+  const summary = await page.next((event) => event.type === 'summary' && event.title === 'Done before it stopped');
+  await page.seen(page.events.at(-1)?.id ?? 0);
+  const result = await run.ended;
+
+  assert.equal(result.code, 1, result.stdout + result.stderr);
+  assert.equal((await page.next((event) => event.type === 'ended' && event.busy === busy.id)).ok, true);
+  assert.ok(summary.rows.some((/** @type {[string, string]} */ [label, value]) => label === 'Skills' && value === busy.message.replace(/^Installing/, 'Installed')), JSON.stringify(summary.rows));
+  // Memory isn't switched off, and the connectors' page isn't opened: the run stopped first.
+  const log = await readOnlyLog(where.home);
+  assert.doesNotMatch(log.text, /Written to settings: skillsInstalled/);
+  assert.ok(!summary.rows.some((/** @type {[string, string]} */ [label]) => label === 'Memory'), JSON.stringify(summary.rows));
+  assert.deepEqual(await machine.pagesOpened(), []);
+});
+
+test("Stop, pressed while a skills install says it worked but leaves no skills, doesn't count them as installed", async (t) => {
+  const { where } = await aLaptop(t, { skillsTake: 1_500, skillsArrive: false });
+  const run = await runOnPage(where, 'york');
+  t.after(run.kill);
+  const page = run.connect();
+  await answerUntil(page, run, (event) => event.type === 'busy' && /^Installing .* skills? from /.test(event.message));
+
+  assert.equal((await run.stop()).status, 200);
+  const summary = await page.next((event) => event.type === 'summary' && event.title === 'Done before it stopped');
+  await page.seen(page.events.at(-1)?.id ?? 0);
+  const result = await run.ended;
+
+  assert.equal(result.code, 1, result.stdout + result.stderr);
+  assert.ok(!summary.rows.some((/** @type {[string, string]} */ [label]) => label === 'Skills'), JSON.stringify(summary.rows));
+});
+
+test("Stop, pressed while an install has hung, waits 10 minutes of counted time for it, then stops without it", async (t) => {
+  const { where, machine } = await aLaptop(t, { skillsTake: 60_000 });
+  // A wait for something outside the Installer is given a moment of real time, then counted out.
+  await machine.setWaiting({ outside: 1_000 });
+  const run = await runOnPage(where, 'york');
+  t.after(run.kill);
+  const page = run.connect();
+  const busy = await answerUntil(page, run, (event) => event.type === 'busy' && /^Installing .* skills? from /.test(event.message));
+
+  const pressed = performance.now();
+  assert.equal((await run.stop()).status, 200);
+  const summary = await page.next((event) => event.type === 'summary' && event.title === 'Done before it stopped');
+  await page.seen(page.events.at(-1)?.id ?? 0);
+  const result = await run.ended;
+  const took = performance.now() - pressed;
+
+  assert.equal(result.code, 1, result.stdout + result.stderr);
+  assert.ok(took < 15_000, `the 10 minutes were counted, not waited: ${Math.round(took)} ms`);
+  // It simply ended, neither done nor failed, and isn't counted as done.
+  assert.equal((await page.next((event) => event.type === 'ended' && event.busy === busy.id)).ok, undefined);
+  assert.ok(!summary.rows.some((/** @type {[string, string]} */ [label]) => label === 'Skills'), JSON.stringify(summary.rows));
+  const log = await readOnlyLog(where.home);
+  assert.match(log.text, /Installer page: the step wasn't done within 10 minutes of the stop, so it's left to finish by itself: Installing /);
 });
 
 test("Stop, pressed while T3 Code installs, waits for its installer, and lists T3 Code as done, though its step went on to wait for it to open", async (t) => {

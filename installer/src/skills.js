@@ -110,8 +110,16 @@ export async function installSkills(profile, ours, installedFrom, context) {
       const args = ['add', source, '-g', '-a', 'claude-code', '-y', ...(names ? ['-s', ...wanted] : [])];
       const what = `${wanted.length === 1 ? 'the skill' : `${wanted.length} skills`} from ${source}`;
       const command = [...program.args, ...args];
-      ran = await frontEnd.busy(`Installing ${what}`, (_, output) => machine.run(program.file, command, { env: forceColor, onOutput: output }), ({ code }) =>
-        code === 0 ? { text: `Installed ${what}`, ok: true, done: ['Skills', `Installed ${what}`] } : { text: `Couldn't install ${what}`, ok: false },
+      ran = await frontEnd.busy(
+        `Installing ${what}`,
+        async (_, output) => {
+          const ran = await machine.run(program.file, command, { env: forceColor, onOutput: output });
+          // Whether they're all there, which alone says they're installed, should the run stop now.
+          const arrived = (await Promise.all(wanted.map((name) => exists(join(folder, name, 'SKILL.md'))))).every(Boolean);
+          return { ...ran, arrived };
+        },
+        ({ code, arrived }) =>
+          code === 0 ? { text: `Installed ${what}`, ok: true, ...(arrived ? { done: /** @type {[string, string]} */ (['Skills', `Installed ${what}`]) } : {}) } : { text: `Couldn't install ${what}`, ok: false },
       );
     }
     for (const name of skills) {
