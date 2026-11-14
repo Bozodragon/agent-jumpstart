@@ -160,6 +160,15 @@
       "id": "claude",
       "name": "Claude Code",
       "when": "t3",
+      "releases": "https://downloads.claude.ai/claude-code-releases",
+      "channel": "latest",
+      "files": {
+        "x64": "win32-x64",
+        "arm64": "win32-arm64"
+      },
+      "fallback": {
+        "script": "https://claude.ai/install.ps1"
+      },
       "install": {
         "folder": ".local/bin",
         "check": "claude.exe"

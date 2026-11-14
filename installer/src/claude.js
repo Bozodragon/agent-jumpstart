@@ -1,29 +1,51 @@
 // Claude Code, before T3 Code is installed and started. T3's first-run wizard, which would have
-// offered to install it, is skipped (see t3.js), so the installer installs it with Anthropic's
-// own install script. The script shows no progress of its own, so it runs hidden with its output
-// captured, like every other install, under a spinner that says it can take several minutes. It
-// puts claude.exe in the profile folder's .local\bin and never adds that folder to PATH, so the
-// installer does, first, whether or not Claude Code is there yet: T3 reads PATH only as it
-// starts. Then it asks Claude Code whether it's signed in. If it isn't, Claude Code's own
-// sign-in runs in the person's window, reading a pasted code from the window (nothing shows in
-// the window as it's pasted, which the notice says), while what it prints is kept for the log.
-// The sign-in runs with BROWSER=explorer.exe, for that run only, so Claude opens its page in the
-// default browser by itself. A sign-in that fails can be tried again, as often as it fails, or
-// skipped for now, and the ending then says how to finish. The signed-in email is what
-// Jumpstart reads.
+// offered to install it, is skipped (see t3.js), so the installer installs it. It downloads
+// Claude Code itself, as Anthropic's own script would: the version from Anthropic's `latest`, the
+// platform's checksum and size from that version's manifest, then the program, with a
+// percentage, into the installer's own downloads folder. It checks the SHA-256 and runs
+// `claude.exe install latest`, which copies the program into the profile folder's .local\bin and
+// records the channel it updates itself on, then deletes the download (kept in a debug run). If
+// the version, the manifest, the download or the checksum fails, Anthropic's script installs it
+// instead, quietly: it runs hidden with its output captured, under a spinner that says it can
+// take several minutes, and why it was needed goes only to the log. A failed `claude install`
+// doesn't fall back, since the script ends in the same command. With a downloads folder, the
+// three files come from there and nothing falls back. When Claude Code still isn't installed,
+// the person can try the whole thing again, as often as it fails, or skip it for now, which
+// ends the run as a skipped sign-in does.
 //
-// Claude Code isn't pinned: the script installs Anthropic's current release.
+// Neither route adds .local\bin to PATH, so the installer does, first, whether or not Claude
+// Code is there yet: T3 reads PATH only as it starts. Then it asks Claude Code whether it's
+// signed in. If it isn't, Claude Code's own sign-in runs in the person's window, reading a
+// pasted code from the window (nothing shows in the window as it's pasted, which the notice
+// says), while what it prints is kept for the log. The sign-in runs with BROWSER=explorer.exe,
+// for that run only, so Claude opens its page in the default browser by itself. On the Installer
+// page, it runs piped instead, and the page shows its link and a box for the code; where its
+// local listener can't start, it runs again in a console window of its own (see `onThePage`).
+// A sign-in that fails can be tried again, as often as it fails, or skipped for now, and the
+// ending then says how to finish. The signed-in email is what Jumpstart reads.
+//
+// Claude Code isn't pinned: both routes install Anthropic's current release.
+import { readFile, rm, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { system32 } from './machine.js';
 import { loadManifest, toolEntry } from './manifest.js';
-import { exists } from './tools.js';
-import * as ui from './ui.js';
+import { messageOf } from './stop.js';
+import { exists, isRecord, NotInstalled, openDownload, sha256Of } from './tools.js';
+import { bullet, plainLines, wholeLines } from './text.js';
 
-/** Anthropic's own installer, run as Anthropic says to, in Windows PowerShell from System32. */
-const anthropicsInstaller = {
+/**
+ * Anthropic's own install script, run as Anthropic says to, in Windows PowerShell from System32.
+ * @param {string} script its address
+ */
+const anthropicsInstaller = (script) => ({
   file: system32(join('WindowsPowerShell', 'v1.0', 'powershell.exe')),
-  args: ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', 'irm https://claude.ai/install.ps1 | iex'],
-};
+  args: ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', `irm ${script} | iex`],
+});
+
+/**
+ * What a run skipped for now: Claude Code's install or its sign-in, with why it didn't work.
+ * @typedef {{ reason: string, missing: 'installed' | 'signed in' }} Skipped
+ */
 
 /**
  * @typedef {object} ClaudeState
@@ -38,12 +60,14 @@ const anthropicsInstaller = {
  * Installs Claude Code if it isn't there, puts its folder on the user PATH, and signs the person
  * in if they aren't. Before T3 is installed and started.
  * @param {import('./tools.js').Context} context
- * @param {import('./questions.js').Asker} ask What answers whether to try a failed sign-in again.
- * @returns {Promise<{ row: string, email: string | null, skipped?: string }>} The checklist's
- *   Claude Code line, the signed-in email, if any, and, when the person skipped the sign-in for
- *   now, Claude's own reason it failed.
+ * @param {import('./questions.js').Asker} ask What answers whether to try a failed install or
+ *   sign-in again.
+ * @returns {Promise<{ row: string, email: string | null, skipped?: Skipped }>} The checklist's
+ *   Claude Code line, the signed-in email, if any, and, when the person skipped the install or
+ *   the sign-in for now, which, and why it didn't work.
  */
-export async function setUpClaude({ places, machine, downloads, log, attended }, ask) {
+export async function setUpClaude(context, ask) {
+  const { places, machine, frontEnd, downloads, log, attended } = context;
   const entry = toolEntry(await loadManifest(downloads), 'claude');
   if (!entry) return { row: 'Not checked: the list of versions has no entry for it', email: null };
   const say = (/** @type {string} */ line) => log.write(`${entry.name}: ${line}`);
@@ -54,57 +78,60 @@ export async function setUpClaude({ places, machine, downloads, log, attended },
 
   // Claude Code takes a few seconds to answer each time, with nothing on screen of its own.
   const look = () =>
-    ui.busy(`Checking ${entry.name}`, async () => {
-      const state = await lookAt(program, machine);
-      say(describe(state, program));
-      return state;
-    });
+    frontEnd.busy(
+      `Checking ${entry.name}`,
+      async () => {
+        const state = await lookAt(program, machine);
+        say(describe(state, program));
+        return state;
+      },
+      // Done, it says so: the page holds a finished busy a moment, and in the words it began
+      // with it would still read as under way.
+      () => ({ text: `Checked ${entry.name}`, ok: true }),
+      { changesNothing: true },
+    );
 
   let state = await look();
-  if (!state.present) {
-    // Whether claude.exe is there afterwards is checked inside the spinner, which shows nothing
-    // else while it runs, so "Checking Claude Code" starts only once this spinner has ended.
-    const { ran, there } = await ui.busy(
-      `Installing ${entry.name}. It's over 300 MB, so this can take several minutes`,
-      async () => {
-        const ran = await machine.run(anthropicsInstaller.file, anthropicsInstaller.args);
-        return { ran, there: await exists(program) };
-      },
-      ({ there }) =>
-        there
-          ? { text: `${entry.name} installed`, ok: true }
-          : { text: `${entry.name} not installed: its installer didn't finish`, ok: false },
-    );
-    // The machine has logged what the script printed after a non-zero exit, and in a debug run.
-    // An exit code of 0 that left no claude.exe would otherwise leave no trace of it.
-    if (ran.code === 0 && !there && !log.debug) for (const line of plainLines(ran.output)) say(`installer said: ${line}`);
+  // A failed install is offered again, as often as it fails, each time the whole thing afresh.
+  // "Checking Claude Code" starts only once the install's last spinner has ended.
+  while (!state.present) {
+    const tried = await install(entry, program, context, say);
     state = await look();
-    say(state.present ? `installed by its installer (code ${ran.code})` : `its installer finished with code ${ran.code}, and ${program} isn't there`);
+    if (state.present) break;
+    const reason = tried.installed ? "its setup didn't leave it in place" : tried.reason;
+    frontEnd.problem(`${entry.name} isn't installed: ${reason}.`);
+    const choice = await ask.choose({
+      key: 'claudeInstall',
+      message: `${entry.name} isn't installed yet.`,
+      options: [
+        { value: 'again', label: 'Try again', hint: 'it starts again from the beginning' },
+        { value: 'skip', label: 'Skip for now', hint: 'the rest of the install carries on' },
+      ],
+      // With nobody at the screen, an answers file that says no more doesn't try for ever.
+      initial: attended ? 'again' : 'skip',
+      inTurn: true,
+    });
+    log.write(`Answer: claudeInstall: ${JSON.stringify(choice)}`);
+    if (choice === 'skip') {
+      say('install skipped for now');
+      return { row: `Not installed: ${reason}`, email: null, skipped: { reason, missing: 'installed' } };
+    }
   }
 
-  /** @type {string | undefined} */
+  /** @type {Skipped | undefined} */
   let skipped;
   if (state.present && state.runs && !state.signedIn) {
-    ui.notice(
-      [
-        `${entry.name} signs you in next, in your browser.`,
-        '',
-        `  ${ui.bullet} A browser window opens at Claude's sign-in page. Sign in there, then come back here: this window carries on by itself.`,
-        `  ${ui.bullet} If no window opens, copy the link below into your browser: select it with the mouse, then right-click to copy it.`,
-        `  ${ui.bullet} If the page shows a code, copy it, come back here and right-click to paste it. Nothing appears when you paste. Paste once, then press Enter.`,
-      ].join('\n'),
-      `Sign in to ${entry.name}`,
-    );
+    const login = frontEnd.inWindow ? inTheWindow(entry.name, program, context) : onThePage(entry.name, program, context, say);
     // One rejected code ends Claude's sign-in, so a failed one is offered again, as often as it
     // fails. Each try is a fresh `claude auth login`, with a new link and code.
     for (;;) {
-      const { code, output } = await machine.runOnScreenAndKeep(program, ['auth', 'login'], { env: { BROWSER: 'explorer.exe' } });
+      const { code, output, reason: otherwise } = await login.run();
       for (const line of withoutWhatWasTyped(output)) say(`sign-in said: ${line}`);
       say(`sign-in finished with code ${code}`);
       state = await look();
       if (state.signedIn) break;
-      const reason = reasonFrom(output) ?? `${entry.name}'s sign-in ended with code ${code}`;
-      ui.problem(reason);
+      const reason = reasonFrom(output) ?? otherwise ?? `${entry.name}'s sign-in ended with code ${code}`;
+      frontEnd.problem(reason);
       const choice = await ask.choose({
         key: 'claudeSignIn',
         message: `${entry.name} isn't signed in yet.`,
@@ -119,7 +146,7 @@ export async function setUpClaude({ places, machine, downloads, log, attended },
       log.write(`Answer: claudeSignIn: ${JSON.stringify(choice)}`);
       if (choice === 'skip') {
         say('sign-in skipped for now');
-        skipped = reason;
+        skipped = { reason, missing: 'signed in' };
         break;
       }
     }
@@ -129,21 +156,401 @@ export async function setUpClaude({ places, machine, downloads, log, attended },
 }
 
 /**
- * The ending after a sign-in skipped for now: no "All done", and T3 Code isn't opened, since it
- * can't use Claude Code yet. A T3 Code that was open during the install reads PATH only when it
- * starts, so it has to be closed first. Pasting the line again signs in, as a run that finds
- * Claude Code signed out always does. Claude Code's row (", not signed in") is already among
- * what didn't work; Claude's own reason is repeated with it. Any other step that didn't work is
+ * Claude's sign-in: one try at it, with what's said before it. Either way it runs as `claude auth
+ * login`, with BROWSER=explorer.exe for that run only, and what it prints comes back for the log,
+ * with `reason`, why it didn't sign the person in, for a try whose output can't hold Claude's own
+ * (one in a window of its own).
+ * @typedef {{ run: () => Promise<import('./machine.js').Ran & { reason?: string }> }} Login
+ */
+
+/** For BROWSER: Claude runs it with the address as its only argument, which opens the default browser. */
+const authLogin = { args: ['auth', 'login'], env: { BROWSER: 'explorer.exe' } };
+
+/**
+ * In the person's window: Claude reads a pasted code from the window itself, and nothing shows
+ * as it's pasted, which the notice says.
+ * @param {string} name @param {string} program @param {import('./tools.js').Context} context
+ * @returns {Login}
+ */
+function inTheWindow(name, program, { machine, frontEnd }) {
+  const notice = [
+    `${name} signs you in next, in your browser.`,
+    '',
+    `  ${bullet} A browser window opens at Claude's sign-in page. Sign in there. ${frontEnd.comeBack()} It carries on by itself.`,
+    `  ${bullet} If no window opens, copy the link below into your browser: select it with the mouse, then right-click to copy it.`,
+    `  ${bullet} If the page shows a code, copy it, come back here and right-click to paste it. Nothing appears when you paste. Paste once, then press Enter.`,
+  ].join('\n');
+  let told = false;
+  return {
+    // Said once: a try after a failed one is in the same window, under the problem and the choice.
+    run() {
+      if (!told) frontEnd.notice(notice, `Sign in to ${name}`);
+      told = true;
+      return machine.runOnScreenAndKeep(program, authLogin.args, { env: authLogin.env });
+    },
+  };
+}
+
+/**
+ * On the page: Claude runs piped. Its paste-a-code link, taken from what it prints, goes to the
+ * page with a box for the code, which the page writes into Claude's input.
+ *
+ * Piped, Claude can't take a pasted code without its local listener (the one the browser hands
+ * the sign-in back to), and fails at once with no link if that can't start, as on a laptop that
+ * blocks it: it offers its paste-a-code prompt in its place only when its input is a terminal.
+ * Then its sign-in runs again in a console window of its own, which is one, and the page says
+ * so, and what to do there. That laptop's listener stays blocked, so every try after it starts
+ * in a window too.
+ * @param {string} name @param {string} program @param {import('./tools.js').Context} context @param {(line: string) => void} say
+ * @returns {Login}
+ */
+function onThePage(name, program, { machine, frontEnd }, say) {
+  /** Claude's own check: a code is its two parts, with a # between them. @param {string} code */
+  const checkCode = (code) => {
+    if (!/^[^#\s]+#[^#\s]+$/.test(code)) return "That isn't the whole code. Copy all of it from Claude's page, then paste it again.";
+    say('a code was pasted on the page, for the sign-in');
+    return undefined;
+  };
+  const notice = [
+    `${name} signs you in next, in your browser.`,
+    '',
+    `  ${bullet} A new tab opens at Claude's sign-in page. Sign in there. ${frontEnd.comeBack()} It carries on by itself.`,
+    `  ${bullet} If no tab opens, use the link below.`,
+    `  ${bullet} If the page shows a code, copy it, then paste it into the box below.`,
+  ].join('\n');
+  const title = `Sign in to ${name}`;
+  const inAWindow = [
+    `${name} can't sign you in from this page on this laptop, so a window called "${title}" has opened for its sign-in. If you can't see it, click it on the taskbar at the bottom of the screen.`,
+    '',
+    `  ${bullet} In that window, ${name} shows a link. Select it with the mouse, right-click to copy it, then paste it into your browser's address bar.`,
+    `  ${bullet} Sign in there. Claude's page then shows a code. Copy it, then right-click in the window to paste it there. Nothing appears when you paste. Paste once, then press Enter.`,
+    `  ${bullet} The window closes by itself when the sign-in ends, whether or not it worked. ${frontEnd.comeBack('that window')} It carries on by itself.`,
+  ].join('\n');
+  // Claude would otherwise retitle the window (as "claude"), and the notice names it.
+  const inItsWindow = { env: { ...authLogin.env, CLAUDE_CODE_DISABLE_TERMINAL_TITLE: '1' }, title };
+  let listenerBlocked = false;
+  return {
+    // Said before every try: it's the sign-in screen's explanation, and each try is a screen of its own.
+    async run() {
+      if (!listenerBlocked) {
+        frontEnd.notice(notice, title);
+        const ran = await frontEnd.signIn((show) => {
+          let shown = false;
+          return machine.runOnScreenAndKeep(program, authLogin.args, {
+            env: authLogin.env,
+            watch(printed) {
+              const link = pasteLinkIn(printed);
+              if (shown || link === undefined) return;
+              shown = true;
+              show({ link: { url: link, label: 'If no tab opens, use this link' }, codeBox: checkCode });
+            },
+          });
+        });
+        if (!listenerCouldntStart(ran.output)) return ran;
+        listenerBlocked = true;
+        for (const line of withoutWhatWasTyped(ran.output)) say(`sign-in said: ${line}`);
+        say(`sign-in finished with code ${ran.code}`);
+        say("its local listener couldn't start, and without it Claude takes a pasted code only in a terminal, so its sign-in runs in a window of its own");
+      }
+      frontEnd.notice(inAWindow, title);
+      const ran = await frontEnd.signIn(() => machine.runInItsOwnWindow(program, authLogin.args, inItsWindow));
+      if (ran.code !== -1) say("what it showed in its window isn't kept, so if it gave a reason, that isn't in this log");
+      return {
+        ...ran,
+        // A code Claude turns down ends it at once, and its window with it, before its reason can be read.
+        reason:
+          ran.code === -1
+            ? `The window for ${name}'s sign-in couldn't be opened`
+            : `${name}'s sign-in window closed without signing you in. If it didn't take your code, Try again gives you a new link and code.`,
+      };
+    },
+  };
+}
+
+/**
+ * Whether `claude auth login` failed because its local listener couldn't start ("Login failed:
+ * Couldn't start the local listener that receives the browser sign-in. Try again.").
+ * @param {string} output
+ */
+const listenerCouldntStart = (output) => plainLines(output).some((line) => /Login failed:.*\blocal listener\b/i.test(line));
+
+/**
+ * The paste-a-code address `claude auth login` prints ("If the browser didn't open, visit: …"),
+ * once it has printed the whole line.
+ * @param {string} printed
+ */
+function pasteLinkIn(printed) {
+  for (const line of wholeLines(printed)) {
+    const link = /visit:\s*(https:\/\/\S+)/.exec(line)?.[1];
+    if (link) return link;
+  }
+  return undefined;
+}
+
+/**
+ * The outcome of a step of Claude Code's own route: installed, or why not, and whether it failed
+ * before `claude install`, so Anthropic's script may install it instead.
+ * @typedef {{ installed: true } | { installed: false, reason: string, fallBack: boolean }} Outcome
+ */
+
+/**
+ * One try at installing Claude Code: its own download, then, if that fails before `claude
+ * install` and there's no downloads folder, Anthropic's script.
+ * @param {import('./manifest.js').ClaudeEntry} entry @param {string} program where it should end up
+ * @param {import('./tools.js').Context} context @param {(line: string) => void} say
+ * @returns {Promise<{ installed: true } | { installed: false, reason: string }>} why it isn't
+ *   installed, in words for the checklist, when it isn't
+ */
+async function install(entry, program, context, say) {
+  const { machine, frontEnd, downloads, log } = context;
+  const own = await ownRoute(entry, program, context, say);
+  if (own.installed) {
+    say('installed by its own download');
+    return { installed: true };
+  }
+  if (!own.fallBack) return own;
+  if (downloads) {
+    say(`Anthropic's script isn't run when the files come from the downloads folder, so it isn't installed: ${own.reason}`);
+    return own;
+  }
+  say(`falling back to Anthropic's script, because ${own.reason}`);
+  const script = anthropicsInstaller(entry.fallback.script);
+  const { ran, there } = await frontEnd.busy(
+    `Installing ${entry.name}. It's over 300 MB, so this can take several minutes`,
+    async () => {
+      const ran = await machine.run(script.file, script.args);
+      return { ran, there: await exists(program) };
+    },
+    ({ there }) =>
+      there
+        ? { text: `${entry.name} installed`, ok: true, done: [entry.name, 'Installed'] }
+        : { text: `${entry.name} not installed: its installer didn't finish`, ok: false },
+  );
+  // The machine has logged what the script printed after a non-zero exit, and in a debug run.
+  // An exit code of 0 that left no claude.exe would otherwise leave no trace of it.
+  if (ran.code === 0 && !there && !log.debug) for (const line of plainLines(ran.output)) say(`installer said: ${line}`);
+  if (!there) {
+    say(`Anthropic's script finished with code ${ran.code}, and ${program} isn't there`);
+    return { installed: false, reason: `${entry.name}'s installer didn't finish` };
+  }
+  say(`installed by Anthropic's script (code ${ran.code})`);
+  return { installed: true };
+}
+
+/**
+ * The Installer's own route: the version, the manifest, the download with progress, the
+ * checksum, and `claude install`. Each step is logged; how far the download has got isn't.
+ * @param {import('./manifest.js').ClaudeEntry} entry @param {string} program
+ * @param {import('./tools.js').Context} context @param {(line: string) => void} say
+ * @returns {Promise<Outcome>}
+ */
+async function ownRoute(entry, program, { places, machine, frontEnd, downloads, keepDownloads, log }, say) {
+  /** Why a step failed, in words for the checklist; an unexpected error's whole story is logged. @param {unknown} error */
+  const why = (error) => {
+    if (!(error instanceof NotInstalled)) say(`failed: ${error instanceof Error ? error.stack : String(error)}`);
+    return error instanceof NotInstalled ? error.message : messageOf(error);
+  };
+  /** A file's address below the release server's, which is where a downloads folder holds it. @param {string} url */
+  const inFolder = (url) => url.slice(entry.releases.length + 1);
+
+  /** @type {{ url: string, checksum: string, size?: number }} */
+  let release;
+  try {
+    release = await findRelease(entry, { downloads, inFolder, say });
+  } catch (error) {
+    return { installed: false, reason: why(error), fallBack: true };
+  }
+
+  const started = performance.now();
+  const took = () => `${((performance.now() - started) / 1000).toFixed(1)} s`;
+  const open = () => openDownload({ url: release.url, size: release.size, from: inFolder(release.url) }, { downloads, saveIn: join(places.state, 'downloads'), say });
+  // The label gives the size: the manifest's, or, when it has none, the server's, which means
+  // reaching the server before the busy starts. With the manifest's, the busy covers it all.
+  /** @type {Awaited<ReturnType<typeof openDownload>> | undefined} */
+  let opened;
+  if (release.size === undefined) {
+    try {
+      opened = await open();
+    } catch (error) {
+      return { installed: false, reason: why(error), fallBack: true };
+    }
+  }
+  const total = release.size ?? opened?.total;
+  const megabytes = total === undefined ? '' : ` (${Math.round(total / 1_000_000)} MB)`;
+  const message = `Downloading ${entry.name}${megabytes}`;
+  const expected = total === undefined ? '' : `, of the ${total} expected`;
+  let received = 0;
+  const fetched = await frontEnd.busy(
+    message,
+    /** @returns {Promise<{ file: string } | { reason: string }>} */
+    async (progress) => {
+      try {
+        const file = await (opened ?? (await open())).receive((bytes, all) => {
+          received = bytes;
+          progress(bytes, all);
+        });
+        say(`${(await stat(file)).size} bytes came${expected}, in ${took()}`);
+        return { file };
+      } catch (error) {
+        say(`${received} bytes came${expected}, before it stopped, in ${took()}`);
+        return { reason: why(error) };
+      }
+    },
+    // A download that fails gives way quietly to Anthropic's script, with no mark of failure.
+    (fetched) => ('file' in fetched ? { text: `${entry.name} downloaded`, ok: true } : { text: message }),
+    // On its own it changes nothing: a stop during it isn't kept waiting for 300 MB to come.
+    { changesNothing: true },
+  );
+  if (!('file' in fetched)) return { installed: false, reason: fetched.reason, fallBack: true };
+  const { file } = fetched;
+
+  try {
+    return await frontEnd.busy(
+      `Setting up ${entry.name}`,
+      /** @returns {Promise<Outcome>} */
+      async () => {
+        try {
+          await checkSha256(file, release.checksum, say);
+        } catch (error) {
+          return { installed: false, reason: why(error), fallBack: true };
+        }
+        const ran = await machine.run(file, ['install', entry.channel]);
+        say(`claude install ${entry.channel} finished with code ${ran.code}`);
+        // The machine has logged what it printed after a non-zero exit, and in a debug run.
+        if (ran.code === 0 && !log.debug) for (const line of plainLines(ran.output)) say(`claude install said: ${line}`);
+        if (ran.code !== 0) return { installed: false, reason: `its setup stopped with code ${ran.code}`, fallBack: false };
+        if (!(await exists(program))) {
+          say(`${program} isn't there after claude install`);
+          return { installed: false, reason: "its setup didn't leave it in place", fallBack: false };
+        }
+        return { installed: true };
+      },
+      (outcome) =>
+        outcome.installed
+          ? { text: `${entry.name} installed`, ok: true, done: [entry.name, 'Installed'] }
+          : outcome.fallBack
+            ? { text: `Setting up ${entry.name}` }
+            : { text: `${entry.name} not installed: ${outcome.reason}`, ok: false },
+    );
+  } finally {
+    if (keepDownloads) say(`kept ${file}`);
+    else {
+      // A program that has only just run can still be held open for a moment (by antivirus, say).
+      // A download that can't be deleted is logged, and never changes how the install went.
+      try {
+        await rm(file, { force: true, maxRetries: 5, retryDelay: 200 });
+      } catch (error) {
+        say(`couldn't delete ${file}: ${messageOf(error)}`);
+      }
+    }
+  }
+}
+
+/**
+ * Claude Code's current release on the entry's channel, for this computer: its address, and the
+ * checksum and size Anthropic's manifest gives it.
+ * @param {import('./manifest.js').ClaudeEntry} entry
+ * @param {{ downloads?: string, inFolder: (url: string) => string, say: (line: string) => void }} how
+ * @returns {Promise<{ url: string, checksum: string, size?: number }>}
+ */
+async function findRelease(entry, { downloads, inFolder, say }) {
+  /** @param {string} url */
+  const read = (url) => readText(url, { downloads, from: inFolder(url), say });
+  const platform = entry.files[process.arch];
+  if (!platform) throw new NotInstalled(`there's no build of it for this kind of computer (${process.arch})`);
+  const version = (await read(`${entry.releases}/${entry.channel}`)).trim();
+  if (!/^\d+\.\d+\.\d+$/.test(version)) {
+    say(`the ${entry.channel} version, ${JSON.stringify(version.slice(0, 80))}, isn't a version number`);
+    throw new NotInstalled(`its ${entry.channel} version couldn't be read`);
+  }
+  say(`the ${entry.channel} version is ${version}`);
+  const found = platformIn(await read(`${entry.releases}/${version}/manifest.json`), platform, say);
+  const url = `${entry.releases}/${version}/${platform}/claude.exe`;
+  say(`${platform}: ${found.size === undefined ? 'no size given' : `${found.size} bytes expected`}, SHA-256 ${found.checksum}`);
+  return { url, ...found };
+}
+
+/**
+ * A small text file of Claude Code's release (its version, its manifest): read from the release
+ * server, or from the downloads folder at `from`.
+ * @param {string} url @param {{ downloads?: string, from: string, say: (line: string) => void }} how
+ */
+async function readText(url, { downloads, from, say }) {
+  if (downloads) {
+    const file = join(downloads, from);
+    try {
+      const text = await readFile(file, 'utf8');
+      say(`taking ${file}`);
+      return text;
+    } catch {
+      say(`${file} isn't there`);
+      throw new NotInstalled("it wasn't in the downloads folder");
+    }
+  }
+  say(`reading ${url}`);
+  try {
+    const response = await fetch(url);
+    if (!response.ok) throw new Error(`the server said ${response.status} ${response.statusText}`);
+    return await response.text();
+  } catch (error) {
+    const cause = error instanceof Error && error.cause ? error.cause : error;
+    say(`couldn't read ${url}: ${messageOf(cause)}`);
+    throw new NotInstalled(`${url} couldn't be read`);
+  }
+}
+
+/**
+ * A platform's checksum and size in Anthropic's manifest for a version. The size is left out
+ * if it isn't a whole number of bytes.
+ * @param {string} text @param {string} platform @param {(line: string) => void} say
+ * @returns {{ checksum: string, size?: number }}
+ */
+function platformIn(text, platform, say) {
+  let manifest;
+  try {
+    manifest = JSON.parse(text);
+  } catch (error) {
+    say(`Anthropic's manifest isn't valid JSON: ${messageOf(error)}`);
+    throw new NotInstalled("Anthropic's list of its files couldn't be read");
+  }
+  const found = isRecord(manifest) && isRecord(manifest.platforms) ? manifest.platforms[platform] : undefined;
+  const checksum = isRecord(found) ? found.checksum : undefined;
+  if (!isRecord(found) || typeof checksum !== 'string' || !/^[0-9a-f]{64}$/i.test(checksum)) {
+    say(`Anthropic's manifest has no SHA-256 for ${platform}`);
+    throw new NotInstalled(`Anthropic's list of its files has nothing for ${platform}`);
+  }
+  const size = found.size;
+  return { checksum, ...(typeof size === 'number' && Number.isSafeInteger(size) && size > 0 && { size }) };
+}
+
+/** @param {string} file @param {string} expected @param {(line: string) => void} say */
+async function checkSha256(file, expected, say) {
+  const actual = await sha256Of(file);
+  if (actual !== expected.toLowerCase()) {
+    say(`checksum ${actual} isn't Anthropic's ${expected}`);
+    throw new NotInstalled("the download didn't match Anthropic's checksum");
+  }
+  say("checksum matches Anthropic's");
+}
+
+/**
+ * The ending after Claude Code's install or sign-in was skipped for now: no "All done", and T3
+ * Code isn't opened, since it can't use Claude Code yet. A T3 Code that was open during the
+ * install reads PATH only when it starts, so it has to be closed first. Pasting the line again
+ * installs it or signs in, as a run that finds Claude Code missing or signed out always does.
+ * Claude Code's row is already among what didn't work. After a sign-in, Claude's own reason is
+ * repeated with it (an install's is in its row already). Any other step that didn't work is
  * named on a line after this closing line.
  * @param {import('./ending.js').Ending} ending
- * @param {string} reason Claude's own reason the sign-in failed.
+ * @param {Skipped} skipped What was skipped, and why.
  * @param {import('./ending.js').ToolNames} tools
  */
-export function endAfterSkippedSignIn(ending, reason, { claude, t3 }) {
-  ending.lines.push(reason);
+export function endAfterSkipped(ending, { reason, missing }, { claude, t3 }) {
+  if (missing === 'signed in') ending.lines.push(reason);
+  const again = missing === 'installed' ? 'installs it' : 'signs you in';
   ending.closing = {
     step: claude,
-    line: `One step didn't work: ${claude} isn't signed in, so ${t3} can't use it yet. If ${t3} is open, close it. Then paste the line again: it signs you in and skips everything that's already done.`,
+    line: `One step didn't work: ${claude} isn't ${missing}, so ${t3} can't use it yet. If ${t3} is open, close it. Then paste the line again: it ${again} and skips everything that's already done.`,
   };
   ending.openT3 = false;
 }
@@ -153,7 +560,12 @@ export function endAfterSkippedSignIn(ending, reason, { claude, t3 }) {
  * @param {string} output
  */
 function reasonFrom(output) {
-  return plainLines(output).find((line) => line.startsWith('Login failed:'));
+  // Anywhere in a line: piped, nothing ends the paste prompt's line, so the reason joins it.
+  for (const line of plainLines(output)) {
+    const reason = /Login failed:.*/.exec(line)?.[0];
+    if (reason) return reason;
+  }
+  return undefined;
 }
 
 /**
@@ -172,20 +584,6 @@ function withoutWhatWasTyped(output) {
     const after = line.slice(prompt.length).trim();
     return /^Login (successful\.|failed:)/.test(after) ? [prompt, after] : [prompt];
   });
-}
-
-/**
- * What a program printed, as lines of plain text: without the colours and links a terminal
- * would draw, and without the blank lines.
- * @param {string} output
- */
-function plainLines(output) {
-  return output
-    .replace(/\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g, '')
-    .replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '')
-    .split(/\r?\n/)
-    .map((line) => line.trimEnd())
-    .filter((line) => line.trim() !== '');
 }
 
 /** @param {string} program @param {import('./machine.js').Machine} machine @returns {Promise<ClaudeState>} */

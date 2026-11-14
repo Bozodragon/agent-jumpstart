@@ -24,12 +24,16 @@ const profilesFolder = fileURLToPath(new URL('../../profiles/', import.meta.url)
  *   `top` is the top workspace's folder name, created in the confirmed location with the chosen
  *   workspaces inside it. `defaultLocation` is the folder, within the user's profile folder,
  *   offered for workspaces when they aren't in Google Drive.
- * @property {{ softwareCenter?: string, softwareCenterOffer?: string }} [googleDrive] Under a
+ * @property {{ softwareCenter?: string, softwareCenterOffer?: string, hostedInstaller?: import('./google-drive.js').HostedInstaller }} [googleDrive] Under a
  *   profile whose workspaces live in Google Drive: `softwareCenter` is the name (or part of it)
  *   that the laptop's Software Center lists Google Drive under. With it, a laptop without Drive
  *   is checked for a Software Center that offers Drive, and the person is offered to install it
  *   from there; without it, that check never runs. `softwareCenterOffer` is what's said then,
  *   in the organisation's words ("York's Software Center can install it for you...").
+ *   `hostedInstaller` is a copy of Google's Drive installer kept on the organisation's shared
+ *   drive: its Drive file `id`, the `version` it installs, its `size` in bytes and its `sha256`.
+ *   When Software Center offers that same version, it's downloaded through the browser and run
+ *   before Software Center is offered.
  * @property {{ defaultModel?: string, effort?: string, codex?: boolean }} [t3] What T3 Code's
  *   settings get, just before the installer installs it and on every run for a T3 already there
  *   (only what's missing: a key the person already has keeps its value): new threads use Claude
@@ -95,9 +99,14 @@ export const fullSkillsSizes = /** @type {const} */ (['no', 'finished', 'beta'])
  * installed only when it's ticked.
  * @typedef {object} ExtraTool
  * @property {string} id
+ * @property {string} [name] What the person knows it as, where that isn't its program's name (Apps
+ *   Script, not clasp): the Installer page heads its sign-in with it.
  * @property {string} question
  * @property {boolean} default
- * @property {string} [signIn] Said before a tool's browser sign-in starts.
+ * @property {string} [signIn] Said in the terminal before a tool's browser sign-in starts in the
+ *   person's window, which it may name ("come back here").
+ * @property {string} [signInOnPage] Said on the Installer page before the sign-in starts. It names
+ *   neither a key nor the window: the page adds where to come back to.
  * @property {string} [settingsPage] A page the person must change a setting on themselves.
  * @property {string} [settings] What to do on that page.
  */

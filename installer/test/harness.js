@@ -5,11 +5,34 @@ import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { access, mkdtemp, mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { basename, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { basename, dirname, join } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 export const repo = fileURLToPath(new URL('../..', import.meta.url));
 export const program = join(repo, 'installer', 'src', 'main.js');
+const fakeInternet = join(repo, 'installer', 'test', 'fake-internet.js');
+
+/**
+ * The internet, for a run that downloads rather than taking its downloads from a folder. Every
+ * address is answered from `folder`, by the file name it ends in (a 404 if it isn't there), in
+ * pieces of `chunk` bytes (64 KB if not given) with `pause` milliseconds between them.
+ * `cutShort` drops the connection after so many bytes of the named files; `stall` sends nothing
+ * more after so many bytes, and keeps the connection open, until the run is stopped. `unsized`
+ * names files sent without their size. `terminal` makes the run's output look like a terminal,
+ * so its spinner line shows.
+ * @typedef {{ folder: string, chunk?: number, pause?: number, cutShort?: Record<string, number>, stall?: Record<string, number>, unsized?: string[], terminal?: boolean }} Internet
+ */
+
+/**
+ * Runs the real installer with no downloads folder: its downloads come from `internet`. The
+ * home, fake machine and answers file are as for `runWith`.
+ * @param {{ home: string, answersFile: string }} where @param {string} profile @param {Internet} internet
+ * @param {{ stopWhen?: () => Promise<boolean>, extra?: string[] }} [options] `stopWhen` as for `run`;
+ *   `extra`, more flags, such as `--debug`
+ */
+export function runOnline(where, profile, internet, { stopWhen, extra = [] } = {}) {
+  return run(['--profile', profile, ...extra, '--home', where.home, '--answers', where.answersFile], { internet, stopWhen });
+}
 
 /** @param {string} name */
 export async function readProfile(name) {
@@ -24,20 +47,29 @@ export async function readProfile(name) {
  * @typedef {'signed-in' | 'signed-out' | 'missing' | 'signed-in, no My Drive yet' | 'installed, never opened'} GoogleDriveState
  */
 
-/** @typedef {{ code?: number, output?: string, creates?: string[], writes?: Record<string, string>, reads?: string[], takes?: number }} Reply What a faked program run returns, leaves behind, and looks for as it starts (its record says which of `reads` it `found`), and how many milliseconds it really takes before it returns (`takes`, to watch a spinner over a fake run; only claude.test.js uses it, in its test of `takes` itself, over Claude Code's install). */
+/** @typedef {{ from: string, saves: string, after?: number, perSecond?: number, stopsAt?: number }} BrowserDownload See the fake machine's `setBrowser`. */
+
+/** @typedef {{ code?: number, output?: string, creates?: string[], writes?: Record<string, string>, reads?: string[], takes?: number, readsALine?: boolean }} Reply What a faked program run returns, leaves behind, and looks for as it starts (its record says which of `reads` it `found`), how many milliseconds it really takes before it returns (`takes`, to watch a spinner over a fake run; only claude.test.js uses it, in its test of `takes` itself, over Claude Code's install), and, on the page's screen, whether it waits for a line on its input (`readsALine`, as Claude's sign-in waits for a pasted code; its record says what it was given, `typed`). */
+
+/** The version of Claude Code whose release files every test home's downloads folder holds. */
+export const defaultClaude = '2.1.400';
 
 /**
- * A temporary home with an answers file and an empty downloads folder,
- * removed when the test ends. Like a York laptop, it has Google Drive for
- * desktop signed in and mirroring to `My Drive` in the home folder, unless
- * told otherwise.
+ * A temporary home with an answers file and a downloads folder, removed when the test ends.
+ * Like a York laptop, it has Google Drive for desktop signed in and mirroring to `My Drive` in
+ * the home folder, unless told otherwise. The downloads folder holds only Claude Code's release
+ * files (`supplyClaude`, at version 2.1.400), and the fake machine's `claude install` puts Claude
+ * Code in place (see `fakeMachine`'s `setReplies`), so a run installs Claude Code by its own
+ * download unless a test says otherwise.
  * @param {import('node:test').TestContext} t
  * @param {object} [answers]
  * @param {{ googleDrive?: GoogleDriveState }} [options]
  */
 export async function makeHome(t, answers = {}, { googleDrive = 'signed-in' } = {}) {
   const root = await mkdtemp(join(tmpdir(), 'jumpstart-test-'));
-  t.after(() => rm(root, { recursive: true, force: true }));
+  // A run a test has just killed can still be closing its log, which Windows reports as ENOTEMPTY
+  // or EBUSY, so the removal retries for a moment rather than failing the test.
+  t.after(() => rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }));
   const home = join(root, 'home');
   const downloads = join(root, 'downloads');
   const answersFile = join(root, 'answers.json');
@@ -45,6 +77,8 @@ export async function makeHome(t, answers = {}, { googleDrive = 'signed-in' } = 
   await mkdir(downloads);
   await writeFile(answersFile, JSON.stringify(answers));
   await fakeGoogleDrive(home, googleDrive);
+  await supplyClaude(downloads, defaultClaude);
+  await fakeMachine(home).setReplies({});
   return { home, downloads, answersFile };
 }
 
@@ -89,24 +123,50 @@ export async function seedSettings(home, settings) {
 }
 
 /**
+ * How every test starts the real installer: Node's arguments for `main.js` with `args`, and the
+ * environment to start it in. Colour is off; `WT_SESSION` is unset unless `windowsTerminal` says
+ * otherwise, whatever window the tests themselves run in; and with `internet`, the run's
+ * downloads are answered by fake-internet.js, preloaded, rather than by the real internet.
+ * @param {string[]} args
+ * @param {{ windowsTerminal?: boolean, internet?: Internet }} [options] as for `run`
+ * @returns {{ args: string[], env: NodeJS.ProcessEnv }} to start `process.execPath` with
+ */
+export function installerProcess(args, { windowsTerminal = false, internet } = {}) {
+  /** @type {NodeJS.ProcessEnv} */
+  const env = { ...process.env, NO_COLOR: '1' };
+  if (windowsTerminal) env.WT_SESSION = 'a-test-window';
+  else delete env.WT_SESSION;
+  if (internet) env.AGENT_JUMPSTART_FAKE_INTERNET = JSON.stringify(internet);
+  else delete env.AGENT_JUMPSTART_FAKE_INTERNET;
+  const preload = internet ? ['--import', pathToFileURL(fakeInternet).href] : [];
+  return { args: [...preload, program, ...args], env };
+}
+
+/**
  * Runs the real installer with the test overrides. It starts with `WT_SESSION` unset unless
  * `windowsTerminal` says otherwise, whatever window the tests themselves run in. It starts with no
  * console of its own (detached), so the title it sets for its window can't reach the console the
  * tests run in.
  * @param {string[]} args
- * @param {{ windowsTerminal?: boolean }} [options] `windowsTerminal`: start with `WT_SESSION` set (true) or unset (false, the default)
+ * @param {{ windowsTerminal?: boolean, internet?: Internet, stopWhen?: () => Promise<boolean> }} [options]
+ *   `windowsTerminal`: start with `WT_SESSION` set (true) or unset (false, the default).
+ *   `internet`: answer the run's downloads from a folder (fake-internet.js); a run given it has
+ *   no `--downloads`. `stopWhen`: checked every 50 ms while the run goes on; once it's true, the
+ *   run is ended at once, as closing its window would end it.
  * @returns {Promise<{ code: number, stdout: string, stderr: string }>}
  */
-export function run(args, { windowsTerminal = false } = {}) {
+export function run(args, { windowsTerminal = false, internet, stopWhen } = {}) {
   return new Promise((resolve) => {
-    /** @type {NodeJS.ProcessEnv} */
-    const env = { ...process.env, NO_COLOR: '1' };
-    if (windowsTerminal) env.WT_SESSION = 'a-test-window';
-    else delete env.WT_SESSION;
-    const options = { env, timeout: 30_000, detached: true, windowsHide: true };
-    execFile(process.execPath, [program, ...args], options, (error, stdout, stderr) => {
+    const started = installerProcess(args, { windowsTerminal, internet });
+    const options = { env: started.env, timeout: 30_000, detached: true, windowsHide: true };
+    const child = execFile(process.execPath, started.args, options, (error, stdout, stderr) => {
+      clearInterval(watching);
       resolve({ code: error ? Number(error.code ?? 1) : 0, stdout, stderr });
     });
+    // Ended the way closing its window ends it: at once, with nothing tidied up.
+    const watching = setInterval(async () => {
+      if (stopWhen && (await stopWhen())) child.kill();
+    }, 50);
   });
 }
 
@@ -208,6 +268,21 @@ export async function readManifest() {
 }
 
 /**
+ * Puts the pinned gh where the installer installs it, so it's taken as already installed. With
+ * no reply for `gh.exe auth status`, it says it's signed in, as any run with no reply succeeds.
+ * @param {string} home
+ * @returns {Promise<{ gh: string, replies: Record<string, { code?: number, output?: string }> }>}
+ */
+export async function ghAlreadyInstalled(home) {
+  const { tools } = await readManifest();
+  const tool = tools.find((/** @type {any} */ entry) => entry.id === 'gh');
+  const gh = join(programsFolder(home), tool.install.folder, tool.install.check);
+  await mkdir(join(gh, '..'), { recursive: true });
+  await writeFile(gh, 'stand-in');
+  return { gh, replies: { 'gh.exe --version': { output: `gh version ${tool.version} (2026-10-01)\n` } } };
+}
+
+/**
  * With `--home`, whatever would change the real machine lands in `<home>/fake-machine/`:
  * `environment.json` stands for the user's environment variables (the user PATH is its
  * `Path`, entries joined with `;`), `runs.json` lists every program it was asked to run,
@@ -241,8 +316,10 @@ export function fakeMachine(home) {
      * with `;`), rebuilt at that moment from the machine PATH, the user PATH and the installer's own.
      * A reply's `reads` adds `found`: which of those files were there when the program started.
      * `env` is the environment variables a run was given beyond PATH, for that run only (the
-     * record has none for a run given none).
-     * @returns {Promise<{ file: string, args: string[], path: string, env?: Record<string, string>, onScreen?: boolean, leftRunning?: boolean, found?: string[] }[]>}
+     * record has none for a run given none). `input` is what the program's input was: `pipe`,
+     * `inherit` (the person's window, for a program on the terminal's screen), or `own window`
+     * for a run in a console window of its own, whose title is `ownWindow`.
+     * @returns {Promise<{ file: string, args: string[], path: string, env?: Record<string, string>, onScreen?: boolean, leftRunning?: boolean, ownWindow?: string, input: string, found?: string[], typed?: string }[]>}
      */
     runs: () => readJson('runs.json', []),
     /** @returns {Promise<string[]>} the addresses it was asked to open in the browser, in order */
@@ -254,20 +331,33 @@ export function fakeMachine(home) {
     /**
      * Time, which the fake only counts: how long the installer may wait for something (its
      * patience; none unless set), and what appears once it has waited so long in all, such as
-     * My Drive a few seconds after Google Drive signs in. Each wait returns at once.
-     * @param {{ patience: number, appears?: { after: number, folders: string[] }[] }} waiting
+     * My Drive a few seconds after Google Drive signs in. Each wait returns at once, except that
+     * something from outside the Installer, such as a page connecting, is given `outside`
+     * milliseconds of real time (10 seconds if not set) before a wait for it is counted out.
+     * @param {{ patience?: number, appears?: { after: number, folders: string[] }[], outside?: number }} waiting
      *   `folders` relative to the home
      */
     setWaiting: (waiting) => writeJson('waiting.json', waiting),
+    /**
+     * What the browser downloads when an address is opened, standing in for Chrome's download:
+     * the bytes of `from`, saved in the home at `saves`. It appears `after` milliseconds of
+     * counted time from when the address was opened (at once if not given) and grows by
+     * `perSecond` bytes each counted second (all at once if not given), as `<saves>.crdownload`
+     * until it's whole, when it's renamed to `saves`. With `stopsAt`, it grows no further than
+     * so many bytes, and is never renamed.
+     * @param {Record<string, BrowserDownload>} downloads by the address that starts each one
+     */
+    setBrowser: (downloads) => writeJson('browser.json', downloads),
     /**
      * Keyed by the program's file name, optionally followed by its first arguments
      * (`"node.exe --version"`, `"skills.cmd add"`); the longest key that matches wins. Runs with no reply succeed with no output.
      * A list answers successive runs with that key in turn, and its last reply repeats.
      * A reply may also list files the run leaves, relative to the home (`creates`), or files with
-     * their contents (`writes`).
+     * their contents (`writes`). Unless the replies say otherwise, `claude install` puts Claude
+     * Code in place, as it does from a good download.
      * @param {Record<string, Reply | Reply[]>} replies
      */
-    setReplies: (replies) => writeJson('replies.json', replies),
+    setReplies: (replies) => writeJson('replies.json', { 'claude.exe install': { creates: [claudeProgram] }, ...replies }),
   };
 }
 
@@ -288,16 +378,17 @@ export async function makeZip(folder, zipFile) {
  * Puts a stand-in T3 installer in the downloads folder with the release feed
  * (`latest.yml` or `nightly.yml`) that names it, as T3's releases publish them.
  * @param {string} downloads @param {string} feedName @param {string} version
- * @param {{ wrongHash?: boolean }} [options]
+ * @param {{ wrongHash?: boolean, size?: number }} [options] `size`: pad each stand-in out to
+ *   so many bytes, for a download that comes in many pieces
  * @returns {Promise<string>} the installer's file name, for this computer's processor
  */
-export async function supplyT3(downloads, feedName, version, { wrongHash = false } = {}) {
+export async function supplyT3(downloads, feedName, version, { wrongHash = false, size = 0 } = {}) {
   const arch = process.arch === 'arm64' ? 'arm64' : 'x64';
   const lines = [`version: '${version}'`, 'files:'];
   let ours = '';
   for (const kind of ['x64', 'arm64']) {
     const name = `T3-Code-${version}-${kind}.exe`;
-    const bytes = `stand-in for ${name}`;
+    const bytes = `stand-in for ${name}`.padEnd(size, '.');
     await writeFile(join(downloads, name), bytes);
     const sha512 = createHash('sha512').update(wrongHash ? 'something else' : bytes).digest('base64');
     lines.push(`  - url: ${name}`, `    sha512: ${sha512}`, `    size: ${bytes.length}`);
@@ -307,6 +398,45 @@ export async function supplyT3(downloads, feedName, version, { wrongHash = false
   await writeFile(join(downloads, feedName), `${lines.join('\n')}\n`);
   return ours;
 }
+
+/**
+ * Puts Claude Code's release files in a folder, laid out as on Anthropic's release server below
+ * its `releases` address: `latest` (the version), `<version>/manifest.json` (each platform's
+ * checksum and size) and `<version>/<platform>/claude.exe` (a stand-in, for each platform).
+ * @param {string} folder the downloads folder, or the fake internet's
+ * @param {string} version
+ * @param {{ latest?: string, size?: number, wrongChecksum?: boolean, unsized?: boolean, noManifest?: boolean, noBinary?: boolean }} [options]
+ *   `latest`: what the `latest` file says, if not the version. `size`: pad each stand-in out to so
+ *   many bytes. `wrongChecksum`: the manifest gives a checksum that isn't the stand-in's.
+ *   `unsized`: the manifest gives no size. `noManifest`, `noBinary`: leave that file out (removing
+ *   it if the folder has it already).
+ * @returns {Promise<{ file: string, bytes: number }>} where this computer's stand-in is, and its size
+ */
+export async function supplyClaude(folder, version, { latest = version, size = 0, wrongChecksum = false, unsized = false, noManifest = false, noBinary = false } = {}) {
+  await writeFile(join(folder, 'latest'), `${latest}\n`);
+  const ours = process.arch === 'arm64' ? 'win32-arm64' : 'win32-x64';
+  /** @type {Record<string, { checksum: string, size?: number }>} */
+  const platforms = {};
+  let file = '';
+  let bytes = 0;
+  for (const platform of ['win32-x64', 'win32-arm64', 'linux-x64']) {
+    const content = `stand-in for Claude Code ${version} on ${platform}`.padEnd(size, '.');
+    const checksum = createHash('sha256').update(wrongChecksum ? 'something else' : content).digest('hex');
+    platforms[platform] = { checksum, ...(!unsized && { size: content.length }) };
+    const binary = join(folder, version, platform, platform.startsWith('win32') ? 'claude.exe' : 'claude');
+    await mkdir(dirname(binary), { recursive: true });
+    if (noBinary) await rm(binary, { force: true });
+    else await writeFile(binary, content);
+    if (platform === ours) [file, bytes] = [binary, content.length];
+  }
+  const manifest = join(folder, version, 'manifest.json');
+  if (noManifest) await rm(manifest, { force: true });
+  else await writeFile(manifest, JSON.stringify({ version, buildDate: '2026-11-10T12:00:00Z', platforms }, null, 2));
+  return { file, bytes };
+}
+
+/** Claude Code's program, relative to the home, where `claude install` puts it. */
+export const claudeProgram = join('.local', 'bin', 'claude.exe');
 
 /**
  * What T3's stable installer leaves, relative to the home: its program, and the command-line
@@ -380,9 +510,24 @@ export async function seedT3Projects(home, projects) {
  * @param {string} stdout @param {string} label @param {string} value
  */
 export function checklistSays(stdout, label, value) {
-  const flowing = (/** @type {string} */ text) => text.replace(/[│|]|\s/g, '');
-  assert.ok(flowing(stdout).includes(flowing(`${label} ${value}`)), `expected a checklist line "${label} … ${value}" in:\n${stdout}`);
+  assert.ok(shows(stdout, `${label} ${value}`), `expected a checklist line "${label} … ${value}" in:\n${stdout}`);
 }
+
+/**
+ * Whether the window showed this text, read as checklistSays reads it: borders, spaces and line
+ * breaks aside.
+ * @param {string} stdout @param {string} text
+ */
+export function shows(stdout, text) {
+  const flowing = (/** @type {string} */ words) => words.replace(/[│|]|\s/g, '');
+  return flowing(stdout).includes(flowing(text));
+}
+
+/**
+ * The arguments of each run of this gh, apart from asking its version, in order.
+ * @param {{ file: string, args: string[] }[]} runs @param {string} gh
+ */
+export const ghCommands = (runs, gh) => runs.filter((run) => run.file === gh && run.args[0] !== '--version').map((run) => run.args.join(' '));
 
 /** @param {string} home */
 export async function readOnlyLog(home) {
@@ -392,7 +537,7 @@ export async function readOnlyLog(home) {
 }
 
 /** Every question a run can put, keyed as the answers file keys them. */
-const questions = ['team', 'topWorkspace', 'googleDriveFolder', 'workspacesLocation', 'channel', 'github', 'workspaces', 'connectors', 'extraTools', 'fullSkills', 'switchOffMemory'];
+const questions = ['team', 'aiExperience', 'codingExperience', 'topWorkspace', 'googleDriveFolder', 'workspacesLocation', 'channel', 'github', 'workspaces', 'connectors', 'extraTools', 'fullSkills', 'switchOffMemory'];
 
 /**
  * An answers file that gives these answers and stops the run if any other question is put to

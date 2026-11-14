@@ -1,0 +1,135 @@
+// The front end: what the person sees and answers. It's a dependency passed in, like `machine`:
+// `main` creates one, and each step gets it in the context it already takes (`context.frontEnd`).
+// Nothing else draws, asks or prints. There are two: the terminal front end (terminal.js) and the
+// Installer page (installer-page.js), behind the same interface, so a step never checks which one
+// it has, except a sign-in, whose steps differ on the page, which picks its version by `inWindow`.
+//
+// Words a step passes in name neither a key nor the window: how to accept a default, what to
+// press once something's done and where to come back to are each front end's own to say.
+
+/**
+ * Where programs run "on screen" show what they print and read what the person types. The
+ * machine starts such a program with the screen's `stdio`, then attaches it; it never decides
+ * where a program's output goes. The terminal's screen is the window itself: `inherit`, or
+ * `inherit` with the output piped, kept by the caller and passed on to the window as it comes.
+ * @typedef {object} Screen
+ * @property {(keep: boolean) => import('node:child_process').StdioOptions} stdio How to start a
+ *   program on the screen. With `keep`, its stdout and stderr must be pipes, which the caller
+ *   reads too.
+ * @property {(child: import('node:child_process').ChildProcess) => void} attach Joins a program,
+ *   just started with `stdio`, to the screen: whatever of it is piped is relayed. Called before
+ *   the caller listens for the program closing. A program in a console window of its own (the
+ *   machine's `runInItsOwnWindow`) is attached too, as the cmd.exe that opened the window, so
+ *   the screen can end it and the window with it.
+ * @property {(text: string) => void} write Shows text as a program on the screen would print it.
+ *   For the fake machine, whose runs print their recorded output here.
+ * @property {<T>(running: Promise<T>) => Promise<T>} [wait] How the run waits for a program on the
+ *   screen to finish, if not simply: the page throws a Stop from it, as from any call that waits.
+ */
+
+/**
+ * How far something slow has got, such as a download: `received` bytes so far, of `total` when
+ * the total is known. It may be called very often (once per piece of a download), with the same
+ * figures more than once, so a front end shows only what has changed. Nothing it's told is logged.
+ * @typedef {(received: number, total?: number) => void} Progress
+ */
+
+/**
+ * What a program run during a busy prints, passed on as it prints it, escape codes and all. The
+ * page shows it in a small terminal under the busy line; the terminal front end shows only its
+ * own spinner, as ever, so it ignores it. Only the skills step passes anything on: it's the one
+ * step whose program's own output is shown (issue #88).
+ * @typedef {(text: string) => void} Output
+ */
+
+/**
+ * How a busy ended, in words: done (`ok` true), failed (false), or neither (no `ok`). `done`: the
+ * row a run that stops partway lists it under, among what was done before it stopped, when it
+ * changed something and went well (`ok`), such as `['Git', '2.47.1 (installed)']`. Only a step's
+ * own rows list it once the whole step is done, so this matters only if the run stops before then.
+ * @typedef {{ text: string, ok?: boolean, done?: [string, string] }} Ended
+ */
+
+/**
+ * @typedef {object} BusyHow
+ * @property {boolean} [changesNothing] The task only looks, waits for something outside the
+ *   Installer (the person, another program), or downloads what a later step installs. A stop
+ *   during it doesn't wait for it, as there's nothing to finish: the page leaves it to itself.
+ *   A stop during any other busy waits for its task to finish (up to 10 minutes), so what it
+ *   started (winget, `claude install`) is done, and listed, then throws the stop, so nothing
+ *   after it starts.
+ */
+
+/**
+ * What a sign-in in the person's browser needs them to have, taken from its program's output as
+ * it comes. Each `show` adds to what's there.
+ * @typedef {object} SignInShown
+ * @property {{ url: string, label: string }} [link] An address to open, such as the program's
+ *   own address for when the browser didn't open by itself. `label` says when to use it.
+ * @property {string} [code] A code to copy into the browser, such as GitHub's one-time code.
+ * @property {(code: string) => string | undefined} [codeBox] A box to paste a code into, which
+ *   goes to the program's input as a line once this finds nothing wrong with it (it's given the
+ *   code trimmed, and returns why it won't do, if it won't). The first code it takes is the only one.
+ */
+
+/**
+ * @typedef {object} Links
+ * @property {string} [setupPage] The profile's setup page, which the person came from.
+ * @property {string} [shareLogLine] The line that copies the newest installer log, for asking for help.
+ */
+
+/**
+ * Going back during the questions. `main` asks every question up to the settings being written
+ * between `begin` and `fix`, and nothing there changes the laptop, except what's done in a page
+ * opened in the browser (Google Drive's installer, or Software Center), which `showPage` fixes
+ * the answers for. Until they're fixed, the question being waited at may throw GoBack
+ * (questions.js); `main` calls `begin` and asks the questions again from the start, and the front
+ * end answers those before the one gone back to as they were answered, without showing anything
+ * again, then asks the rest with the answers given before as their defaults.
+ * @typedef {object} Questions
+ * @property {() => void} begin The questions start, or start again after a GoBack.
+ * @property {() => void} fix Back and Change are gone for good: the questions are over, or
+ *   something has acted on the answers. A going back still on its way is refused.
+ */
+
+/**
+ * @typedef {object} FrontEnd
+ * @property {(title: string, links?: Links) => void} start The run's first words. `links` are
+ *   the profile's, for a front end that shows them (the page does; the terminal doesn't).
+ * @property {(text: string) => void} step A line saying what's happening.
+ * @property {<T>(message: string, task: (progress: Progress, output: Output) => Promise<T>, ended?: (result: T) => Ended, how?: BusyHow) => Promise<T>} busy
+ *   Shows that something slow is under way while `task` runs, then how it ended (`ended`, or
+ *   the message, if not given): done (`ok` true), failed (false), or, with no `ok`, simply over,
+ *   with no mark either way (a step that gave way quietly to another, such as Claude Code's own
+ *   download to Anthropic's script). Nothing else may be shown while it runs. The task may report
+ *   how far it has got through `progress` (the terminal shows a percentage beside the message,
+ *   or the amount so far when the total isn't known); it needn't. It may pass on what a program
+ *   it runs prints through `output`, for a front end that shows it.
+ * @property {<T>(task: (show: (shown: SignInShown) => void) => Promise<T>) => Promise<T>} signIn
+ *   A sign-in under way in the person's browser, for a front end whose screen isn't the person's
+ *   window (`inWindow` false), so the program can't be seen or answered there: `task` runs it and
+ *   hands `show` the link and code the person needs as the program prints them. The notice just
+ *   before it is its explanation, and the page shows the two as one screen, until `task` is over.
+ *   Like `busy`, nothing else may be shown while it runs. (The terminal shows the link and code as
+ *   steps, and no code box: there, the program reads the window itself.)
+ * @property {(text: string) => void} problem Something that didn't work, or why the run stopped.
+ * @property {(rows: [string, string][], title: string) => void} summary Labelled rows, such as the checklist.
+ * @property {(text: string, title: string) => void} notice Something to read before what comes next.
+ * @property {(what: string) => Promise<void>} waitForDone Waits until the person says something
+ *   done elsewhere is done. `what` completes "once …", such as "you've connected them"; the front
+ *   end words the action (the terminal: "Press Enter once you've connected them.").
+ * @property {import('./questions.js').Asker} ask Asks the person. Messages name no key.
+ * @property {(from?: string) => string} comeBack The sentence that sends the person back to the
+ *   Installer from `from` ("the browser", if not given), such as after a notice that opens a page.
+ * @property {boolean} inWindow Whether programs on screen run in the person's own window, where
+ *   they can see and answer them directly. A sign-in whose steps differ picks its version by this.
+ * @property {Screen} screen Where programs run on screen go (see openMachine).
+ * @property {string} description One line saying which front end this is, for the log.
+ * @property {Questions} [questions] Back and Change, for a front end that offers them (the page).
+ *   The terminal doesn't: once a question is answered there, it stays answered.
+ * @property {(text: string) => void} finish The run's last words. A second line, if there is
+ *   one, lines up under the first.
+ * @property {() => Promise<void>} close Called once, as the run ends, whichever way it ends.
+ */
+
+export {};

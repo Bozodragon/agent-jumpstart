@@ -9,6 +9,13 @@ import { join } from 'node:path';
  * @property {string} state The installer's own folder in local AppData.
  * @property {string} settings The settings file Jumpstart reads.
  * @property {string} logs The folder of dated logs.
+ * @property {string} pageAddress The file the Installer page's address is written to while the
+ *   page front end runs, where the Bootstrap looks for it. It's also the lock that says an
+ *   Installer is running: its first line is the address, its second the Installer's process id.
+ *   Removed as the run ends.
+ * @property {string} pageConnected The file written once a page has connected, holding the
+ *   address it connected to, which tells the Bootstrap it can close the window. Left behind
+ *   (the next run's address is another), so a run that ends at once is still seen to have connected.
  * @property {string} programs Where per-user programs go (`%LOCALAPPDATA%\Programs`).
  * @property {string} claudeConfig Claude Code's user folder (its `settings.json`, its `skills`):
  *   `%USERPROFILE%\.claude`, or `CLAUDE_CONFIG_DIR` when that is set.
@@ -44,6 +51,8 @@ export function findPlaces(homeOverride) {
     state,
     settings: join(state, 'settings.json'),
     logs: join(state, 'logs'),
+    pageAddress: join(state, 'page-address.txt'),
+    pageConnected: join(state, 'page-connected.txt'),
     driveRoots,
     programFiles: homeOverride ? join(home, 'Program Files') : (process.env.ProgramW6432 ?? process.env.ProgramFiles ?? 'C:\\Program Files'),
     programs: join(localAppData, 'Programs'),

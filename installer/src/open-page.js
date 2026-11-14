@@ -1,5 +1,4 @@
 import { messageOf } from './stop.js';
-import * as ui from './ui.js';
 
 /**
  * Shows a page's address on screen and opens it in the browser through the machine (under a
@@ -7,10 +6,12 @@ import * as ui from './ui.js';
  * the address is on screen to copy.
  * @param {string} label What the page is, such as "Connectors page".
  * @param {string} url
- * @param {{ machine: import('./machine.js').Machine, log: { write(line: string): void } }} context
+ * @param {{ machine: import('./machine.js').Machine, frontEnd: import('./front-end.js').FrontEnd, log: { write(line: string): void } }} context
  */
-export async function showPage(label, url, { machine, log }) {
-  ui.step(`${label}: ${url}`);
+export async function showPage(label, url, { machine, frontEnd, log }) {
+  // What the person does there (an install, a download) can't be undone by going back.
+  frontEnd.questions?.fix();
+  frontEnd.step(`${label}: ${url}`);
   let opened = 'opened';
   try {
     await machine.openPage(url);

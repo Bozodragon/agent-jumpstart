@@ -1,16 +1,22 @@
 #!/usr/bin/env node
 // The Installer. The bootstrap runs this as:
 //
-//   node main.js --profile <id> [--debug]
+//   node main.js --profile <id> [--debug] [--terminal]
 //
 // --debug comes from the debug pasted line (york-debug.ps1).
+// --terminal keeps the Installer in the window (the terminal front end). Without it, a run with
+// nobody's answers file serves the Installer page and writes its address to a file, for the
+// Bootstrap to open (installer-page.js). The Bootstrap starts that run hidden, so if no page
+// connects within about 20 seconds (or none can be served), the run stops with code 3 before it
+// has run or changed anything, and the Bootstrap runs it again in the window with --terminal.
 //
 // Four overrides are for tests. Three let a test run it end to end with no network and no prompts:
 //   --home <folder>       use this as the user's profile folder (local AppData sits inside it);
 //                         everything that would change the rest of the machine, opening a page
 //                         in the browser among it, is faked inside it (machine.js)
 //   --answers <file>      answer every question from this JSON file; nothing is asked and
-//                         nothing waits for Enter, because nobody is at the screen
+//                         nothing waits for Enter, because nobody is at the screen. The run
+//                         uses the terminal front end
 //   --downloads <folder>  take downloads from this folder instead of the internet
 //
 // A fourth, for tests only, which the bootstrap never passes:
@@ -19,31 +25,42 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { basename, dirname } from 'node:path';
 import { parseArgs } from 'node:util';
 import { openLog } from './log.js';
-import { endAfterSkippedSignIn, setUpClaude } from './claude.js';
+import { endAfterSkipped, setUpClaude } from './claude.js';
 import { walkThroughConnectors } from './connectors.js';
 import { newEnding, note, showEnding } from './ending.js';
 import { setUpExtraTools } from './extra-tools.js';
-import { setUpGitHub } from './github.js';
+import { setUpGitHub, signedInBefore } from './github.js';
 import { loadManifest, toolEntry } from './manifest.js';
 import { findPlaces } from './places.js';
 import { openMachine } from './machine.js';
 import { autoMemoryInUse, switchOffAutoMemory } from './memory.js';
 import { fullSkillsSizes, loadProfile, withFullSkills, withTeam } from './profile.js';
-import { answersFrom, askChange, askQuestions, askTeam, knownFrom, teamTicksToAdd } from './questions.js';
+import { logProxySetting } from './proxy.js';
+import { answersFrom, askChange, askExperience, askingThePerson, askQuestions, askTeam, experienceOptions, fromBeforeExperience, GoBack, hiddenFor, knownFrom, revealedBy, teamTicksToAdd } from './questions.js';
 import { installSkills } from './skills.js';
 import { findT3, installT3, openT3 } from './t3.js';
 import { End, messageOf, Stop } from './stop.js';
 import { installTools, isRecord } from './tools.js';
-import * as ui from './ui.js';
+import { openTerminal } from './terminal.js';
+import { inWordsOrNone } from './text.js';
+import { openInstallerPage } from './installer-page.js';
+import { holdLock } from './lock.js';
 import { setWindowTitle } from './window.js';
 import { addToT3, createWorkspaces } from './workspaces.js';
 
-/** @returns {{ profile: string, debug: boolean, home?: string, answers?: string, downloads?: string, profiles?: string }} */
+/** How long the Installer page has to connect before the run stops for the Bootstrap to run it in the window. */
+const noPageWithin = 20_000;
+
+/** The exit code of a run that stopped because no page could be shown: served or connected. */
+const noPage = 3;
+
+/** @returns {{ profile: string, debug: boolean, terminal: boolean, home?: string, answers?: string, downloads?: string, profiles?: string }} */
 function readOptions() {
   const { values } = parseArgs({
     options: {
       profile: { type: 'string', default: 'default' },
       debug: { type: 'boolean', default: false },
+      terminal: { type: 'boolean', default: false },
       home: { type: 'string' },
       answers: { type: 'string' },
       downloads: { type: 'string' },
@@ -95,26 +112,32 @@ async function readEarlierSettings(path, profile, log) {
 
 /**
  * What a re-run takes from the settings file instead of asking, in the person's words: the top
- * workspace, if it's the one an earlier run wrote down, and each answer the settings gave.
+ * workspace, if it's the one an earlier run wrote down, and each answer the settings gave, except
+ * those to questions this person isn't asked, which they never chose.
  * @param {Record<string, unknown>} earlier
  * @param {import('./questions.js').Answers} choices
- * @param {Set<string>} reused The keys of the answers the settings gave.
+ * @param {Set<string>} given The keys of the answers the settings gave.
+ * @param {string[]} hidden The keys of the questions the experience answers hide (see hiddenFor).
  * @param {string | undefined} downloads
  * @returns {Promise<[string, string][]>}
  */
-async function reusedRows(earlier, choices, reused, downloads) {
-  /** @param {string[]} names */
-  const list = (names) => (names.length === 0 ? 'None' : ui.inWords(names));
+async function reusedRows(earlier, choices, given, hidden, downloads) {
+  const reused = new Set([...given].filter((key) => !hidden.includes(key)));
   /** @type {[string, string][]} */
   const rows = [];
   if (reused.has('team') && choices.team !== undefined) rows.push(['Team', choices.team]);
+  // Each in the words it was answered in.
+  for (const [key, label] of /** @type {const} */ ([['aiExperience', 'AI tools'], ['codingExperience', 'Writing code']])) {
+    const said = experienceOptions[key].find((option) => option.value === choices[key]);
+    if (reused.has(key) && said) rows.push([label, said.label]);
+  }
   if (choices.topWorkspace === earlier.topWorkspace || reused.has('googleDriveFolder') || reused.has('workspacesLocation')) {
     rows.push(['Top workspace', choices.topWorkspace]);
   }
   if (reused.has('channel')) rows.push(['T3 Code', choices.channel === 'nightly' ? 'Nightly' : 'Stable']);
   if (reused.has('github')) rows.push(['GitHub', choices.github ? 'Set up' : 'Not set up']);
-  if (reused.has('workspaces')) rows.push(['Workspaces', list(choices.workspaces)]);
-  if (reused.has('connectors')) rows.push(['Connectors', list(choices.connectors)]);
+  if (reused.has('workspaces')) rows.push(['Workspaces', inWordsOrNone(choices.workspaces)]);
+  if (reused.has('connectors')) rows.push(['Connectors', inWordsOrNone(choices.connectors)]);
   if (reused.has('extraTools')) {
     // Named as the checklist names them, by the tools they install.
     const tools = await loadManifest(downloads).then(({ tools }) => tools, () => []);
@@ -122,7 +145,7 @@ async function reusedRows(earlier, choices, reused, downloads) {
       const named = tools.filter((tool) => tool.when === id).map((tool) => tool.name);
       return named.length > 0 ? named : [id];
     });
-    rows.push(['Extra tools', list(names)]);
+    rows.push(['Extra tools', inWordsOrNone(names)]);
   }
   if (reused.has('fullSkills')) {
     /** @type {Record<import('./profile.js').FullSkills, string>} */
@@ -150,23 +173,81 @@ async function main() {
     return 2;
   }
 
+  // Everything the person sees and answers from here on goes through it: steps are given it in
+  // their context, as they're given the machine.
   const places = findPlaces(options.home);
+  const opened = await openFrontEnd(options, places);
   const log = openLog(places.logs, { debug: options.debug });
   log.write(`Installer started with Node ${process.version}`);
   log.write(`Profile: ${options.profile}`);
   log.write(`Debug: ${options.debug ? 'on' : 'off'}`);
   log.write(`Home: ${places.home}`);
-  log.write(`Window: ${ui.inWindowsTerminal ? 'Windows Terminal' : 'not Windows Terminal, most likely the old console'}`);
+  if (!opened.frontEnd) {
+    log.write(opened.why);
+    process.stdout.write(`${opened.why}\n`);
+    return noPage;
+  }
+  const { page, frontEnd: openedFrontEnd } = opened;
+  /**
+   * What the busies of the step under way have done (each that changed something and says so),
+   * for a run that stops before that step's own rows are recorded.
+   * @type {[string, string][]}
+   */
+  let doneInStep = [];
+  /** @type {import('./front-end.js').FrontEnd} */
+  const frontEnd = {
+    ...openedFrontEnd,
+    busy: (message, task, ended, how) =>
+      openedFrontEnd.busy(
+        message,
+        task,
+        ended &&
+          ((result) => {
+            const said = ended(result);
+            if (said.ok && said.done) doneInStep.push(said.done);
+            return said;
+          }),
+        how,
+      ),
+  };
+  log.write(frontEnd.description);
   if (options.answers) log.write(`Answers from: ${options.answers}`);
   if (options.downloads) log.write(`Downloads from: ${options.downloads}`);
   if (options.profiles) log.write(`Profiles from: ${options.profiles}`);
-  const machine = openMachine(places, log);
+  const machine = openMachine(places, log, frontEnd.screen);
+  // A page closed partway is waited for at the next question by the machine's clock, as above.
+  page?.use({ waitFor: machine.waitFor, say: (line) => log.write(`Installer page: ${line}`) });
+  // Nothing happens until a page is there to show it. With none, the run stops before it has run
+  // or changed anything, and the Bootstrap, seeing it end with no page, runs it in the window.
+  /** Why no page can be counted on, if none can: the Bootstrap knows of one only from the connected file. @type {string | undefined} */
+  let noPageBecause;
+  const shown = page?.connected.then(
+    () => undefined,
+    (error) => `A page connected, but ${basename(places.pageConnected)} couldn't be written (${messageOf(error)})`,
+  );
+  if (shown && !(await machine.waitFor(shown, noPageWithin))) noPageBecause = `No page connected within ${noPageWithin / 1000} seconds`;
+  else noPageBecause = await shown;
+  if (page && noPageBecause) {
+    const why = `${noPageBecause}, so the Installer stops, for the Bootstrap to run it in the window with --terminal`;
+    log.write(why);
+    process.stdout.write(`${why}.\n`);
+    await frontEnd.close();
+    return noPage;
+  }
   if (options.debug) await logUserPath(machine, log, 'before');
+  await logProxySetting(machine, log);
   /**
    * What this run has changed so far, step by step, for a run that stops partway.
    * @type {[string, string][]}
    */
   const done = [];
+  /** @param {[string, string][]} rows a step's, which cover what its busies did */
+  const recordDone = (rows) => {
+    done.push(...rows);
+    doneInStep = [];
+  };
+  /** What's done once the run is over, however it ends (see google-drive.js's Context). @type {(() => Promise<void>)[]} */
+  const atEnd = [];
   /** What the ending says: the steps that didn't work, noted as the run meets them. */
   const ending = newEnding();
   /**
@@ -174,7 +255,7 @@ async function main() {
    * @param {[string, string][]} rows @param {string} [step] as for `note`
    */
   const record = (rows, step) => {
-    done.push(...rows);
+    recordDone(rows);
     note(ending, rows, step);
   };
 
@@ -184,65 +265,102 @@ async function main() {
     const unattended = answers !== undefined;
 
     // The setup page isn't opened: the person has just pasted its line into this window.
-    ui.start(`Agent Jumpstart · ${offered.name}`);
+    frontEnd.start(`Agent Jumpstart · ${offered.name}`, { setupPage: offered.page, shareLogLine: offered.shareLogLine });
 
     // A re-run asks nothing an earlier run already wrote down, unless the person chooses to change it.
     const earlier = await readEarlierSettings(places.settings, offered.id, log);
-    const asker = unattended ? answersFrom(answers) : ui.ask;
-    /** @type {Set<string>} */
-    const reused = new Set();
-    /**
-     * The keys of the answers to ask again, which the settings no longer answer, each with the
-     * ticks a team adds to a pick's default.
-     * @type {Map<string, string[]>}
-     */
-    const changing = new Map();
-    const ask = earlier ? knownFrom(earlier, asker, log, reused, changing) : asker;
+    const asker = unattended ? answersFrom(answers) : askingThePerson(frontEnd.ask);
     /** @type {import('./tools.js').Context} */
-    const context = { places, machine, downloads: options.downloads, keepDownloads: options.debug, log, attended: !unattended };
+    const context = { places, machine, frontEnd, downloads: options.downloads, keepDownloads: options.debug, log, attended: !unattended };
     // What's already on the laptop decides what's asked. Memory's sign is looked for before
     // what to change, which offers Memory only when there's a sign of it or it was left on.
     const memoryInUse = await autoMemoryInUse(context);
-    // The team first, and on a re-run, what to change from last time. With a team saved, what
-    // to change comes first, so a ticked Team is asked next, in its usual place. From here on
-    // the run works from the profile with the team's entries merged in.
-    const teamSaved = earlier !== undefined && 'team' in earlier;
-    let team = teamSaved ? undefined : await askTeam(offered, ask, log);
-    if (earlier) for (const key of await askChange(offered, earlier, memoryInUse, asker, log)) changing.set(key, []);
-    if (teamSaved) team = await askTeam(offered, ask, log);
-    const profile = withTeam(offered, team);
-    // A team joined or changed asks again each pick it ticks something new in, with its ticks added.
-    if (earlier) for (const [key, ticks] of teamTicksToAdd(profile, earlier, team, log)) changing.set(key, ticks);
-    // A list of versions that can't be read isn't a reason to stop yet: the first install stops
-    // on it, once the answers are saved.
-    const foundT3 = await findT3(context).catch((error) => {
-      if (!(error instanceof Stop)) throw error;
-      log.write(`T3 Code: couldn't look for an earlier install: ${error.message}`);
-      return undefined;
-    });
-    const found = { earlier, memoryInUse, t3Channel: foundT3?.channel };
-    const choices = {
-      ...(team === undefined ? {} : { team }),
-      ...(await askQuestions(profile, places, ask, log, found, { machine, attended: !unattended })),
+    // An answers file from before the experience questions answers every question as it did then,
+    // hidden or not, so nothing the experience answers hide is left out or brought back for it.
+    const olderAnswers = answers !== undefined && fromBeforeExperience(answers);
+    // So is whether GitHub's own tool is signed in, which leaves nothing to ask about GitHub. An
+    // older answers file doesn't look, so it runs what it did.
+    const githubSignedIn = olderAnswers ? undefined : await signedInBefore(context);
+    // A list of versions that can't be read isn't a reason to stop yet (findT3 says so). Looked
+    // for once, however often the questions are asked.
+    /** @type {ReturnType<typeof findT3> | undefined} */
+    let lookingForT3;
+    const lookForT3 = () => (lookingForT3 ??= findT3(context));
+
+    // Every question, up to the settings being written. Nothing here changes the laptop (bar
+    // Google Drive's install, after which there's no going back), so a person who goes back on
+    // the page is asked them again from the start, the page answering those before the question
+    // gone back to as they were answered (see FrontEnd's `questions`).
+    const askEverything = async () => {
+      /** @type {Set<string>} */
+      const reused = new Set();
+      /** The keys of the answers the settings no longer give, which are put as on a first run. @type {Set<string>} */
+      const fresh = new Set();
+      /**
+       * The keys of the answers to ask again, which the settings no longer answer, each with the
+       * ticks a team adds to a pick's default.
+       * @type {Map<string, string[]>}
+       */
+      const changing = new Map();
+      const ask = earlier ? knownFrom(earlier, asker, log, reused, fresh, changing) : asker;
+      if (githubSignedIn) fresh.add('github');
+      // The team first, and on a re-run, what to change from last time. With a team saved, what
+      // to change comes first, so a ticked Team is asked next, in its usual place. From here on
+      // the run works from the profile with the team's entries merged in.
+      const teamSaved = earlier !== undefined && 'team' in earlier;
+      let team = teamSaved ? undefined : await askTeam(offered, ask, log);
+      if (earlier) for (const key of await askChange(offered, earlier, { memoryInUse, githubSignedIn, olderAnswers }, asker, log)) changing.set(key, []);
+      if (teamSaved) team = await askTeam(offered, ask, log);
+      const experience = await askExperience(ask, log);
+      // A question the new experience answers reveal is asked, rather than kept from last time.
+      if (earlier && !olderAnswers) for (const key of revealedBy(earlier, experience, log)) fresh.add(key);
+      const profile = withTeam(offered, team);
+      // A team joined or changed asks again each pick it ticks something new in, with its ticks added.
+      if (earlier) for (const [key, ticks] of teamTicksToAdd(profile, earlier, team, log)) changing.set(key, ticks);
+      const foundT3 = await lookForT3();
+      const found = { earlier, memoryInUse, t3Channel: foundT3?.channel, experience, githubSignedIn };
+      const choices = {
+        ...(team === undefined ? {} : { team }),
+        ...experience,
+        ...(await askQuestions(profile, places, ask, log, found, { machine, frontEnd, attended: !unattended, keepDownloads: options.debug, once, atEnd })),
+      };
+      if (earlier) {
+        const rows = await reusedRows(earlier, choices, reused, olderAnswers ? [] : hiddenFor(experience), options.downloads);
+        if (rows.length > 0) frontEnd.summary(rows, 'Using your answers from last time');
+      }
+      return { profile, foundT3, choices };
     };
-    if (earlier) {
-      const rows = await reusedRows(earlier, choices, reused, options.downloads);
-      if (rows.length > 0) ui.summary(rows, 'Using your answers from last time');
+    /** Looks the questions make once a run, however often they're asked (see Reach). @type {Map<string, Promise<any>>} */
+    const once = new Map();
+    /** @type {Awaited<ReturnType<typeof askEverything>> | undefined} */
+    let asked;
+    while (!asked) {
+      frontEnd.questions?.begin();
+      try {
+        asked = await askEverything();
+      } catch (error) {
+        if (!(error instanceof GoBack)) throw error;
+        log.write(`Back: ${error.message}`);
+      }
     }
+    frontEnd.questions?.fix();
+    const { profile, foundT3, choices } = asked;
 
     // Keys this run doesn't write (another program's, or a later version's) are kept.
     /** @type {Record<string, unknown>} */
     const settings = { ...earlier, profile: profile.id, ...choices };
     await writeSettings(places.settings, settings);
     log.write(`Settings written to ${places.settings}`);
-    done.push(['Settings', 'Your answers, saved for next time']);
+    // The questions have no rows of their own, so what their busies did (Google Drive installed)
+    // stays among what's done.
+    recordDone([...doneInStep, ['Settings', 'Your answers, saved for next time']]);
 
     const workspaces = await createWorkspaces(choices.topWorkspace, choices.workspaces, log);
     record(workspaces.rows, 'Workspaces');
 
     const { rows: tools, programs } = await installTools(context);
     record(tools);
-    const github = await setUpGitHub(profile, choices.github, programs, context);
+    const github = await setUpGitHub(profile, choices.github, programs, context, githubSignedIn);
     record([['GitHub', github]]);
     const ours = Array.isArray(earlier?.skillsInstalled) ? earlier.skillsInstalled.filter((name) => typeof name === 'string') : [];
     const installedFrom = /** @type {Record<string, string>} */ (
@@ -257,7 +375,23 @@ async function main() {
       log.write(`Skills: fullSkills has grown from "${earlier?.fullSkills}" to "${choices.fullSkills}", so ${fullSet} is added again`);
       delete installedFrom[fullSet];
     }
-    const skills = await installSkills(withFullSkills(profile, choices.fullSkills), ours, installedFrom, context);
+    // What the step has installed when a stop cuts it short is written down, as the step's end
+    // would have, so the next run updates those skills rather than leave them be as the person's.
+    const skillsSoFar = { installed: /** @type {string[]} */ ([]), sources: { ...installedFrom } };
+    /** @type {Awaited<ReturnType<typeof installSkills>>} */
+    let skills;
+    try {
+      skills = await installSkills(withFullSkills(profile, choices.fullSkills), ours, installedFrom, context, skillsSoFar);
+    } catch (error) {
+      if (error instanceof Stop && skillsSoFar.installed.length > 0) {
+        const skillsInstalled = [...new Set([...ours, ...skillsSoFar.installed])];
+        Object.assign(settings, { skillsInstalled });
+        if (Object.keys(skillsSoFar.sources).length > 0 || 'skillSources' in settings) settings.skillSources = skillsSoFar.sources;
+        await writeSettings(places.settings, settings);
+        log.write(`Written to settings, as the run stopped during the skills: skillsInstalled: ${JSON.stringify(skillsInstalled)}, skillSources: ${JSON.stringify(skillsSoFar.sources)}`);
+      }
+      throw error;
+    }
     /** @type {[string, string][]} */
     const skillsRows = skills.cli === undefined ? [] : [['Skills CLI', skills.cli]];
     skillsRows.push(['Skills', skills.line]);
@@ -277,7 +411,7 @@ async function main() {
     // Settings' connectors are kept only when every one is still offered, so equal means known.
     const connectedBefore = JSON.stringify(earlier?.connectors) === JSON.stringify(choices.connectors);
     const connectors = await walkThroughConnectors(profile, choices.connectors, { ...context, connectedBefore });
-    done.push(['Connectors', connectors]);
+    recordDone([['Connectors', connectors]]);
     const extraTools = await setUpExtraTools(profile, choices.extraTools, context);
     record(extraTools);
     // Their steps are named as their manifest entries name them (installTools has read it).
@@ -287,7 +421,7 @@ async function main() {
     // Before T3, which finds Claude Code only if it's on PATH when T3 starts.
     const claude = await setUpClaude(context, asker);
     record([[named.claude, claude.row]]);
-    if (claude.skipped !== undefined) endAfterSkippedSignIn(ending, claude.skipped, named);
+    if (claude.skipped !== undefined) endAfterSkipped(ending, claude.skipped, named);
     settings.email = claude.email;
     await writeSettings(places.settings, settings);
     log.write(`Signed-in email written to settings: ${claude.email ?? 'none'}`);
@@ -311,11 +445,11 @@ async function main() {
       ['Connectors', connectors],
       ['GitHub', github],
     ];
-    if (skills.rows.length > 0) ui.summary(skills.rows, 'Skills');
-    ui.summary(workspaces.rows, 'Workspaces');
-    ui.summary(checklist, 'Checklist');
+    if (skills.rows.length > 0) frontEnd.summary(skills.rows, 'Skills');
+    frontEnd.summary(workspaces.rows, 'Workspaces');
+    frontEnd.summary(checklist, 'Checklist');
     for (const [label, value] of [...skills.rows, ...workspaces.rows, ...checklist]) log.write(`Checklist: ${label}: ${value}`);
-    ui.step(`Log: ${log.path}`);
+    frontEnd.step(`Log: ${log.path}`);
 
     // T3 Code is opened at the end of every run that has it, so the person ends up where they
     // work, unless this run's install has just started it (its installer does, and it has opened).
@@ -323,34 +457,76 @@ async function main() {
     else if (!t3.installed) log.write("Ending: T3 Code isn't opened: it isn't installed");
     else if (!foundT3 && t3.opened) log.write("Ending: T3 Code isn't opened again: its install just started it");
     else await openT3(foundT3?.channel ?? choices.channel, context);
-    showEnding(ending, { top: basename(choices.topWorkspace), t3Installed: t3.installed, tools: named, log });
+    showEnding(ending, { top: basename(choices.topWorkspace), t3Installed: t3.installed, tools: named, log, frontEnd });
     log.write('Installer finished');
     return 0;
   } catch (error) {
     if (error instanceof End) {
       log.write(`Ended early, as the person chose: ${error.message}`);
-      ui.finish(error.message);
+      frontEnd.finish(error.message);
       log.write('Installer finished');
       return 0;
     }
     if (!(error instanceof Stop)) {
       log.write(`Failed: ${error instanceof Error ? error.stack : String(error)}`);
+      // Said in plain words first; Node then prints the stack, as it always has.
+      frontEnd.problem(`Something went wrong that the Installer didn't expect: ${messageOf(error)}`);
+      frontEnd.finish(`The Installer has stopped. The log says more: ${log.path}`);
       throw error;
     }
     log.write(`Stopped: ${error.message}`);
     // Only here is the person told what a stop left behind, so it's never claimed that nothing
-    // changed after something did.
+    // changed after something did: that's the steps done, and what the busies of the step it
+    // stopped in had done, such as the install a stop waited for.
+    done.push(...doneInStep);
     if (done.length === 0) {
-      ui.problem(`${error.message} Nothing has been changed.`);
+      frontEnd.problem(`${error.message} Nothing has been changed.`);
     } else {
-      ui.problem(error.message);
-      ui.summary(done, 'Done before it stopped');
+      frontEnd.problem(error.message);
+      frontEnd.summary(done, 'Done before it stopped');
       for (const [label, value] of done) log.write(`Done before it stopped: ${label}: ${value}`);
-      ui.step('Running the same line again carries on from here, without asking your answers again.');
+      frontEnd.step('Running the same line again carries on from here, without asking your answers again.');
     }
     return 1;
   } finally {
+    for (const each of atEnd) await each().catch((error) => log.write(`Tidying up once the run was over failed: ${messageOf(error)}`));
     if (options.debug) await logUserPath(machine, log, 'after');
+    await frontEnd.close();
+  }
+}
+
+/**
+ * The front end for this run: the Installer page for someone at the screen, unless `--terminal`
+ * keeps them in the window; the terminal for a run whose answers come from a file. A page that
+ * can't be served gives no front end, and says why for the log: the Bootstrap started this run
+ * hidden, so a terminal here would wait where nobody can see it.
+ * @param {{ answers?: string, terminal: boolean }} options @param {import('./places.js').Places} places
+ * @returns {Promise<{ frontEnd: import('./front-end.js').FrontEnd, page?: Awaited<ReturnType<typeof openInstallerPage>> } | { frontEnd?: undefined, page?: undefined, why: string }>}
+ */
+async function openFrontEnd(options, places) {
+  if (options.answers !== undefined) return { frontEnd: await openTerminal() };
+  if (options.terminal) {
+    // Someone at the window holds the lock too, with no page's address, so a second paste of the
+    // line leaves this run be (and says so) rather than replacing the program under it.
+    const terminal = await openTerminal();
+    const lock = await holdLock(places.pageAddress);
+    return {
+      frontEnd: {
+        ...terminal,
+        async close() {
+          await terminal.close();
+          await lock.release();
+        },
+      },
+    };
+  }
+  try {
+    const page = await openInstallerPage({ addressFile: places.pageAddress, connectedFile: places.pageConnected });
+    // For whoever started it by hand: the Bootstrap opens the address from the file.
+    process.stdout.write(`The Installer page: ${page.address}\n`);
+    return { frontEnd: page, page };
+  } catch (error) {
+    return { why: `The Installer page couldn't be served, so the Installer stops, for the Bootstrap to run it in the window with --terminal: ${messageOf(error)}` };
   }
 }
 

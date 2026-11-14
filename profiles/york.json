@@ -55,7 +55,13 @@
   ],
   "googleDrive": {
     "softwareCenter": "Google Drive",
-    "softwareCenterOffer": "Google Drive isn't on this laptop. With it, your workspaces are backed up and you can reach them from any device. York's Software Center can install it for you, with no admin rights needed."
+    "softwareCenterOffer": "Google Drive isn't on this laptop. With it, your workspaces are backed up and you can reach them from any device. York's Software Center can install it for you, with no admin rights needed.",
+    "hostedInstaller": {
+      "id": "1rRGalKcRRAW5b4AtmX8fWqdExYH2SzQd",
+      "version": "132.0.0.0",
+      "size": 292804760,
+      "sha256": "6ab7af8224736d4b6f0b06345f5bdc78a664c0a995973c0b1b38c3a0ad5cd853"
+    }
   },
   "t3": {
     "defaultModel": "claude-opus-5-5",
@@ -108,9 +114,11 @@
   "extraTools": [
     {
       "id": "apps-script",
+      "name": "Apps Script",
       "question": "Would you like the agent to be able to publish and manage Apps Script projects for you?",
       "default": true,
       "signIn": "A browser window will open. Choose your York Google account and allow what clasp asks for. Come back here when the page says \"Logged in!\".",
+      "signInOnPage": "A browser window will open. Choose your York Google account and allow what clasp asks for, until your browser says \"Logged in!\".",
       "settingsPage": "https://script.google.com/home/usersettings",
       "settings": "On the Apps Script settings page, check your York account is the one shown at the top right. Then click Google Apps Script API and switch it on. Only you can change this setting."
     }

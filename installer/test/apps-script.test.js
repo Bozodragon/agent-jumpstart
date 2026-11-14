@@ -95,6 +95,11 @@ test("clasp's browser sign-in runs in the person's window and the installer wait
   assert.equal(result.code, 0, result.stdout + result.stderr);
   checklistSays(result.stdout, 'clasp', `${clasp.version} (installed), signed in as a.person@york.ac.uk`);
   assert.ok(result.stdout.includes(appsScript.signIn.slice(0, 40)), result.stdout);
+  // The terminal's sign-ins look as they did before the Installer page: clasp's notice word for word.
+  const flowing = result.stdout.replace(/[│|]/g, ' ').replace(/\s+/g, ' ');
+  const start = flowing.indexOf('Sign in to clasp');
+  const notice = flowing.slice(start, flowing.indexOf('Checking', start));
+  assert.match(notice, /^Sign in to clasp [^A-Za-z]*A browser window will open\. Choose your York Google account and allow what clasp asks for\. Come back here when the page says "Logged in!"\.[^A-Za-z]*$/, notice);
   const claspRuns = (await machine.runs()).filter((run) => basename(run.file) === 'clasp.cmd' && run.args[0] !== '--version');
   assert.deepEqual(
     claspRuns.map((run) => [run.args.join(' '), Boolean(run.onScreen)]),
@@ -115,7 +120,7 @@ test('after the sign-in, the Apps Script settings page is given with a plain ins
   assert.ok(page > result.stdout.indexOf(appsScript.signIn.slice(0, 40)), 'the page comes after the sign-in');
   assert.match(result.stdout, /Google Apps Script API and switch it on/);
   const flowing = result.stdout.slice(page).replace(/[│|]/g, ' ').replace(/\s+/g, ' ');
-  assert.match(flowing, /Once you're done in the browser, come back to the Agent Jumpstart window, where you pasted the line, and press Enter\./);
+  assert.match(flowing, /Once you're done in the browser, come back to the Agent Jumpstart window, where you pasted the line\./);
   const log = await readOnlyLog(where.home);
   assert.ok(log.text.includes(`Settings page: ${appsScript.settingsPage} (opened)`), log.text);
   assert.ok((await fakeMachine(where.home).pagesOpened()).includes(appsScript.settingsPage));

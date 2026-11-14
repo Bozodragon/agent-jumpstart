@@ -20,7 +20,6 @@ import { pipeline } from 'node:stream/promises';
 import { system32 } from './machine.js';
 import { loadManifest } from './manifest.js';
 import { messageOf } from './stop.js';
-import * as ui from './ui.js';
 
 /** A reason a tool isn't installed, worded for the checklist. */
 export class NotInstalled extends Error {}
@@ -32,6 +31,7 @@ export const installedMarker = '.installed-by-agent-jumpstart';
  * @typedef {object} Context
  * @property {import('./places.js').Places} places
  * @property {import('./machine.js').Machine} machine
+ * @property {import('./front-end.js').FrontEnd} frontEnd What the person sees and answers.
  * @property {string} [downloads] The downloads-folder override. It stands in for the internet
  *   only: what's taken from it is still copied into the installer's own downloads folder.
  * @property {boolean} [keepDownloads] Leave the downloads in the installer's own folder after
@@ -84,27 +84,23 @@ export async function installTools(context) {
  * @returns {Promise<Installed>} A copy of the installer's at another version is replaced; the
  *   person's own copy is left as it is.
  */
-export async function installTool(tool, { places, machine, downloads, keepDownloads, log }) {
+export async function installTool(tool, { places, machine, frontEnd, downloads, keepDownloads, log }) {
   const say = (/** @type {string} */ line) => log.write(`${tool.name}: ${line}`);
   const folder = join(places.programs, tool.install.folder);
-  const marker = join(folder, installedMarker);
   /** @type {Command | undefined} */
   let here;
   try {
-    here = await commandIn(tool, folder);
-    const ours = await exists(marker);
-    if (here && !ours) {
-      say(`${folder} holds it, but the installer didn't put it there`);
-      return await leaveTheirs(tool, here, folder, { machine, say });
+    const found = await locate(tool, { places, machine });
+    if (found.onPath) {
+      say(`found on the PATH at ${found.onPath.join(', ')}`);
+      return await leaveTheirs(tool, found.command, found.onPath[0], { machine, frontEnd, say });
     }
-    if (!here && !ours) {
-      // A tool only the installer runs (no PATH entry) is always its own copy.
-      const name = basename(tool.install.check);
-      const elsewhere = tool.install.path.length === 0 ? [] : (await machine.findOnPath(name)).filter((found) => !isInside(found, folder));
-      if (elsewhere.length > 0) {
-        say(`found on the PATH at ${elsewhere.join(', ')}`);
-        return await leaveTheirs(tool, { file: join(elsewhere[0], name), args: [] }, elsewhere[0], { machine, say });
-      }
+    here = found.command;
+    if (here && !found.ours) {
+      say(`${folder} holds it, but the installer didn't put it there`);
+      return await leaveTheirs(tool, here, folder, { machine, frontEnd, say });
+    }
+    if (!here && !found.ours) {
       if (await holdsAnything(folder)) {
         say(`${folder} holds other things, not ${tool.install.check}, and the installer didn't put them there, so it's left as it is`);
         throw new NotInstalled(`${folder} already holds something else`);
@@ -116,11 +112,43 @@ export async function installTool(tool, { places, machine, downloads, keepDownlo
 
   // The download and the install show nothing of their own, for a minute or more.
   const there = here;
-  return ui.busy(
+  return frontEnd.busy(
     `Installing ${tool.name} ${tool.version}`,
     () => putInPlace(tool, there, { places, machine, downloads, keepDownloads, say }),
-    ({ installed, row }) => ({ text: `${tool.name}: ${row}`, ok: installed }),
+    ({ installed, row }) => ({ text: `${tool.name}: ${row}`, ok: installed, done: [tool.name, row] }),
   );
+}
+
+/**
+ * The copy of a tool already in place, as installTool would find it before installing anything:
+ * the one in its folder here, or, when that folder has none and the installer hasn't put it
+ * there, the person's own on the PATH. Changes nothing.
+ * @param {import('./manifest.js').Tool} tool
+ * @param {Pick<Context, 'places' | 'machine'>} context
+ * @returns {Promise<Command | undefined>}
+ */
+export async function findTool(tool, context) {
+  return (await locate(tool, context)).command;
+}
+
+/**
+ * Where a tool already is, the one rule installTool and findTool share: in its folder here
+ * (`ours` when the installer put it there), or, when that folder has none and the installer
+ * hasn't put it there, the person's own on the PATH (`onPath`: the folders that hold it, the
+ * first of them the one taken). A tool only the installer runs (no PATH entry) is always its own
+ * copy, so the PATH isn't looked at for it. Changes nothing.
+ * @param {import('./manifest.js').Tool} tool
+ * @param {Pick<Context, 'places' | 'machine'>} context
+ * @returns {Promise<{ command?: Command, ours: boolean, onPath?: undefined } | { command: Command, ours: false, onPath: string[] }>}
+ */
+async function locate(tool, { places, machine }) {
+  const folder = join(places.programs, tool.install.folder);
+  const command = await commandIn(tool, folder);
+  const ours = await exists(join(folder, installedMarker));
+  if (command || ours || tool.install.path.length === 0) return { command, ours };
+  const name = basename(tool.install.check);
+  const onPath = (await machine.findOnPath(name)).filter((found) => !isInside(found, folder));
+  return onPath.length > 0 ? { command: { file: join(onPath[0], name), args: [] }, ours: false, onPath } : { ours: false };
 }
 
 /**
@@ -241,11 +269,11 @@ async function unpackFallback(fallback, folder, { places, machine, downloads, ke
  * The person's own copy: asked its version for the checklist, and otherwise left exactly as it
  * is, with no PATH entry added for it.
  * @param {import('./manifest.js').Tool} tool @param {Command} program @param {string} folder
- * @param {{ machine: import('./machine.js').Machine, say: (line: string) => void }} how
+ * @param {{ machine: import('./machine.js').Machine, frontEnd: import('./front-end.js').FrontEnd, say: (line: string) => void }} how
  * @returns {Promise<Installed>}
  */
-async function leaveTheirs(tool, program, folder, { machine, say }) {
-  ui.step(`Using the ${tool.name} already at ${folder}`);
+async function leaveTheirs(tool, program, folder, { machine, frontEnd, say }) {
+  frontEnd.step(`Using the ${tool.name} already at ${folder}`);
   const ran = await machine.run(program.file, [...program.args, '--version']);
   const version = ran.code === 0 ? versionIn(ran.output) : undefined;
   say(`${version ?? "a version that couldn't be read"} is already installed at ${folder}, so it's left as it is and used`);
@@ -350,46 +378,128 @@ async function addToPath(tool, folder, machine, say) {
 }
 
 /**
- * @param {{ url: string }} download
- * @param {{ downloads?: string, saveIn: string, say: (line: string) => void }} where
+ * Downloads a file into `saveIn`, or copies it from the downloads folder, by the file name its
+ * address ends in (or by `from`, its path inside the downloads folder). A download reports how far
+ * it has got through `progress`, against `size` when the caller knows it, or else the size the
+ * server gives (when it sends the file as it is, not compressed); a copy reports nothing.
+ * Nothing about how far it has got is logged. A download is written as `<name>.partial` and
+ * renamed once it's whole; a copy is made as it always was.
+ * @param {{ url: string, size?: number, from?: string }} download
+ * @param {{ downloads?: string, saveIn: string, say: (line: string) => void, progress?: import('./front-end.js').Progress }} where
  * @returns {Promise<string>} the file
  */
-export async function obtain({ url }, { downloads, saveIn, say }) {
+export async function obtain(download, where) {
+  return (await openDownload(download, where)).receive(where.progress ?? (() => {}));
+}
+
+/**
+ * The first half of `obtain`: reaches the server (or finds the file in the downloads folder), so
+ * that the size to count against is known before anything comes, then `receive` brings the file.
+ * `total` is `size` when the caller knows it, or else the size the server gives (when it sends
+ * the file as it is, not compressed); for a copy, `size`.
+ * @param {{ url: string, size?: number, from?: string }} download
+ * @param {{ downloads?: string, saveIn: string, say: (line: string) => void }} where
+ * @returns {Promise<{ total: number | undefined, receive: (progress: import('./front-end.js').Progress) => Promise<string> }>}
+ */
+export async function openDownload({ url, size, from }, { downloads, saveIn, say }) {
   const name = basename(new URL(url).pathname);
   const file = join(saveIn, name);
   if (downloads) {
-    const source = join(downloads, name);
+    const source = join(downloads, from ?? name);
     if (!(await exists(source))) {
       say(`${source} isn't there`);
       throw new NotInstalled("it wasn't in the downloads folder");
     }
-    say(`taking ${source}`);
-    await mkdir(saveIn, { recursive: true });
-    await copyFile(source, file);
-    say(`downloaded to ${file}`);
-    return file;
+    return {
+      total: size,
+      async receive() {
+        say(`taking ${source}`);
+        await mkdir(saveIn, { recursive: true });
+        await copyFile(source, file);
+        say(`downloaded to ${file}`);
+        return file;
+      },
+    };
   }
-  await mkdir(saveIn, { recursive: true });
-  say(`downloading ${url}`);
-  try {
-    const response = await fetch(url);
-    if (!response.ok || !response.body) throw new Error(`the server said ${response.status} ${response.statusText}`);
-    await pipeline(Readable.fromWeb(/** @type {any} */ (response.body)), createWriteStream(file));
-  } catch (error) {
-    await rm(file, { force: true });
+  // Written under a name of its own until it's whole, so a download cut short, even by the run
+  // ending partway, is never taken for the file, and antivirus doesn't lock it half-written. One
+  // left from an earlier run is replaced, as is the file itself, kept by a debug run.
+  const partial = `${file}.partial`;
+  /** @param {unknown} error @returns {Promise<never>} */
+  const failed = async (error) => {
+    await rm(partial, { force: true });
     const cause = error instanceof Error && error.cause ? error.cause : error;
     say(`download failed: ${messageOf(cause)}`);
     throw new NotInstalled(`it couldn't be downloaded (${messageOf(cause)})`);
+  };
+  await mkdir(saveIn, { recursive: true });
+  await rm(file, { force: true });
+  await rm(partial, { force: true });
+  say(`downloading ${url}`);
+  /** @type {Response} */
+  let response;
+  try {
+    response = await fetch(url);
+    if (!response.ok || !response.body) throw new Error(`the server said ${response.status} ${response.statusText}`);
+  } catch (error) {
+    return failed(error);
   }
-  say(`downloaded to ${file}`);
-  return file;
+  // Bytes are counted once fetch has unpacked them, so a size the caller knows (Claude Code's,
+  // from Anthropic's manifest) is the right total even when the server compresses the file.
+  const total = size ?? sizeOf(response);
+  return {
+    total,
+    async receive(progress) {
+      let received = 0;
+      progress(received, total);
+      try {
+        await pipeline(
+          Readable.fromWeb(/** @type {any} */ (response.body)),
+          async function* (/** @type {AsyncIterable<Buffer>} */ pieces) {
+            for await (const piece of pieces) {
+              received += piece.length;
+              progress(received, total);
+              yield piece;
+            }
+          },
+          createWriteStream(partial),
+        );
+        await rename(partial, file);
+      } catch (error) {
+        return failed(error);
+      }
+      say(`downloaded to ${file}`);
+      return file;
+    },
+  };
+}
+
+/**
+ * The file's size as the server gives it, unless it's compressed on the way: then the size
+ * given is the compressed one, while what's counted is what arrives once fetch has unpacked it.
+ * @param {Response} response
+ * @returns {number | undefined}
+ */
+function sizeOf(response) {
+  const encoding = response.headers.get('content-encoding');
+  if (encoding && encoding !== 'identity') return undefined;
+  const length = Number(response.headers.get('content-length') ?? NaN);
+  return Number.isSafeInteger(length) && length > 0 ? length : undefined;
+}
+
+/**
+ * A file's SHA-256, in lower-case hex. Each caller compares it, and words a mismatch, its own way.
+ * @param {string} file
+ */
+export async function sha256Of(file) {
+  const hash = createHash('sha256');
+  await pipeline(createReadStream(file), hash);
+  return hash.digest('hex');
 }
 
 /** @param {string} file @param {string} expected @param {(line: string) => void} say */
 async function checkSum(file, expected, say) {
-  const hash = createHash('sha256');
-  await pipeline(createReadStream(file), hash);
-  const actual = hash.digest('hex');
+  const actual = await sha256Of(file);
   if (actual !== expected.toLowerCase()) {
     say(`checksum ${actual} isn't the pinned ${expected}`);
     throw new NotInstalled("the download didn't match its pinned checksum");

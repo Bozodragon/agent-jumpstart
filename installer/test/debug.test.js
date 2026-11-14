@@ -23,13 +23,19 @@ async function aLaptop(t) {
   const nodeFolder = join(programsFolder(where.home), 'nodejs');
   await markAsInstalledByUs(nodeFolder);
   await writeFile(join(nodeFolder, 'node.exe'), 'the copy already there');
-  const downloaded = ['git', 'gh'].map((id) => basename(new URL(tool(id).downloads[process.arch].url).pathname));
-  for (const name of downloaded) await writeFile(join(where.downloads, name), `not really ${name}`);
+  const supplied = ['git', 'gh'].map((id) => basename(new URL(tool(id).downloads[process.arch].url).pathname));
+  for (const name of supplied) await writeFile(join(where.downloads, name), `not really ${name}`);
+  // Claude Code's own download, from the release files every test home has, is one of them too.
+  const downloaded = [...supplied, 'claude.exe'];
+  const override = await everythingIn(where.downloads);
   const machine = fakeMachine(where.home);
   await machine.setEnvironment({ Path: 'C:\\Already\\There' });
   await machine.setReplies({ 'node.exe --version': { output: nodeSays(node.version) } });
-  return { where, node, nodeFolder, downloaded };
+  return { where, node, nodeFolder, downloaded, override };
 }
+
+/** Every file and folder in a folder, at any depth (Claude Code's release files are in folders of their own). @param {string} folder */
+const everythingIn = async (folder) => (await readdir(folder, { recursive: true })).sort();
 
 /** The installer's own downloads folder, not the test's downloads override. @param {string} home */
 async function keptDownloads(home) {
@@ -103,24 +109,24 @@ test('a debug run logs the user PATH before and after', async (t) => {
 });
 
 test("a debug run keeps the downloads in the installer's folder", async (t) => {
-  const { where, downloaded } = await aLaptop(t);
+  const { where, downloaded, override } = await aLaptop(t);
 
   const result = await runWith(where, 'york', ['--debug']);
 
   assert.equal(result.code, 0, result.stderr);
   assert.deepEqual(await keptDownloads(where.home), [...downloaded].sort());
-  assert.deepEqual((await readdir(where.downloads)).sort(), [...downloaded].sort(), 'the downloads override is left as it was');
+  assert.deepEqual(await everythingIn(where.downloads), override, 'the downloads override is left as it was');
 });
 
 test("an ordinary run deletes the downloads from the installer's folder", async (t) => {
-  const { where, downloaded } = await aLaptop(t);
+  const { where, override } = await aLaptop(t);
 
   const result = await runWith(where, 'york');
 
   assert.equal(result.code, 0, result.stderr);
   assert.match((await readOnlyLog(where.home)).text, /Git: downloaded to .*agent-jumpstart\\downloads/, 'it was obtained there first');
   assert.deepEqual(await keptDownloads(where.home), []);
-  assert.deepEqual((await readdir(where.downloads)).sort(), [...downloaded].sort(), 'the downloads override is left as it was');
+  assert.deepEqual(await everythingIn(where.downloads), override, 'the downloads override is left as it was');
 });
 
 test('the person sees the same questions and checklist in both modes; only the log is bigger', async (t) => {

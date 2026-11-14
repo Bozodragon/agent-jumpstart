@@ -26,7 +26,15 @@ import { join } from 'node:path';
 import { loadManifest, toolEntry } from './manifest.js';
 import { skillNames } from './profile.js';
 import { exists, installTool } from './tools.js';
-import * as ui from './ui.js';
+
+/**
+ * The CLI keeps its look on a pipe (issue #88): its logo, rails, boxes and a spinner that redraws
+ * itself. On Windows its own colours stay on too; FORCE_COLOR=1 brings back the rest (the grey
+ * rails, the spinner's colour) and changes nothing else. What it prints is passed on to the front
+ * end as it prints it, for the page's small terminal; the terminal front end shows its own
+ * spinner instead, as it always has.
+ */
+const forceColor = { FORCE_COLOR: '1' };
 
 const leftAlone = 'Already there, left as it is';
 const upToDate = 'Up to date';
@@ -37,13 +45,17 @@ const upToDate = 'Up to date';
  * @param {Record<string, string>} installedFrom The commit an earlier run installed each source
  *   from (the settings file's `skillSources`).
  * @param {import('./tools.js').Context} context
+ * @param {{ installed: string[], sources: Record<string, string> }} [soFar] Kept up to date as
+ *   each source is done with, for a run that stops partway through the step (as a Stop that
+ *   waited for a source to install does, as it ends): the skills installed so far, and `sources`,
+ *   given as `installedFrom` was, with each source done with recorded as it now is.
  * @returns {Promise<{ cli?: string, rows: [string, string][], line: string, installed: string[], sources: Record<string, string> }>}
  *   The checklist's Skills CLI row, when the profile has skills; one row per skill, labelled as
  *   the person types it, for the Skills summary; the checklist's Skills line; the skills this
  *   run installed; and the commit each source's skills are now from, where that's known.
  */
-export async function installSkills(profile, ours, installedFrom, context) {
-  const { places, machine, downloads, log } = context;
+export async function installSkills(profile, ours, installedFrom, context, soFar) {
+  const { places, machine, frontEnd, downloads, log } = context;
   const sources = profile.skills ?? [];
   if (sources.length === 0) return { rows: [], line: 'None in this profile', installed: [], sources: {} };
 
@@ -70,12 +82,13 @@ export async function installSkills(profile, ours, installedFrom, context) {
   const latest = new Map();
   const toLookUp = program && git.length > 0 ? named.filter(({ skills }) => skills.some((name) => !theirs.includes(name))) : [];
   if (toLookUp.length > 0) {
-    await ui.busy(
+    await frontEnd.busy(
       'Checking the skill sources for changes',
       async () => {
         for (const { source } of toLookUp) latest.set(source, await latestCommit(source, join(git[0], 'git.exe'), context));
       },
       () => ({ text: 'Checked the skill sources for changes', ok: true }),
+      { changesNothing: true },
     );
   }
 
@@ -100,9 +113,35 @@ export async function installSkills(profile, ours, installedFrom, context) {
     if (program && git.length > 0 && wanted.length > 0 && !unchanged) {
       const args = ['add', source, '-g', '-a', 'claude-code', '-y', ...(names ? ['-s', ...wanted] : [])];
       const what = `${wanted.length === 1 ? 'the skill' : `${wanted.length} skills`} from ${source}`;
-      ran = await ui.busy(`Installing ${what}`, () => machine.run(program.file, [...program.args, ...args]), ({ code }) =>
-        code === 0 ? { text: `Installed ${what}`, ok: true } : { text: `Couldn't install ${what}`, ok: false },
-      );
+      const command = [...program.args, ...args];
+      /** Whether its installer ran and said it worked, which a stop's record needs, as the step's end does. */
+      let worked = false;
+      try {
+        ran = await frontEnd.busy(
+          `Installing ${what}`,
+          async (_, output) => {
+            const ran = await machine.run(program.file, command, { env: forceColor, onOutput: output });
+            worked = ran.code === 0;
+            // Whether they're all there, which alone says they're installed, should the run stop now.
+            const arrived = (await Promise.all(wanted.map((name) => exists(join(folder, name, 'SKILL.md'))))).every(Boolean);
+            return { ...ran, arrived };
+          },
+          ({ code, arrived }) =>
+            code === 0 ? { text: `Installed ${what}`, ok: true, ...(arrived ? { done: /** @type {[string, string]} */ (['Skills', `Installed ${what}`]) } : {}) } : { text: `Couldn't install ${what}`, ok: false },
+        );
+      } catch (error) {
+        // A stop that waited for this source: if its installer worked, what of it arrived is the
+        // Installer's, as it would have been. One that failed, or never ran, is recorded as nothing,
+        // so the next run adds it again.
+        if (soFar) {
+          const arrived = [];
+          if (worked) for (const name of wanted) if (await exists(join(folder, name, 'SKILL.md'))) arrived.push(name);
+          soFar.installed.push(...arrived);
+          if (worked && commit !== undefined && arrived.length === wanted.length) soFar.sources[source] = commit;
+          else delete soFar.sources[source];
+        }
+        throw error;
+      }
     }
     for (const name of skills) {
       let value;
@@ -123,6 +162,11 @@ export async function installSkills(profile, ours, installedFrom, context) {
     if (unchanged && commit !== undefined) recorded[source] = commit;
     else if (ran && commit !== undefined && wanted.every((name) => installed.includes(name))) recorded[source] = commit;
     else if (!ran && before !== undefined) recorded[source] = before;
+    if (soFar) {
+      soFar.installed.push(...skills.filter((name) => installed.includes(name)));
+      if (source in recorded) soFar.sources[source] = recorded[source];
+      else delete soFar.sources[source];
+    }
   }
   return { cli: cli.row, rows, line: lineFor(rows), installed, sources: recorded };
 }

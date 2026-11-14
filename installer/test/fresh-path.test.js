@@ -39,13 +39,14 @@ test('a program the installer runs sees a Git on the machine PATH that the insta
   assert.equal(new Set(given).size, given.length, 'each folder once');
 });
 
-test("T3 Code starts with Claude Code's folder on its PATH, even if Claude Code's install didn't finish, and with the folders this run added", async (t) => {
+test("T3 Code's installer runs with Claude Code's folder on its PATH, even if Claude Code's install didn't finish, and with the folders this run added", async (t) => {
   const where = await makeHome(t, { channel: 'stable' });
   await supplyDownloads(where, ['node']);
   const installer = await supplyT3(where.downloads, 'latest.yml', '0.1.2');
   const machine = fakeMachine(where.home);
-  // Anthropic's installer leaves nothing here. The silent install starts T3, which leaves its shim.
-  await machine.setReplies({ [`${installer} /S --force-run`]: { creates: [t3Leaves.program, t3Leaves.shim] } });
+  // Claude Code's setup stops and leaves nothing here, so it's skipped and T3 is installed
+  // without starting.
+  await machine.setReplies({ 'claude.exe install': { code: 1 }, [`${installer} /S`]: { creates: [t3Leaves.program] } });
   const claudeFolder = join(where.home, '.local', 'bin');
   const nodeFolder = join(programsFolder(where.home), 'nodejs');
 
