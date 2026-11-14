@@ -43,8 +43,9 @@
 const columns = 80;
 
 /**
- * The lines everything printed so far leaves on screen, each a list of spans. The line the cursor
- * ends on is left out when nothing's on it, as it is after the last line break.
+ * The lines everything printed so far leaves on screen, each a list of spans. A line the cursor
+ * has only just reached with a line break, with nothing on it yet, is left out: it's where the next
+ * line goes. One erased, such as a spinner's between its frames, stays, empty.
  * @param {string} text
  * @returns {Line[]}
  */
@@ -60,6 +61,8 @@ export function draw(text) {
    * terminal's does, until the next character wraps it.
    */
   let full = false;
+  /** Whether the cursor's line is a new one a line break made, which nothing has touched since. */
+  let fresh = false;
   /** @type {Look} */
   let look = {};
 
@@ -70,6 +73,7 @@ export function draw(text) {
     line[column] = { char, look };
     column++;
     full = column % columns === 0;
+    fresh = false;
   };
   /** Which row of 80, along its line, the cursor is on. */
   const rowAlong = () => Math.floor(column / columns) - (full ? 1 : 0);
@@ -105,17 +109,18 @@ export function draw(text) {
           }
           column = along * columns + across;
           full = false;
+          fresh = false;
           break;
         }
         case 'J':
-          // Erase down: the rest of this line and every line below. (1 and 2, erase up or all, never come.)
-          if ((numbers[0] ?? 0) === 0) {
-            screen[row].length = Math.min(screen[row].length, column);
-            screen.length = row + 1;
-          }
-          break;
         case 'K':
-          if ((numbers[0] ?? 0) === 0) screen[row].length = Math.min(screen[row].length, column);
+          // Erase to the end of the line, and for J every line below too. (Erasing back or all, 1
+          // and 2, never comes.) A line that had something on it stays a line, empty.
+          if ((numbers[0] ?? 0) === 0) {
+            if (screen[row].length > column) fresh = false;
+            screen[row].length = Math.min(screen[row].length, column);
+            if (code.final === 'J') screen.length = row + 1;
+          }
           break;
       }
       continue;
@@ -125,6 +130,7 @@ export function draw(text) {
       row++;
       column = 0;
       full = false;
+      fresh = screen[row] === undefined;
       screen[row] ??= [];
     } else if (char === '\r') {
       column = rowAlong() * columns;
@@ -138,7 +144,7 @@ export function draw(text) {
     } else if (char >= ' ' && char !== '\x7f') put(char);
   }
 
-  if (screen.length > 1 && screen.at(-1)?.length === 0) screen.pop();
+  if (fresh && row === screen.length - 1 && screen[row].length === 0) screen.pop();
   return screen.map(spans);
 }
 

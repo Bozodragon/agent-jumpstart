@@ -189,3 +189,9 @@ test("a spinner line too long for the CLI's 80 columns, which it moves up over t
   const full = `•  ${'y'.repeat(77)}`;
   assert.deepEqual(plain(draw(`|\n${full}\x1b[1G\x1b[Jdone\n`)), ['|', 'done']);
 });
+
+test("between a spinner's erase and its next frame, its line is still there, empty, as in a terminal, so nothing below or above it moves", () => {
+  assert.deepEqual(plain(draw('|\n•  Cloning repository…\x1b[1G\x1b[J')), ['|', '']);
+  // A line break with nothing after it yet is where the next line will go, not a line.
+  assert.deepEqual(plain(draw('|\n')), ['|']);
+});
