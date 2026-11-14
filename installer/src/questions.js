@@ -300,7 +300,8 @@ export async function askChange(profile, earlier, { memoryInUse, githubSignedIn,
     ['connectors', 'Connectors', ['connectors'], true],
     ['extraTools', 'Extra tools', ['extraTools'], true],
     ['github', 'GitHub', ['github'], !githubSignedIn],
-    ['fullSkills', 'Skills', ['fullSkills'], olderAnswers || earlier.aiExperience !== 'first-time'],
+    // Offered only to someone the experience answers they gave last time didn't hide it from.
+    ['fullSkills', 'Skills', ['fullSkills'], olderAnswers || !hiddenFor({ aiExperience: /** @type {AiExperience} */ (earlier.aiExperience) }).includes('fullSkills')],
     ['switchOffMemory', 'Memory', ['switchOffMemory'], memoryInUse || earlier.switchOffMemory === false],
   ];
   const held = offered.filter(([, , keys, shown]) => shown && keys.some((key) => key in earlier));
