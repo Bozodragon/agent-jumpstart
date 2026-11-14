@@ -41,6 +41,23 @@
  */
 
 /**
+ * How a busy ended, in words: done (`ok` true), failed (false), or neither (no `ok`). `done`: the
+ * row a run that stops partway lists it under, among what was done before it stopped, when it
+ * changed something and went well (`ok`), such as `['Git', '2.47.1 (installed)']`. Only a step's
+ * own rows list it once the whole step is done, so this matters only if the run stops before then.
+ * @typedef {{ text: string, ok?: boolean, done?: [string, string] }} Ended
+ */
+
+/**
+ * @typedef {object} BusyHow
+ * @property {boolean} [changesNothing] The task only looks, waits for something outside the
+ *   Installer (the person, another program), or downloads what a later step installs. A stop
+ *   during it doesn't wait for it, as there's nothing to finish: the page leaves it to itself.
+ *   A stop during any other busy waits for its task to finish, so what it started (winget, `claude
+ *   install`) is done, and listed, before the run stops.
+ */
+
+/**
  * @typedef {object} Links
  * @property {string} [setupPage] The profile's setup page, which the person came from.
  * @property {string} [shareLogLine] The line that copies the newest installer log, for asking for help.
@@ -51,7 +68,7 @@
  * @property {(title: string, links?: Links) => void} start The run's first words. `links` are
  *   the profile's, for a front end that shows them (the page does; the terminal doesn't).
  * @property {(text: string) => void} step A line saying what's happening.
- * @property {<T>(message: string, task: (progress: Progress, output: Output) => Promise<T>, ended?: (result: T) => { text: string, ok?: boolean }) => Promise<T>} busy
+ * @property {<T>(message: string, task: (progress: Progress, output: Output) => Promise<T>, ended?: (result: T) => Ended, how?: BusyHow) => Promise<T>} busy
  *   Shows that something slow is under way while `task` runs, then how it ended (`ended`, or
  *   the message, if not given): done (`ok` true), failed (false), or, with no `ok`, simply over,
  *   with no mark either way (a step that gave way quietly to another, such as Claude Code's own

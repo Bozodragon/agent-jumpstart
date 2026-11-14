@@ -82,3 +82,34 @@ test("a question the stop left unanswered isn't counted as answered in the heade
 
   assert.deepEqual(dashes(page).questions, ['done', 'to-come']);
 });
+
+test('Stop while a step installs something: the step stays on screen, saying the run stops once it is done, until it ends; then the stop screen comes', () => {
+  const installing = /** @type {[number, Record<string, unknown>][]} */ ([
+    [0, { type: 'busy', message: 'Installing T3 Code. This takes about a minute.' }],
+    [3000, { type: 'stopping', after: 1 }],
+  ]);
+  const waiting = play(installing);
+
+  const shown = /** @type {any} */ (onScreen(waiting));
+  assert.equal(shown.kind, 'busy');
+  assert.equal(shown.stopsAfter, true);
+  assert.equal(shown.ended, undefined);
+
+  const page = play([
+    ...installing,
+    [40_000, { type: 'ended', busy: 1, text: 'T3 Code 0.0.30 installed', ok: true }],
+    ...stopScreen.map((event) => /** @type {[number, Record<string, unknown>]} */ ([40_010, event])),
+  ]);
+  assert.equal(onScreen(page).kind, 'problem');
+});
+
+test('a page opened while the run finishes its step after Stop opens on that step, saying the run stops once it is done', () => {
+  // A reload: the busy and the stop had both happened before this page connected.
+  let page = reduce(begin, { type: 'connected', before: 2 });
+  page = reduce(page, { type: 'event', event: { id: 1, type: 'busy', message: 'Installing T3 Code. This takes about a minute.' }, now: 0 });
+  page = reduce(page, { type: 'event', event: { id: 2, type: 'stopping', after: 1 }, now: 0 });
+
+  const shown = /** @type {any} */ (onScreen(page));
+  assert.equal(shown.kind, 'busy');
+  assert.equal(shown.stopsAfter, true);
+});

@@ -119,7 +119,7 @@ export async function installTool(tool, { places, machine, frontEnd, downloads, 
   return frontEnd.busy(
     `Installing ${tool.name} ${tool.version}`,
     () => putInPlace(tool, there, { places, machine, downloads, keepDownloads, say }),
-    ({ installed, row }) => ({ text: `${tool.name}: ${row}`, ok: installed }),
+    ({ installed, row }) => ({ text: `${tool.name}: ${row}`, ok: installed, done: [tool.name, row] }),
   );
 }
 
