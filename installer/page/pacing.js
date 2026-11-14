@@ -400,12 +400,21 @@ export function wakeAt(page) {
 }
 
 /**
- * Whether the run had already gone on from event `key` to another screen when the page last
- * connected. The newest thing it had shown isn't counted as past: the person may not have read it.
+ * The events that give the person something new to read or answer. The steps and busies after a
+ * notice don't: they're what it told the person about, such as Software Center's install, which
+ * the person may still be doing.
+ */
+const givesSomethingToRead = new Set(['notice', 'problem', 'summary', 'finish', 'question', 'signIn']);
+
+/**
+ * Whether the run had already gone on from event `key` to something else to read or answer when
+ * the page last connected. The newest such thing it had shown isn't counted as past, however
+ * many steps and busies followed it: the person may not have read it, or may still be doing what
+ * it says, so a reload or a second window opens on it as the first page had it.
  * @param {Page} page @param {number} key
  */
 function movedOnBefore(page, key) {
-  return page.events.some((event) => event.id > key && event.id <= page.before && makesAScreen.has(event.type));
+  return page.events.some((event) => event.id > key && event.id <= page.before && givesSomethingToRead.has(event.type));
 }
 
 /** Whether a question asked after event `key` has been answered. @param {Page} page @param {number} key */

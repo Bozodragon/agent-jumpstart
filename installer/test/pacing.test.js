@@ -277,6 +277,29 @@ test('a page opened mid-run rebuilds what had happened without pausing on it, an
   assert.equal(words(at(page, 1000 + holds.done - 1)), 'Skills CLI installed');
 });
 
+test("a page opened while the run does what a notice asks the person to do opens on that notice, until Continue", () => {
+  /** @type {[number, Record<string, unknown>][]} */
+  const history = [
+    [0, { type: 'notice', title: 'Install Google Drive', text: 'Click Install in Software Center.' }],
+    [0, { type: 'step', text: 'Software Center opened' }],
+    [0, { type: 'busy', message: 'Waiting until Google Drive is installed' }],
+  ];
+  let page = play(history, { before: history.length });
+  assert.equal(/** @type {any} */ (onScreen(page)).title, 'Install Google Drive', "the notice's instruction is still needed while its busy runs");
+
+  page = reduce(page, { type: 'continue', screen: 1, now: 100 });
+  assert.equal(words(at(page, 100)), 'Waiting until Google Drive is installed');
+
+  // Once the run had gone on to something else to read, the notice is past.
+  /** @type {[number, Record<string, unknown>][]} */
+  const after = [
+    [0, { type: 'ended', busy: 3, text: 'Google Drive is installed', ok: true }],
+    [0, { type: 'notice', title: 'Sign in to Google Drive', text: 'Open Google Drive and sign in.' }],
+  ];
+  const later = play([...history, ...after], { before: history.length + after.length });
+  assert.equal(/** @type {any} */ (onScreen(later)).title, 'Sign in to Google Drive');
+});
+
 test('a page that had stopped at a step opens on that step, the last thing that happened', () => {
   const page = play(
     [
