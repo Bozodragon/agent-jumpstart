@@ -4,11 +4,12 @@
 // Adding a screen: give pacing.js's `Screen` a kind (or a field on an existing one) and the rule
 // in `screensOf` that makes it, then a case in `Screen` below. See the notes for #101.
 import { useEffect, useRef, useState } from 'react';
+import { ScrollArea } from './overlay.js';
 import { CopyBox, Line, Path, Status, Words, icons } from './parts.js';
 import { Terminal } from './terminal-panel.js';
 import { soFar } from '../src/text.js';
 import { checklistOf, failedIn } from './pacing.js';
-import { split } from './words.js';
+import { opened, split } from './words.js';
 
 /** @typedef {import('./pacing.js').Shown} Shown */
 /** @typedef {import('./pacing.js').QuestionScreen} QuestionScreen */
@@ -102,14 +103,7 @@ export function Screen({ shown, actions }) {
     case 'summary':
       return <Notice title={shown.title} onContinue={() => actions.carryOn(shown.key)} body={<Rows rows={shown.rows} />} />;
     case 'step':
-      return (
-        <>
-          <Status kind="tick" />
-          <h1 className="title">
-            <Line text={shown.text} />
-          </h1>
-        </>
-      );
+      return <Step text={shown.text} />;
     case 'busy':
       return <Busy screen={shown} />;
     case 'signIn':
@@ -131,6 +125,32 @@ export function Screen({ shown, actions }) {
 }
 
 /**
+ * Something done. A page the run opened in the person's browser is its name, with its address
+ * as a button that opens it again, there too.
+ * @param {{ text: string }} props
+ */
+function Step({ text }) {
+  const page = opened(text);
+  return (
+    <>
+      <Status kind="tick" />
+      <h1 className="title">
+        <Line text={page ? page.label : text} />
+      </h1>
+      {page && (
+        <div className="actions">
+          <a className="secondary is-out" href={page.url} target="_blank" rel="noopener noreferrer" title={page.url}>
+            <span className="out-address">{page.url.replace(/^https?:\/\//, '').replace(/\/$/, '')}</span>
+            {icons.out}
+            <span className="offscreen"> (opens in your browser)</span>
+          </a>
+        </div>
+      )}
+    </>
+  );
+}
+
+/**
  * Something to read before what comes next. The run doesn't wait for it, but the page does:
  * it stays until Continue.
  * @param {{ title: string, body: import('react').ReactNode, onContinue: () => void }} props
@@ -138,10 +158,10 @@ export function Screen({ shown, actions }) {
 function Notice({ title, body, onContinue }) {
   const ref = useFocus('.primary');
   return (
-    <div ref={/** @type {any} */ (ref)}>
+    <div ref={/** @type {any} */ (ref)} className="fits">
       <Status kind="you" />
       <h1 className="title">{title}</h1>
-      <div className="notice-body">{body}</div>
+      <ScrollArea className="notice-body">{body}</ScrollArea>
       <form
         onSubmit={(event) => {
           event.preventDefault();
@@ -259,10 +279,11 @@ function SignIn({ screen, actions }) {
 
   return (
     <div ref={/** @type {any} */ (ref)} className="signin">
-      {sent ? <Status kind="ring">Checking the code</Status> : <Status kind="you" waiting>Waiting for you to sign in</Status>}
+      {sent ? <Status kind="ring" /> : <Status kind="you" waiting />}
       <h1 className="title" tabIndex={-1}>
         {notice?.title ?? 'Sign in'}
       </h1>
+      <p className="status-note">{sent ? 'Checking the code' : 'Waiting for you to sign in'}</p>
       {notice && (
         <div className="notice-body">
           <Words text={notice.text} />
@@ -401,13 +422,13 @@ function Question({ screen, actions }) {
 function Done({ title, text, what, sending, onDone }) {
   const ref = useFocus('.primary');
   return (
-    <div ref={/** @type {any} */ (ref)}>
+    <div ref={/** @type {any} */ (ref)} className="fits">
       <Status kind="you" waiting />
       <h1 className="title">{title ?? `Click Done once ${what}`}</h1>
       {text && (
-        <div className="notice-body">
+        <ScrollArea className="notice-body">
           <Words text={text} />
-        </div>
+        </ScrollArea>
       )}
       <form
         onSubmit={(event) => {

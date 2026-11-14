@@ -19,6 +19,7 @@ function App() {
   const [page, dispatch] = useReducer(reduce, begin);
   const connection = useRef(/** @type {number | undefined} */ (undefined));
   const [over, setOver] = useState(false);
+  const scroller = useRef(/** @type {HTMLDivElement | null} */ (null));
 
   useEffect(() => {
     const events = new EventSource('events');
@@ -64,19 +65,31 @@ function App() {
   const shown = onScreen(page);
   const ending = shown.kind === 'ending';
   const back = backTo(page, shown);
+  // The window never scrolls: the header stays, and under it the stage scrolls in its own room
+  // when a screen is taller than that, under its own thumb. Above the screen, the space that
+  // gives way first: generous while there's room, down to a little before anything scrolls.
   return (
-    <div className={`shell${ending ? ' is-ending' : ''}`}>
-      <Header page={page} over={over} />
-      <Stage
-        shown={shown}
-        actions={{
-          answer: postAnswer,
-          goBack: back === undefined ? undefined : () => postBack(back),
-          carryOn: (screen) => dispatch({ type: 'continue', screen, now: performance.now() }),
-          shareLogLine: page.shareLogLine,
-        }}
-      />
-      <Thumb />
+    <div className={`app${ending ? ' is-ending' : ''}`}>
+      <div className="shell is-top">
+        <Header page={page} over={over} />
+      </div>
+      <div className="scroller" ref={scroller}>
+        <div className="shell column">
+          <div className="room" aria-hidden="true" />
+          <Stage
+            shown={shown}
+            scroller={scroller}
+            actions={{
+              answer: postAnswer,
+              goBack: back === undefined ? undefined : () => postBack(back),
+              carryOn: (screen) => dispatch({ type: 'continue', screen, now: performance.now() }),
+              shareLogLine: page.shareLogLine,
+            }}
+          />
+          <div className="foot" aria-hidden="true" />
+        </div>
+      </div>
+      <Thumb of={scroller} />
     </div>
   );
 }
@@ -111,9 +124,9 @@ const leavingFor = 180;
  * to the next. The one going off is the same element, kept as it was (with the answer just
  * given); a screen that changes in place (a busy line's figure, a notice joined by its Done)
  * stays put. What a screen says is announced from one live region that's always there.
- * @param {{ shown: Shown, actions: import('./screens.js').Actions }} props
+ * @param {{ shown: Shown, actions: import('./screens.js').Actions, scroller: import('react').RefObject<HTMLDivElement | null> }} props
  */
-function Stage({ shown, actions }) {
+function Stage({ shown, actions, scroller }) {
   // The screen as last drawn, and the one going off: worked out while drawing, so the outgoing
   // screen is never dropped and drawn again from scratch.
   const [current, setCurrent] = useState(shown);
@@ -131,7 +144,7 @@ function Stage({ shown, actions }) {
   // A new screen starts at the top, whatever was scrolled to on the one before.
   // (In braces: newer browsers return a promise from scrollTo, which React would take for a cleanup.)
   useEffect(() => {
-    window.scrollTo(0, 0);
+    scroller.current?.scrollTo(0, 0);
   }, [shown.key]);
   return (
     <main className="stage">

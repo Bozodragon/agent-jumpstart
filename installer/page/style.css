@@ -37,21 +37,31 @@ html { font-size: clamp(16px, min(1.1713vw, 2.0834vh), 30px); }
   --ease: cubic-bezier(.2, .7, .2, 1);
   /* A window taller than the composition: the spare height, part of which goes above the stage. */
   --spare: max(0px, 100vh - 48rem);
+  /* A screen's heading, and the badge's height: the badge sits level with the heading's first line. */
+  --title-size: clamp(1.625rem, 1.9vw + .8rem, 2.375rem);
+  --badge: 2.125rem;
+  /* How far the heading sits lower with the badge above it, as it is in a narrow window. Where the
+     badge hangs in the margin instead, the space above the heading is that much more. */
+  --badge-row: 3.5rem;
+  --hung: 0rem;
+  /* The least space kept above a screen and below it, once the window runs short. */
+  --least-room: 1.25rem;
+  --least-foot: 1rem;
   color-scheme: dark;
 }
 * { box-sizing: border-box; }
 html { background: var(--bg); }
 /* No scrollbar of the browser's anywhere: one took room as it came and went, so the column moved
-   over on each screen that ran past the window's foot. What can scroll (the page in a small
-   window, the Details panel, the skills terminal) gets overlay.js's thumb, over its content. */
-html, .sheet-body, .term-body { scrollbar-width: none; }
-html::-webkit-scrollbar, .sheet-body::-webkit-scrollbar, .term-body::-webkit-scrollbar { display: none; }
+   over on each screen that ran past the window's foot. What can scroll (the stage under the header,
+   a notice's words, the Details panel, the skills terminal) gets overlay.js's thumb, over its
+   content. The window itself never scrolls. */
+html, .scroller, .scroll-body, .sheet-body, .term-body { scrollbar-width: none; }
+html::-webkit-scrollbar, .scroller::-webkit-scrollbar, .scroll-body::-webkit-scrollbar, .sheet-body::-webkit-scrollbar, .term-body::-webkit-scrollbar { display: none; }
 .thumb {
   position: absolute; right: 3px; z-index: 5; width: 6px; border-radius: 3px;
   background: #6b6f79; opacity: .38; touch-action: none;
   transition: opacity .2s ease, width .12s ease, right .12s ease;
 }
-.thumb.is-page { position: fixed; z-index: 19; }
 .thumb.is-bright, .thumb:hover { opacity: .8; }
 .thumb:hover { width: 8px; right: 2px; }
 body {
@@ -73,19 +83,26 @@ code, kbd {
 .path { font-family: var(--mono); font-variant-ligatures: none; font-size: .88em; }
 .path > span { white-space: nowrap; }
 
-/* ---- The shell: one column, the same left edge for everything ---- */
+/* ---- The window: the header, and under it the stage, which scrolls in its own room ----
+   One column, the same left edge and width for everything, in the header and on the stage. The
+   window never scrolls. The space above a screen is used, not kept: generous while there's room,
+   it gives way first, down to a little, before the screen runs past the window's foot. Only then
+   does the stage scroll, under its thumb. A notice keeps its heading and button in view instead,
+   and its words scroll (.fits, below). */
+.app { position: relative; display: flex; flex-direction: column; height: 100vh; height: 100dvh; }
 .shell {
-  max-width: 48rem; min-height: 100vh; margin: 0 auto;
-  padding: 1.75rem 1.5rem 2.5rem;
+  width: 100%; max-width: 48rem; margin: 0 auto; padding: 0 1.5rem;
   transition: max-width .45s var(--ease);
 }
-.shell.is-ending { max-width: 68rem; }
+.app.is-ending .shell { max-width: 68rem; }
+.shell.is-top { flex: none; padding-top: 1.75rem; }
+.scroller { flex: 1 1 auto; min-height: 0; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; }
+.column { display: flex; flex-direction: column; height: 100%; }
+.room { flex: 0 1 calc(clamp(1.75rem, 10vh, 5.75rem) + var(--spare) * .3 + var(--hung)); min-height: var(--least-room); }
+.app.is-ending .room { flex-basis: calc(clamp(1.75rem, 6vh, 3.25rem) + var(--spare) * .25 + var(--hung)); }
+.foot { flex: 0 1 2.5rem; min-height: var(--least-foot); }
 
-.head {
-  display: flex; align-items: center; gap: .5rem;
-  margin-bottom: calc(clamp(1.75rem, 10vh, 5.75rem) + var(--spare) * .3);
-}
-.shell.is-ending .head { margin-bottom: calc(clamp(1.75rem, 6vh, 3.25rem) + var(--spare) * .25); }
+.head { display: flex; align-items: center; gap: .5rem; }
 /* The header holds no name: the profile's name is the window's title, beside its icon (the >_
    mark), in the title bar and on the taskbar. */
 
@@ -211,8 +228,8 @@ code, kbd {
 .did.is-bad .did-value, .did.is-bad .did-label { color: var(--warn-text); }
 
 /* ---- The stage: one screen at a time ---- */
-.stage { display: grid; }
-.screen { grid-area: 1 / 1; min-width: 0; animation: come-in .34s var(--ease) .09s both; }
+.stage { flex: none; display: grid; }
+.screen { position: relative; grid-area: 1 / 1; min-width: 0; animation: come-in .34s var(--ease) .09s both; }
 /* Gone back to: it comes in from above, the way back. */
 .screen.is-back { animation-name: come-in-back; }
 .screen.is-leaving { animation: go-out .16s ease-in both; pointer-events: none; }
@@ -221,17 +238,29 @@ code, kbd {
 @keyframes go-out { to { opacity: 0; transform: translateY(-.75rem); } }
 @keyframes fade-in { from { opacity: 0; } }
 
-/* The badge says whose turn it is. */
-.status { display: flex; align-items: center; gap: .75rem; height: 2.125rem; margin-bottom: 1.375rem; }
+/* The badge says whose turn it is. In a narrow window it sits above the heading. Where the window
+   has a margin for it, it hangs there, level with the heading's first line and out of the flow,
+   so the column keeps its place and width on every screen. The ending's column is wider, so its
+   badge hangs only in a wider window. */
+.status { display: flex; align-items: center; height: var(--badge); margin-bottom: calc(var(--badge-row) - var(--badge)); }
+@media (min-width: 880px) {
+  :root { --hung: var(--badge-row); }
+  .screen .status { position: absolute; top: calc((var(--title-size) * 1.16 - var(--badge)) / 2); right: calc(100% + 1.375rem); margin: 0; }
+}
+@media (min-width: 880px) and (max-width: 1199.98px) {
+  .app.is-ending { --hung: 0rem; }
+  .app.is-ending .screen .status { position: static; margin-bottom: calc(var(--badge-row) - var(--badge)); }
+}
 .badge {
-  width: 2.125rem; height: 2.125rem; flex: none; border-radius: 50%;
+  width: var(--badge); height: var(--badge); flex: none; border-radius: 50%;
   border: 1px solid var(--outline); color: var(--secondary);
   font-size: .875rem; font-weight: 600; font-variant-numeric: tabular-nums;
   display: grid; place-items: center;
 }
-.status-note { font-size: .875rem; color: var(--secondary); }
+/* What the badge says on a sign-in (waiting for you, checking the code), under the heading. */
+.status-note { margin: .5rem 0 0; font-size: .875rem; color: var(--secondary); }
 .badge.is-ring { border: 0; }
-.badge.is-ring svg { width: 2.125rem; height: 2.125rem; animation: spin .95s linear infinite; }
+.badge.is-ring svg { width: var(--badge); height: var(--badge); animation: spin .95s linear infinite; }
 .ring-track { stroke: var(--outline); stroke-width: 1.5; }
 .ring-arc { stroke: var(--accent); stroke-width: 2; stroke-linecap: round; stroke-dasharray: 28 100; }
 @keyframes spin { to { transform: rotate(360deg); } }
@@ -248,7 +277,7 @@ code, kbd {
 
 .title {
   margin: 0; max-width: 21em;
-  font-size: clamp(1.625rem, 1.9vw + .8rem, 2.375rem); line-height: 1.16; font-weight: 600; letter-spacing: -0.022em;
+  font-size: var(--title-size); line-height: 1.16; font-weight: 600; letter-spacing: -0.022em;
   text-wrap: balance; overflow-wrap: break-word;
 }
 .title.quiet { color: var(--secondary); }
@@ -258,6 +287,18 @@ code, kbd {
 .lede.small { font-size: .9375rem; }
 .notice-body { margin-top: .125rem; }
 .notice-body .lede:first-child { margin-top: .875rem; }
+
+/* A notice (Connect these, with its Done) keeps its heading and button in view: the stage takes no
+   more than the window has once the least space above and below is kept, and the notice's words
+   scroll in what's left, under their own thumb. */
+.stage:has(.fits) { max-height: calc(100% - var(--least-room) - var(--least-foot)); grid-template-rows: minmax(0, 1fr); }
+.stage:has(.fits) > .screen { display: flex; flex-direction: column; min-height: 0; }
+.fits { display: flex; flex-direction: column; flex: 0 1 auto; min-height: 0; }
+.fits > * { flex: none; }
+.fits > .scroll-area { flex: 0 1 auto; min-height: 4.5rem; }
+.scroll-area { position: relative; display: flex; flex-direction: column; }
+.scroll-body { min-height: 0; padding-right: .875rem; overflow-y: auto; overscroll-behavior: contain; }
+.scroll-body:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: .25rem; }
 
 form { margin: 0; }
 .body { margin-top: 1.875rem; }
@@ -331,6 +372,9 @@ form { margin: 0; }
 .secondary:hover { background: var(--hover); }
 .secondary svg { width: .9375rem; height: .9375rem; color: var(--secondary); }
 .secondary.small { height: 2.25rem; padding: 0 .875rem; font-size: .875rem; }
+/* A page the run opened, to open again: its address on the button, cut short if it's long. */
+.secondary.is-out { flex: 0 1 auto; min-width: 0; max-width: 100%; }
+.out-address { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .primary:focus-visible, .secondary:focus-visible { border-radius: 999px; }
 .hint { font-size: .875rem; color: var(--muted); }
 /* Back: second to Continue, but a button you can see, at the row's far end. */
@@ -484,8 +528,10 @@ form { margin: 0; }
 }
 
 @media (max-width: 560px) {
-  .shell { padding: 1.25rem 1rem 2rem; }
-  .status { margin-bottom: 1.125rem; }
+  :root { --badge-row: 3.25rem; }
+  .shell { padding: 0 1rem; }
+  .shell.is-top { padding-top: 1.25rem; }
+  .foot { flex-basis: 2rem; }
   .body { margin-top: 1.5rem; }
   .lede, .next p, .readout { font-size: 1rem; }
   .option-text, .options.is-pick .option-text { display: block; }

@@ -3,8 +3,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { blocks, pieces } from './words.js';
 
-/** @typedef {import('react').ReactNode} ReactNode */
-
 export const icons = {
   mark: (
     <svg viewBox="0 0 24 24" fill="none" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -56,19 +54,19 @@ export const icons = {
 /**
  * The round badge, which says whose turn it is: a question's number, the turning ring while the
  * Installer works, a tick once something's done, the blue dot when it's the person's turn, and
- * amber when something didn't work.
- * @param {{ kind: 'number' | 'ring' | 'tick' | 'you' | 'warn', number?: number, waiting?: boolean, children?: ReactNode }} props
- *   `waiting`: the dot's ring breathes out, while the run waits on the person. `children`: a
- *   short note beside the badge.
+ * amber when something didn't work. It comes just before the screen's heading. Where the window
+ * has the room, style.css hangs it in the margin, level with the heading's first line and out of
+ * the flow, so the column stays where it is; in a narrow window it sits above the heading.
+ * @param {{ kind: 'number' | 'ring' | 'tick' | 'you' | 'warn', number?: number, waiting?: boolean }} props
+ *   `waiting`: the dot's ring breathes out, while the run waits on the person.
  */
-export function Status({ kind, number, waiting = false, children }) {
+export function Status({ kind, number, waiting = false }) {
   const inside = { number, ring: icons.ring, tick: icons.tick, you: <i />, warn: '!' }[kind];
   return (
     <div className="status">
       <span className={`badge is-${kind}${waiting ? ' is-waiting' : ''}`} aria-hidden="true">
         {inside}
       </span>
-      {children && <span className="status-note">{children}</span>}
     </div>
   );
 }
