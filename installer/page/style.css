@@ -102,9 +102,9 @@ code, kbd {
 .stop:hover { color: var(--warn-text); border-color: var(--warn-line); background: var(--warn-fill); }
 .stop:disabled { cursor: default; color: var(--muted); border-color: var(--hairline); background: none; }
 .stop:focus-visible { border-radius: 999px; }
-/* With Stop beside them, the dashes give way, not the name (they squeeze by design). Below 641px
-   the dashes have a line of their own, and the name may shorten. */
-@media (min-width: 641px) { .brand { flex-shrink: 0; } }
+/* With Stop beside them, the dashes give way, not the name (they squeeze by design), unless the
+   name is long. At 640px and narrower the dashes have a line of their own. */
+@media (min-width: 641px) { .brand { flex-shrink: 0; max-width: 45%; } }
 .confirm {
   width: min(29rem, calc(100vw - 2rem)); padding: 1.75rem 1.75rem 1.625rem;
   color: var(--text); background: var(--panel); border: 1px solid var(--outline); border-radius: 1.125rem;

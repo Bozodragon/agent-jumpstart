@@ -277,8 +277,9 @@ const makesAScreen = new Set(['step', 'notice', 'problem', 'summary', 'finish', 
  * @param {Screen} screen @param {Page} page @param {number} now @param {number} behind
  */
 function isThrough(screen, page, now, behind) {
-  // Once the run is stopping, nothing from before is waited on: the stop screen comes next.
-  if (screen.kind !== 'ending' && screen.kind !== 'problem' && page.events.some((event) => event.type === 'stopping' && event.id > screen.key)) return true;
+  // Once the run is stopping, nothing is waited on but the stop screen: not what came before, nor
+  // a notice or step the run sends on its way to the call that throws the Stop.
+  if (screen.kind !== 'ending' && screen.kind !== 'problem' && page.events.some((event) => event.type === 'stopping')) return true;
   switch (screen.kind) {
     case 'question':
       return screen.answer !== undefined;
@@ -386,6 +387,8 @@ export function dashes(page) {
   /** @param {Screen} screen @param {number} index @returns {Dash} */
   const dash = (screen, index) => {
     if ((screen.kind === 'busy' && screen.ended?.ok === false) || (screen.kind === 'question' && screen.problem !== undefined) || screen.kind === 'problem') return 'warn';
+    // Never answered (the run stopped): not one of those done.
+    if (screen.kind === 'question' && screen.answer === undefined) return index === page.current ? 'now' : 'to-come';
     if (page.current === -1 || index < page.current) return 'done';
     return index === page.current ? 'now' : 'to-come';
   };

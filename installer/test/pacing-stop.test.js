@@ -3,7 +3,7 @@
 // an answer, a Continue, or a step's moment on screen.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { begin, onScreen, reduce } from '../page/pacing.js';
+import { begin, dashes, onScreen, reduce } from '../page/pacing.js';
 
 /**
  * A page sent `events`, each at the time given with it; ids are numbered from 1.
@@ -57,4 +57,28 @@ test('before the stop screen arrives, the page shows it is waiting on the run, n
   ]);
 
   assert.equal(onScreen(page).kind, 'between');
+});
+
+test("a notice or step the run sends after Stop, on its way to the next call that waits, doesn't hold back the stop screen", () => {
+  const page = play([
+    [0, { type: 'step', text: 'Using the GitHub CLI already there' }],
+    [3000, { type: 'stopping' }],
+    [3002, { type: 'notice', title: 'Sign in to GitHub', text: "GitHub's own tool signs you in next." }],
+    [3004, { type: 'step', text: 'Opening the browser' }],
+    ...stopScreen.map((event) => /** @type {[number, Record<string, unknown>]} */ ([3010, event])),
+  ]);
+
+  assert.equal(onScreen(page).kind, 'problem');
+});
+
+test("a question the stop left unanswered isn't counted as answered in the header's dashes", () => {
+  const page = play([
+    [0, { type: 'question', question: 1, kind: 'choose', key: 'team', message: 'Which team are you in?', options: [{ value: 'a', label: 'A' }], initial: 'a' }],
+    [10, { type: 'answered', question: 1, answer: 'a' }],
+    [20, { type: 'question', question: 2, kind: 'confirm', key: 'github', message: 'Set up GitHub?', initial: true }],
+    [4000, { type: 'stopping' }],
+    ...stopScreen.map((event) => /** @type {[number, Record<string, unknown>]} */ ([4010, event])),
+  ]);
+
+  assert.deepEqual(dashes(page).questions, ['done', 'to-come']);
 });

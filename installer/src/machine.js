@@ -215,12 +215,14 @@ export function openMachine(places, log, screen) {
     else for (const line of [...(log.debug ? [] : [running]), ...lines]) log.write(line);
     return ran;
   };
+  /** Waits for a program on the screen as the screen says (the page can stop the wait). @type {<T>(running: Promise<T>) => Promise<T>} */
+  const waitOnScreen = (running) => (screen.wait ? screen.wait(running) : running);
   // A program in the person's window writes straight to it: catching its output would take the
   // real terminal away from it (gh auth login needs one), so only the command and code are logged.
   /** @param {Machine['runOnScreen']} run @returns {Machine['runOnScreen']} */
   const loggedOnScreen = (run) => async (file, args, how) => {
     log.detail(`Running in the person's window: ${commandLine(file, args)}${withEnv(how)}`);
-    const code = await run(file, args, how);
+    const code = await waitOnScreen(run(file, args, how));
     log.detail(`Ran: ${basename(file)} (code ${code})`);
     log.detail("  (its output went to the person's window, not the log)");
     return code;
@@ -230,7 +232,7 @@ export function openMachine(places, log, screen) {
   /** @param {Machine['runOnScreenAndKeep']} run @returns {Machine['runOnScreenAndKeep']} */
   const loggedOnScreenAndKept = (run) => async (file, args, how) => {
     log.detail(`Running in the person's window, keeping what it prints: ${commandLine(file, args)}${withEnv(how)}`);
-    const ran = await run(file, args, how);
+    const ran = await waitOnScreen(run(file, args, how));
     log.detail(`Ran: ${basename(file)} (code ${ran.code})`);
     log.detail("  (what it printed went to the person's window, and is logged by the step that ran it)");
     return ran;

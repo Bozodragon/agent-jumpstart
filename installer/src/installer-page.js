@@ -24,12 +24,14 @@
 //                                            waited on any more, and the stop screen follows
 //
 // Stopping: Stop on the page throws `Stop('Stopped at your request.')` from whichever call the
-// run is waiting on (a question, or a busy, whose task is left to itself), or from the next one
-// it makes, if it's waiting on none. A run whose every page has gone finishes the step it's on,
-// then waits at the next question about 10 minutes for a page to come back (a reload, the
-// Bootstrap reopening it, a second window), and stops the same way if none does.
+// run is waiting on (a question; a busy, whose task is left to itself; a program on the screen,
+// such as a sign-in, which is ended), or from the next one it makes, if it's waiting on none. A
+// run whose every page has gone finishes the step it's on, then waits at the next question (or
+// program on the screen, which needs the page) about 10 minutes for a page to come back (a
+// reload, the Bootstrap reopening it, a second window), and stops the same way if none does.
+import { spawn } from 'node:child_process';
 import { mkdir, rename, rm, writeFile } from 'node:fs/promises';
-import { dirname } from 'node:path';
+import { dirname, join } from 'node:path';
 import { openPageServer } from './page-server.js';
 import { Stop } from './stop.js';
 
@@ -105,9 +107,23 @@ export async function openInstallerPage({ addressFile, connectedFile, page }) {
   stopping.catch(() => {});
   /** Whether the run has had its last words, after which there's nothing to stop. */
   let over = false;
+  /** The programs on the screen now, which a stop ends. @type {Set<import('node:child_process').ChildProcess>} */
+  const onScreen = new Set();
+
+  /**
+   * Ends a program on the screen, and whatever it started (cmd.exe's child, say).
+   * @param {import('node:child_process').ChildProcess} child
+   */
+  const end = (child) => {
+    if (child.exitCode !== null || child.signalCode !== null || child.pid === undefined) return;
+    if (process.platform !== 'win32') return void child.kill();
+    const taskkill = join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'taskkill.exe');
+    spawn(taskkill, ['/pid', String(child.pid), '/T', '/F'], { stdio: 'ignore', windowsHide: true }).once('error', () => child.kill());
+  };
 
   /**
    * Stops the run: whatever it's waiting on throws `why`, and so does whatever it waits on next.
+   * A program on the screen is ended: nobody can answer it now.
    * @param {Stop} why
    */
   const stop = (why) => {
@@ -116,6 +132,7 @@ export async function openInstallerPage({ addressFile, connectedFile, page }) {
     server.send({ type: 'stopping' });
     for (const asked of open.values()) asked.reject(why);
     open.clear();
+    for (const child of onScreen) end(child);
     stopNow(why);
   };
 
@@ -190,23 +207,24 @@ export async function openInstallerPage({ addressFile, connectedFile, page }) {
         },
       });
       server.send({ type: 'question', question: id, ...question });
-      waitForAPage(id, settled);
+      waitForAPage(() => open.has(id), settled);
     });
   };
 
   /**
-   * While question `id` is open: whenever no page is, waits for one to come back, and stops the
-   * run if none does within `comeBackWithin`.
-   * @param {number} id @param {Promise<void>} settled
+   * While the run waits on the person (`waiting()`: a question, or a program on the screen):
+   * whenever no page is open, waits for one to come back, and stops the run if none does within
+   * `comeBackWithin`.
+   * @param {() => boolean} waiting @param {Promise<void>} settled resolves once it's over
    */
-  const waitForAPage = async (id, settled) => {
+  const waitForAPage = async (waiting, settled) => {
     const minutes = comeBackWithin / 60_000;
     for (;;) {
       await Promise.race([server.whenNone(), settled]);
-      if (!open.has(id)) return;
-      say(`no page is open, so the run waits at this question, up to ${minutes} minutes, for one to come back`);
+      if (!waiting() || stopped) return;
+      say(`no page is open, so the run waits, up to ${minutes} minutes, for one to come back`);
       const back = await waitFor(Promise.race([server.whenConnected(), settled]), comeBackWithin);
-      if (!open.has(id)) return;
+      if (!waiting() || stopped) return;
       if (!back) {
         say(`no page came back within ${minutes} minutes`);
         return stop(new Stop(`The Installer page was closed, and wasn't opened again within ${minutes} minutes.`));
@@ -237,9 +255,23 @@ export async function openInstallerPage({ addressFile, connectedFile, page }) {
         from?.setEncoding('utf8');
         from?.on('data', (/** @type {string} */ text) => server.send({ type: 'output', text }));
       }
+      if (stopped) return end(child);
+      onScreen.add(child);
+      child.once('close', () => onScreen.delete(child));
     },
     write(text) {
       if (text !== '') server.send({ type: 'output', text });
+    },
+    // A program on the page's screen waits on the person (a sign-in), like a question: a stop
+    // throws from it at once, and with no page open it's waited on only so long.
+    wait(running) {
+      let finished = false;
+      const settled = running.then(
+        () => void (finished = true),
+        () => void (finished = true),
+      );
+      waitForAPage(() => !finished, settled);
+      return Promise.race([running, stopping]);
     },
   };
 

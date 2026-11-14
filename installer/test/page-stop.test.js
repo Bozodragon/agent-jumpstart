@@ -10,15 +10,16 @@ import { claudeFolder, exists, fakeMachine, makeHome, readOnlyLog, readProfile, 
 import { addressFile, runOnPage } from './page-harness.js';
 
 /** The answers given on the page: a team, a first-timer, and the connectors, which end in a Done. */
-const answers = { team: 'Marketing', aiExperience: 'first-time', codingExperience: 'no', github: false, workspaces: ['Thinking space'], connectors: ['Gmail'] };
+let answers = { team: 'Marketing', aiExperience: 'first-time', codingExperience: 'no', github: false, workspaces: ['Thinking space'], connectors: ['Gmail'] };
 
 /**
  * A York laptop where the tools are already there and the skills install, taking `skillsTake`
  * ms of real time to, so a test can act while that step is under way. After the skills, the run
  * walks through the connectors and waits for the person to say they're done.
- * @param {import('node:test').TestContext} t @param {{ skillsTake?: number }} [options]
+ * @param {import('node:test').TestContext} t
+ * @param {{ skillsTake?: number, replies?: Record<string, import('../src/machine.js').Reply> }} [options] `replies`: more of the fake machine's
  */
-async function aLaptop(t, { skillsTake = 0 } = {}) {
+async function aLaptop(t, { skillsTake = 0, replies = {} } = {}) {
   const where = await makeHome(t);
   const profile = await readProfile('york');
   await supplyDownloads(where, ['skills']);
@@ -44,6 +45,7 @@ async function aLaptop(t, { skillsTake = 0 } = {}) {
     'gh.exe auth status --hostname github.com': { code: 1, output: 'You are not logged into any GitHub hosts.' },
     'claude.exe --version': { output: '2.1.311 (Claude Code)\n' },
     'claude.exe auth status': { output: JSON.stringify({ loggedIn: true, authMethod: 'claude.ai', email: 'jo.bloggs@york.ac.uk' }) },
+    ...replies,
   });
   return { where, machine };
 }
@@ -164,7 +166,7 @@ test('a page closed during a step: the step finishes, the next question waits, a
   // connectors' Done.
   assert.ok(Array.isArray((await readSettings(where.home)).skillsInstalled), 'the skills were recorded');
   const log = await readOnlyLog(where.home);
-  const waits = log.text.indexOf('Installer page: no page is open, so the run waits at this question, up to 10 minutes, for one to come back');
+  const waits = log.text.indexOf('Installer page: no page is open, so the run waits, up to 10 minutes, for one to come back');
   assert.ok(waits > log.text.indexOf('Written to settings: skillsInstalled'), log.text);
   assert.match(log.text, /Installer page: no page came back within 10 minutes/);
   assert.match(log.text, /Stopped: The Installer page was closed, and wasn't opened again within 10 minutes\./);
@@ -179,7 +181,7 @@ test('a page that comes back within the 10 minutes finds the question waiting, a
   const first = run.connect();
   await answerUntil(first, run, (event) => event.type === 'busy' && /^Installing .* skills? from /.test(event.message));
   first.close();
-  await logSays(where.home, /Installer page: no page is open, so the run waits at this question/);
+  await logSays(where.home, /Installer page: no page is open, so the run waits, up to 10 minutes/);
 
   // Opened again (a reload, or the Bootstrap reopening it): the same question, still open.
   const again = run.connect();
@@ -194,4 +196,77 @@ test('a page that comes back within the 10 minutes finds the question waiting, a
   assert.match(log.text, /Installer page: a page is open again/);
   assert.doesNotMatch(log.text, /no page came back/);
   assert.ok(!again.events.some((event) => event.type === 'stopping'));
+});
+
+/** GitHub's own sign-in, run on screen, which takes `ms` of real time to come back. @param {number} ms */
+const aSlowGitHubSignIn = (ms) => ({ 'gh.exe auth login': { takes: ms } });
+
+/** The notice just before GitHub's sign-in runs on screen. @param {import('./page-harness.js').PageEvent} event */
+const signInToGitHub = (event) => event.type === 'notice' && event.title === 'Sign in to GitHub';
+
+test("Stop, pressed while a sign-in runs on screen, ends the run at once, without waiting for the sign-in", async (t) => {
+  const { where } = await aLaptop(t, { replies: aSlowGitHubSignIn(15_000) });
+  answers = { ...answers, github: true };
+  t.after(() => (answers = { ...answers, github: false }));
+  const run = await runOnPage(where, 'york');
+  t.after(run.kill);
+  const page = run.connect();
+  await answerUntil(page, run, signInToGitHub);
+  // Under way: the run has gone to the sign-in, with nothing more to say until it comes back.
+  await new Promise((resolve) => setTimeout(resolve, 300));
+
+  const pressed = performance.now();
+  assert.equal((await run.stop()).status, 200);
+  await page.next((event) => event.type === 'step' && /^Running the same line again/.test(event.text));
+  await page.seen(page.events.at(-1)?.id ?? 0);
+  const result = await run.ended;
+  const took = performance.now() - pressed;
+
+  assert.equal(result.code, 1, result.stdout + result.stderr);
+  assert.ok(took < 8_000, `it stopped without waiting for the sign-in: ${Math.round(took)} ms`);
+  const problem = await page.next((event) => event.type === 'problem');
+  assert.equal(problem.text, 'Stopped at your request.');
+  await page.next((event) => event.type === 'summary' && event.title === 'Done before it stopped');
+  assert.doesNotMatch((await readOnlyLog(where.home)).text, /gh auth login stopped with code/);
+});
+
+test('a page closed while a sign-in runs on screen: with no page back within 10 minutes of counted time, the run stops itself', async (t) => {
+  const { where, machine } = await aLaptop(t, { replies: aSlowGitHubSignIn(15_000) });
+  await machine.setWaiting({ outside: 1_000 });
+  answers = { ...answers, github: true };
+  t.after(() => (answers = { ...answers, github: false }));
+  const run = await runOnPage(where, 'york');
+  t.after(run.kill);
+  const page = run.connect();
+  await answerUntil(page, run, signInToGitHub);
+  page.close();
+  const closed = performance.now();
+  const result = await run.ended;
+  const took = performance.now() - closed;
+
+  assert.equal(result.code, 1, result.stdout + result.stderr);
+  assert.ok(took < 8_000, `the 10 minutes were counted, and the sign-in not waited for: ${Math.round(took)} ms`);
+  const log = await readOnlyLog(where.home);
+  assert.match(log.text, /Installer page: no page is open, so the run waits, up to 10 minutes, for one to come back/);
+  assert.match(log.text, /Stopped: The Installer page was closed, and wasn't opened again within 10 minutes\./);
+});
+
+test('Stop, pressed while the run looks for an earlier T3 Code, stops before anything is changed', async (t) => {
+  const { where } = await aLaptop(t, { replies: { 'reg.exe query': { code: 1, output: 'ERROR: The system was unable to find the specified registry key or value.', takes: 3_000 } } });
+  const run = await runOnPage(where, 'york');
+  t.after(run.kill);
+  const page = run.connect();
+  await answerUntil(page, run, (event) => event.type === 'busy' && /^Checking whether T3 Code is installed/.test(event.message));
+
+  assert.equal((await run.stop()).status, 200);
+  const problem = await page.next((event) => event.type === 'problem');
+  await page.seen(page.events.at(-1)?.id ?? 0);
+  const result = await run.ended;
+
+  assert.equal(result.code, 1, result.stdout + result.stderr);
+  assert.equal(problem.text, 'Stopped at your request. Nothing has been changed.');
+  assert.equal(await exists(join(where.home, 'AppData', 'Local', 'agent-jumpstart', 'settings.json')), false);
+  const log = await readOnlyLog(where.home);
+  assert.doesNotMatch(log.text, /couldn't look for an earlier install/);
+  assert.doesNotMatch(log.text, /Settings written/);
 });

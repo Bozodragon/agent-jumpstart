@@ -21,6 +21,8 @@
  *   the caller listens for the program closing.
  * @property {(text: string) => void} write Shows text as a program on the screen would print it.
  *   For the fake machine, whose runs print their recorded output here.
+ * @property {<T>(running: Promise<T>) => Promise<T>} [wait] How the run waits for a program on the
+ *   screen to finish, if not simply: the page throws a Stop from it, as from any call that waits.
  */
 
 /**
