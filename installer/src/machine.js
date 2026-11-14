@@ -794,7 +794,7 @@ function realMachine(loggedRun, screen) {
         // cmd.exe shares the Installer's console, hidden on the page, as every program on the
         // screen does, so nothing flashes; only the window `start` opens is seen. Its own output
         // is only what `start` says if it can't open it.
-        const child = spawn(how.file, how.args, { ...how.options, env, stdio: waitedFor });
+        const child = spawn(how.file, how.args, { ...how.options, env: { ...env, ...how.env }, stdio: waitedFor });
         for (const from of [child.stdout, child.stderr]) {
           from?.setEncoding('utf8');
           from?.on('data', (/** @type {string} */ chunk) => (output += chunk));
@@ -819,21 +819,28 @@ function realMachine(loggedRun, screen) {
  * console, shown as any new window is (in Windows Terminal, where that's the default terminal),
  * titled `title`, and `/wait` waits for the program, not for anything it leaves running. Alone,
  * `cmd /c start /wait` exits 0 whatever the program's code, so the line ends by passing that on
- * (`!errorlevel!`, with `/v:on`). The line is quoted for cmd and passed as it is: anything cmd
- * would still expand inside quotes, `^` among them with `/v:on`, is refused rather than escaped.
- * Checked on Windows 11 from a Node started hidden: the window opened, its program's input and
- * output were a terminal, its exit code came back, and ending cmd.exe's tree closed the window.
+ * (`!errorlevel!`, with `/v:on`). The title, the program and its arguments aren't written into
+ * the line: each is an environment variable of cmd's, put in quotes as `"!name!"`, since what
+ * delayed expansion puts in isn't parsed again, so a profile folder with `!`, `%`, `^` or `&` in
+ * its name comes through as it is. Only a `"` or a line break, which would end `start`'s own
+ * quotes, is refused. The variables are passed on to the program too, which ignores them.
+ * Checked on Windows 11 from a Node started hidden, in Windows Terminal and in the old console:
+ * the window opened, its program's input and output were a terminal, its exit code came back,
+ * and ending cmd.exe's tree closed the window.
  * @param {string} file @param {string[]} args @param {string} title
- * @returns {{ file: string, args: string[], options: import('node:child_process').SpawnOptions } | { refused: string }}
+ * @returns {{ file: string, args: string[], options: import('node:child_process').SpawnOptions, env: Record<string, string> } | { refused: string }}
  */
 function inItsOwnWindow(file, args, title) {
-  const unsafe = [title, file, ...args].find((arg) => /["%!^\r\n]/.test(arg));
+  const values = [title, file, ...args];
+  const unsafe = values.find((value) => /["\r\n]/.test(value));
   if (unsafe !== undefined) return { refused: `can't pass ${unsafe} to a window of its own safely` };
-  const program = [file, ...args].map((arg, index) => (index === 0 || arg === '' || /[\s&|<>(),;=]/.test(arg) ? `"${arg}"` : arg)).join(' ');
-  const line = `start "${title}" /wait ${program} & exit !errorlevel!`;
+  const name = (/** @type {number} */ index) => `AGENT_JUMPSTART_WINDOW_${index}`;
+  const env = Object.fromEntries(values.map((value, index) => [name(index), value]));
+  const [titled, program, ...rest] = values.map((_, index) => `"!${name(index)}!"`);
+  const line = `start ${titled} /wait ${[program, ...rest].join(' ')} & exit !errorlevel!`;
   // /d skips AutoRun commands; /s with the outer quotes keeps the line exactly as built.
   const cmd = process.env.ComSpec ?? system32('cmd.exe');
-  return { file: cmd, args: ['/d', '/v:on', '/s', '/c', `"${line}"`], options: { windowsVerbatimArguments: true } };
+  return { file: cmd, args: ['/d', '/v:on', '/s', '/c', `"${line}"`], options: { windowsVerbatimArguments: true }, env };
 }
 
 /**

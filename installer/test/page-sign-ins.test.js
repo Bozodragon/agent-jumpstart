@@ -191,7 +191,7 @@ test("when Claude's local listener can't start, its sign-in opens in a window of
   assert.equal(piped.input, 'pipe');
   assert.equal(inAWindow?.ownWindow, 'Sign in to Claude Code', "a window of its own, with the sign-in's title");
   assert.equal(inAWindow.input, 'own window', 'the window is its input, so Claude offers its own paste-a-code prompt there');
-  assert.deepEqual(inAWindow.env, { BROWSER: 'explorer.exe' });
+  assert.deepEqual(inAWindow.env, { BROWSER: 'explorer.exe', CLAUDE_CODE_DISABLE_TERMINAL_TITLE: '1' }, 'the window keeps the title the page names');
   assert.deepEqual(more, []);
   // The second sign-in screen is the window's: its notice says a window has opened, what to do in
   // it, and to come back to the page; it has no link and no code box, since Claude shows those there.
@@ -199,7 +199,7 @@ test("when Claude's local listener can't start, its sign-in opens in a window of
   assert.ok(windowSignIn, 'the window has a sign-in screen of its own');
   const notice = page.events.filter((event) => event.id < windowSignIn.id).at(-1);
   assert.equal(notice?.type, 'notice');
-  assert.match(notice.text, /a window has opened for its sign-in/);
+  assert.match(notice.text, /a window called "Sign in to Claude Code" has opened for its sign-in/);
   assert.match(notice.text, /come back to the Installer page/);
   assert.deepEqual(page.events.filter((event) => event.type === 'signInShows' && event.signIn === windowSignIn.id), []);
   assert.ok(page.events.some((event) => event.type === 'signInEnded' && event.signIn === windowSignIn.id));
@@ -231,12 +231,12 @@ test("a window sign-in that closes before Claude is signed in says so, with Try 
   const question = page.events.find((event) => event.type === 'question' && event.key === 'claudeSignIn');
   assert.ok(question, 'Try again or Skip for now was asked');
   const before = page.events.filter((event) => event.id < question.id).at(-1);
-  assert.deepEqual([before?.type, before?.text], ['problem', "Claude Code's sign-in window closed before you were signed in"]);
+  assert.deepEqual([before?.type, before?.text], ['problem', "Claude Code's sign-in window closed without signing you in. If it didn't take your code, Try again gives you a new link and code."]);
   const signIns = page.events.filter((event) => event.type === 'signIn');
   assert.equal(signIns.length, 3);
   for (const signIn of signIns.slice(1)) {
     const notice = page.events.filter((event) => event.id < signIn.id).at(-1);
-    assert.match(notice?.text ?? '', /a window has opened/, 'each window is explained');
+    assert.match(notice?.text ?? '', /has opened for its sign-in/, 'each window is explained');
   }
 });
 
@@ -251,7 +251,7 @@ test("Stop, pressed while Claude's sign-in window is open, ends the run at once,
   t.after(run.kill);
   const page = run.connect();
   answerEverything(page, run.answer, { channel: 'stable' }).catch(() => {});
-  const notice = await page.next((event) => event.type === 'notice' && /a window has opened/.test(event.text));
+  const notice = await page.next((event) => event.type === 'notice' && /has opened for its sign-in/.test(event.text));
   await page.next((event) => event.type === 'signIn' && event.id > notice.id);
   const pressed = performance.now();
   assert.equal((await run.stop()).status, 200);

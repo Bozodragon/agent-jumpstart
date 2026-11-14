@@ -123,16 +123,38 @@ export async function openInstallerPage({ addressFile, connectedFile, page }) {
   let over = false;
   /** The programs on the screen now, which a stop ends. @type {Set<import('node:child_process').ChildProcess>} */
   const onScreen = new Set();
+  /**
+   * The ends a stop has set going, which the front end waits for as it closes. Were the
+   * Installer to exit first, Windows would end taskkill and cmd.exe with it (Node's children share
+   * its job), but not a program cmd.exe started in a window of its own, which `start` takes out
+   * of that job: Claude's sign-in window would stay open after the run had stopped.
+   * @type {Set<Promise<void>>}
+   */
+  const ending = new Set();
 
   /**
-   * Ends a program on the screen, and whatever it started (cmd.exe's child, say).
+   * Ends a program on the screen, and whatever it started (cmd.exe's child, say). Resolves once
+   * taskkill has finished, or after 5 seconds at most.
    * @param {import('node:child_process').ChildProcess} child
+   * @returns {Promise<void>}
    */
   const end = (child) => {
-    if (child.exitCode !== null || child.signalCode !== null || child.pid === undefined) return;
-    if (process.platform !== 'win32') return void child.kill();
+    if (child.exitCode !== null || child.signalCode !== null || child.pid === undefined) return Promise.resolve();
+    if (process.platform !== 'win32') return Promise.resolve(void child.kill());
     const taskkill = join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'taskkill.exe');
-    spawn(taskkill, ['/pid', String(child.pid), '/T', '/F'], { stdio: 'ignore', windowsHide: true }).once('error', () => child.kill());
+    return new Promise((resolve) => {
+      const done = () => {
+        clearTimeout(timer);
+        resolve();
+      };
+      const timer = setTimeout(done, 5_000);
+      spawn(taskkill, ['/pid', String(child.pid), '/T', '/F'], { stdio: 'ignore', windowsHide: true })
+        .once('error', () => {
+          child.kill();
+          done();
+        })
+        .once('close', done);
+    });
   };
 
   /**
@@ -146,7 +168,7 @@ export async function openInstallerPage({ addressFile, connectedFile, page }) {
     server.send({ type: 'stopping' });
     for (const asked of open.values()) asked.reject(why);
     open.clear();
-    for (const child of onScreen) end(child);
+    for (const child of onScreen) ending.add(end(child));
     stopNow(why);
   };
 
@@ -271,7 +293,7 @@ export async function openInstallerPage({ addressFile, connectedFile, page }) {
     stdio: () => ['pipe', 'pipe', 'pipe'],
     attach(child) {
       for (const from of [child.stdout, child.stderr]) from?.resume();
-      if (stopped) return end(child);
+      if (stopped) return void ending.add(end(child));
       onScreen.add(child);
       const input = child.stdin ?? undefined;
       // A program that has gone before its code arrives mustn't take the Installer with it.
@@ -426,6 +448,7 @@ export async function openInstallerPage({ addressFile, connectedFile, page }) {
     },
     async close() {
       over = true;
+      await Promise.all(ending);
       await server.close();
       await connectedWritten;
       await rm(addressFile, { force: true });

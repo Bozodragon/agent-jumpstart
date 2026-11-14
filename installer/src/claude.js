@@ -215,12 +215,14 @@ function onThePage(name, program, { machine, frontEnd }, say) {
   ].join('\n');
   const title = `Sign in to ${name}`;
   const inAWindow = [
-    `${name} can't sign you in from this page on this laptop, so a window has opened for its sign-in. If you can't see it, look for it on the taskbar.`,
+    `${name} can't sign you in from this page on this laptop, so a window called "${title}" has opened for its sign-in. If you can't see it, click it on the taskbar at the bottom of the screen.`,
     '',
     `  ${bullet} In that window, ${name} shows a link. Select it with the mouse, right-click to copy it, then paste it into your browser's address bar.`,
-    `  ${bullet} Sign in there. The page then shows a code. Copy it, then right-click in the window to paste it there. Nothing appears when you paste. Paste once, then press Enter.`,
-    `  ${bullet} The window closes by itself once you're signed in. ${frontEnd.comeBack('that window')} It carries on by itself.`,
+    `  ${bullet} Sign in there. Claude's page then shows a code. Copy it, then right-click in the window to paste it there. Nothing appears when you paste. Paste once, then press Enter.`,
+    `  ${bullet} The window closes by itself when the sign-in ends, whether or not it worked. ${frontEnd.comeBack('that window')} It carries on by itself.`,
   ].join('\n');
+  // Claude would otherwise retitle the window (as "claude"), and the notice names it.
+  const inItsWindow = { env: { ...authLogin.env, CLAUDE_CODE_DISABLE_TERMINAL_TITLE: '1' }, title };
   let listenerBlocked = false;
   return {
     // Said before every try: it's the sign-in screen's explanation, and each try is a screen of its own.
@@ -246,10 +248,15 @@ function onThePage(name, program, { machine, frontEnd }, say) {
         say("its local listener couldn't start, and without it Claude takes a pasted code only in a terminal, so its sign-in runs in a window of its own");
       }
       frontEnd.notice(inAWindow, title);
-      const ran = await frontEnd.signIn(() => machine.runInItsOwnWindow(program, authLogin.args, { env: authLogin.env, title }));
+      const ran = await frontEnd.signIn(() => machine.runInItsOwnWindow(program, authLogin.args, inItsWindow));
+      if (ran.code !== -1) say("what it showed in its window isn't kept, so if it gave a reason, that isn't in this log");
       return {
         ...ran,
-        reason: ran.code === -1 ? `The window for ${name}'s sign-in couldn't be opened` : `${name}'s sign-in window closed before you were signed in`,
+        // A code Claude turns down ends it at once, and its window with it, before its reason can be read.
+        reason:
+          ran.code === -1
+            ? `The window for ${name}'s sign-in couldn't be opened`
+            : `${name}'s sign-in window closed without signing you in. If it didn't take your code, Try again gives you a new link and code.`,
       };
     },
   };
