@@ -4,9 +4,11 @@
 // secret path.
 import { StrictMode, useEffect, useReducer, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { begin, dashes, onScreen, reduce, wakeAt } from './pacing.js';
+import { backTo } from './details.js';
+import { Details } from './details-panel.js';
+import { begin, onScreen, reduce, wakeAt } from './pacing.js';
 import { icons } from './parts.js';
-import { Screen, announced, postAnswer } from './screens.js';
+import { Screen, announced, postAnswer, postBack } from './screens.js';
 import { StopButton } from './stop.js';
 
 /** @typedef {import('./pacing.js').PageEvent} PageEvent */
@@ -60,6 +62,7 @@ function App() {
 
   const shown = onScreen(page);
   const ending = shown.kind === 'ending';
+  const back = backTo(page, shown);
   return (
     <div className={`shell${ending ? ' is-ending' : ''}`}>
       <Header page={page} over={over} />
@@ -67,6 +70,7 @@ function App() {
         shown={shown}
         actions={{
           answer: postAnswer,
+          goBack: back === undefined ? undefined : () => postBack(back),
           carryOn: (screen) => dispatch({ type: 'continue', screen, now: performance.now() }),
           shareLogLine: page.shareLogLine,
         }}
@@ -76,13 +80,11 @@ function App() {
 }
 
 /**
- * The name, the way back to the setup page, the dashes that say how far along the run is, and Stop.
+ * The name, the way back to the setup page, the dashes that say how far along the run is, which
+ * open the Details panel, and Stop.
  * @param {{ page: import('./pacing.js').Page, over: boolean }} props
  */
 function Header({ page, over }) {
-  const { questions, work, ending } = dashes(page);
-  const count = (/** @type {string[]} */ run) => run.filter((dash) => dash !== 'to-come' && dash !== 'now').length;
-  const said = `${count(questions)} ${count(questions) === 1 ? 'question' : 'questions'} answered, ${count(work)} ${count(work) === 1 ? 'step' : 'steps'} done${ending === 'now' ? ', and finished' : ''}`;
   return (
     <header className="head">
       <div className="brand">
@@ -98,13 +100,7 @@ function Header({ page, over }) {
           <span className="offscreen"> (opens in your browser)</span>
         </a>
       )}
-      <div className="progress" role="img" aria-label={`How far along: ${said}`}>
-        <span className="run">{questions.map((dash, index) => <i key={index} className={`dash is-${dash}`} />)}</span>
-        <span className="run is-work">{work.map((dash, index) => <i key={index} className={`dash is-${dash}`} />)}</span>
-        <span className="run">
-          <i className={`dash is-${ending}`} />
-        </span>
-      </div>
+      <Details page={page} onChange={(question) => postBack(question)} />
       <StopButton page={page} over={over} />
     </header>
   );
@@ -147,7 +143,7 @@ function Stage({ shown, actions }) {
           <Screen shown={leaving} actions={actions} />
         </section>
       )}
-      <section key={shown.key} className="screen">
+      <section key={shown.key} className={`screen${shown.kind === 'question' && shown.again ? ' is-back' : ''}`}>
         <Screen shown={shown} actions={actions} />
       </section>
       <p className="offscreen" role="status">

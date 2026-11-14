@@ -43,6 +43,24 @@
  */
 
 /**
+ * How a busy ended, in words: done (`ok` true), failed (false), or neither (no `ok`). `done`: the
+ * row a run that stops partway lists it under, among what was done before it stopped, when it
+ * changed something and went well (`ok`), such as `['Git', '2.47.1 (installed)']`. Only a step's
+ * own rows list it once the whole step is done, so this matters only if the run stops before then.
+ * @typedef {{ text: string, ok?: boolean, done?: [string, string] }} Ended
+ */
+
+/**
+ * @typedef {object} BusyHow
+ * @property {boolean} [changesNothing] The task only looks, waits for something outside the
+ *   Installer (the person, another program), or downloads what a later step installs. A stop
+ *   during it doesn't wait for it, as there's nothing to finish: the page leaves it to itself.
+ *   A stop during any other busy waits for its task to finish (up to 10 minutes), so what it
+ *   started (winget, `claude install`) is done, and listed, then throws the stop, so nothing
+ *   after it starts.
+ */
+
+/**
  * What a sign-in in the person's browser needs them to have, taken from its program's output as
  * it comes. Each `show` adds to what's there.
  * @typedef {object} SignInShown
@@ -61,11 +79,25 @@
  */
 
 /**
+ * Going back during the questions. `main` asks every question up to the settings being written
+ * between `begin` and `fix`, and nothing there changes the laptop, except what's done in a page
+ * opened in the browser (Google Drive's installer, or Software Center), which `showPage` fixes
+ * the answers for. Until they're fixed, the question being waited at may throw GoBack
+ * (questions.js); `main` calls `begin` and asks the questions again from the start, and the front
+ * end answers those before the one gone back to as they were answered, without showing anything
+ * again, then asks the rest with the answers given before as their defaults.
+ * @typedef {object} Questions
+ * @property {() => void} begin The questions start, or start again after a GoBack.
+ * @property {() => void} fix Back and Change are gone for good: the questions are over, or
+ *   something has acted on the answers. A going back still on its way is refused.
+ */
+
+/**
  * @typedef {object} FrontEnd
  * @property {(title: string, links?: Links) => void} start The run's first words. `links` are
  *   the profile's, for a front end that shows them (the page does; the terminal doesn't).
  * @property {(text: string) => void} step A line saying what's happening.
- * @property {<T>(message: string, task: (progress: Progress, output: Output) => Promise<T>, ended?: (result: T) => { text: string, ok?: boolean }) => Promise<T>} busy
+ * @property {<T>(message: string, task: (progress: Progress, output: Output) => Promise<T>, ended?: (result: T) => Ended, how?: BusyHow) => Promise<T>} busy
  *   Shows that something slow is under way while `task` runs, then how it ended (`ended`, or
  *   the message, if not given): done (`ok` true), failed (false), or, with no `ok`, simply over,
  *   with no mark either way (a step that gave way quietly to another, such as Claude Code's own
@@ -93,6 +125,8 @@
  *   they can see and answer them directly. A sign-in whose steps differ picks its version by this.
  * @property {Screen} screen Where programs run on screen go (see openMachine).
  * @property {string} description One line saying which front end this is, for the log.
+ * @property {Questions} [questions] Back and Change, for a front end that offers them (the page).
+ *   The terminal doesn't: once a question is answered there, it stays answered.
  * @property {(text: string) => void} finish The run's last words. A second line, if there is
  *   one, lines up under the first.
  * @property {() => Promise<void>} close Called once, as the run ends, whichever way it ends.

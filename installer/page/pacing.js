@@ -33,6 +33,8 @@
  * @property {unknown} [initial]
  * @property {string} [placeholder]
  * @property {string} [what] For `done`: what it's waiting for, which completes "once …".
+ * @property {boolean} [back] Asked while Back and Change last: it may be gone back to once
+ *   answered (until the run sends `fixed`).
  *
  * @typedef {{ title: string, rows: [string, string][] }} Summary
  *
@@ -42,12 +44,14 @@
  * @typedef {Shared & { kind: 'step', text: string }} StepScreen
  * @typedef {Shared & { kind: 'notice', title: string, text: string }} NoticeScreen
  * @typedef {Shared & { kind: 'summary', title: string, rows: [string, string][] }} SummaryScreen
- * @typedef {Shared & { kind: 'busy', message: string, received?: number, total?: number, ended?: { text: string, ok?: boolean }, endedBy?: number, terminal?: string }} BusyScreen
+ * @typedef {Shared & { kind: 'busy', message: string, received?: number, total?: number, ended?: { text: string, ok?: boolean }, endedBy?: number, terminal?: string, stopsAfter?: boolean }} BusyScreen
  *   `terminal`: what the skills installer printed during it, which the page shows in a small
- *   terminal (output events with this busy's id).
- * @typedef {Shared & { kind: 'question', question: Asked, number?: number, answer?: { value: unknown }, refused?: { answer: unknown, reason: string }, problem?: string, notice?: { title: string, text: string } }} QuestionScreen
+ *   terminal (output events with this busy's id). `stopsAfter`: Stop came while it ran, and the
+ *   run finishes it before it stops (it installs something), so it stays until it has ended.
+ * @typedef {Shared & { kind: 'question', question: Asked, number?: number, answer?: { value: unknown }, refused?: { answer: unknown, reason: string }, problem?: string, notice?: { title: string, text: string }, again?: boolean }} QuestionScreen
  *   `problem` or `notice`: the call just before it, joined to it. `number`: which question this
  *   is, counting only the person's answers to the setup's questions (not Done, not Try again).
+ *   `again`: the first question asked after going back.
  * @typedef {Shared & { kind: 'signIn', notice?: { title: string, text: string }, link?: { url: string, label: string }, code?: string, codeBox?: number, sent?: boolean, refused?: { reason: string, by: number }, over?: boolean }} SignInScreen
  *   A sign-in in the browser, joined to the notice before it, which explains it: the link and
  *   code the person needs, as the program prints them, and a box for a code, posted as an answer
@@ -164,7 +168,8 @@ export function reduce(page, action) {
  *   come then (T3 Code that couldn't be opened, say) are shown before it.
  *
  * What a program prints goes with the newest screen; what the skills installer prints, with its
- * busy, as its `terminal`.
+ * busy, as its `terminal`. Going back (`back`) takes off the question gone back to and every
+ * screen since: the run asks them again, as new questions.
  * @param {PageEvent[]} events
  * @returns {Screen[]}
  */
@@ -185,6 +190,8 @@ export function screensOf(events) {
   const codeBoxes = new Map();
   /** A problem or notice the question coming next joins. @type {{ key: number, problem?: string, notice?: { title: string, text: string } } | undefined} */
   let joining;
+  /** Whether the person has just gone back, which the next question comes in as. */
+  let again = false;
 
   /** The next event, after `index`, that makes or joins a screen. @param {number} index */
   const nextCall = (index) => events.slice(index + 1).find((event) => makesAScreen.has(event.type));
@@ -253,8 +260,9 @@ export function screensOf(events) {
       case 'question': {
         const { id, type, ...asked } = event;
         /** @type {QuestionScreen} */
-        const screen = { kind: 'question', key: id, output: '', question: /** @type {Asked} */ (asked), ...joining };
+        const screen = { kind: 'question', key: id, output: '', question: /** @type {Asked} */ (asked), ...joining, ...(again ? { again } : {}) };
         joining = undefined;
+        again = false;
         add(screen);
         questions.set(event.question, screen);
         break;
@@ -309,6 +317,20 @@ export function screensOf(events) {
         else if (newest && event.busy === undefined) newest.output += event.text;
         break;
       }
+      case 'stopping': {
+        const busy = event.after === undefined ? undefined : busies.get(event.after);
+        if (busy) busy.stopsAfter = true;
+        break;
+      }
+      case 'back': {
+        const from = screens.findIndex((screen) => screen.kind === 'question' && screen.question.question === event.to);
+        if (from < 0) break;
+        screens.length = from;
+        newest = screens.at(-1);
+        joining = undefined;
+        again = true;
+        break;
+      }
     }
   });
 
@@ -328,8 +350,10 @@ const makesAScreen = new Set(['step', 'notice', 'problem', 'summary', 'finish', 
  */
 function isThrough(screen, page, now, behind) {
   // Once the run is stopping, nothing is waited on but the stop screen: not what came before, nor
-  // a notice or step the run sends on its way to the call that throws the Stop.
-  if (screen.kind !== 'ending' && screen.kind !== 'problem' && page.events.some((event) => event.type === 'stopping')) return true;
+  // a notice or step the run sends on its way to the call that throws the Stop. The one thing
+  // the run finishes first, a step that installs something, stays until it has ended.
+  const finishing = screen.kind === 'busy' && screen.stopsAfter && !screen.ended;
+  if (screen.kind !== 'ending' && screen.kind !== 'problem' && !finishing && page.events.some((event) => event.type === 'stopping')) return true;
   switch (screen.kind) {
     case 'question':
       return screen.answer !== undefined;

@@ -36,7 +36,7 @@ import { openMachine } from './machine.js';
 import { autoMemoryInUse, switchOffAutoMemory } from './memory.js';
 import { fullSkillsSizes, loadProfile, withFullSkills, withTeam } from './profile.js';
 import { logProxySetting } from './proxy.js';
-import { answersFrom, askChange, askExperience, askingThePerson, askQuestions, askTeam, experienceOptions, fromBeforeExperience, hiddenFor, knownFrom, revealedBy, teamTicksToAdd } from './questions.js';
+import { answersFrom, askChange, askExperience, askingThePerson, askQuestions, askTeam, experienceOptions, fromBeforeExperience, GoBack, hiddenFor, knownFrom, revealedBy, teamTicksToAdd } from './questions.js';
 import { installSkills } from './skills.js';
 import { findT3, installT3, openT3 } from './t3.js';
 import { End, messageOf, Stop } from './stop.js';
@@ -188,7 +188,29 @@ async function main() {
     process.stdout.write(`${opened.why}\n`);
     return noPage;
   }
-  const { frontEnd, page } = opened;
+  const { page, frontEnd: openedFrontEnd } = opened;
+  /**
+   * What the busies of the step under way have done (each that changed something and says so),
+   * for a run that stops before that step's own rows are recorded.
+   * @type {[string, string][]}
+   */
+  let doneInStep = [];
+  /** @type {import('./front-end.js').FrontEnd} */
+  const frontEnd = {
+    ...openedFrontEnd,
+    busy: (message, task, ended, how) =>
+      openedFrontEnd.busy(
+        message,
+        task,
+        ended &&
+          ((result) => {
+            const said = ended(result);
+            if (said.ok && said.done) doneInStep.push(said.done);
+            return said;
+          }),
+        how,
+      ),
+  };
   log.write(frontEnd.description);
   if (options.answers) log.write(`Answers from: ${options.answers}`);
   if (options.downloads) log.write(`Downloads from: ${options.downloads}`);
@@ -220,6 +242,11 @@ async function main() {
    * @type {[string, string][]}
    */
   const done = [];
+  /** @param {[string, string][]} rows a step's, which cover what its busies did */
+  const recordDone = (rows) => {
+    done.push(...rows);
+    doneInStep = [];
+  };
   /** What the ending says: the steps that didn't work, noted as the run meets them. */
   const ending = newEnding();
   /**
@@ -227,7 +254,7 @@ async function main() {
    * @param {[string, string][]} rows @param {string} [step] as for `note`
    */
   const record = (rows, step) => {
-    done.push(...rows);
+    recordDone(rows);
     note(ending, rows, step);
   };
 
@@ -242,17 +269,6 @@ async function main() {
     // A re-run asks nothing an earlier run already wrote down, unless the person chooses to change it.
     const earlier = await readEarlierSettings(places.settings, offered.id, log);
     const asker = unattended ? answersFrom(answers) : askingThePerson(frontEnd.ask);
-    /** @type {Set<string>} */
-    const reused = new Set();
-    /** The keys of the answers the settings no longer give, which are put as on a first run. @type {Set<string>} */
-    const fresh = new Set();
-    /**
-     * The keys of the answers to ask again, which the settings no longer answer, each with the
-     * ticks a team adds to a pick's default.
-     * @type {Map<string, string[]>}
-     */
-    const changing = new Map();
-    const ask = earlier ? knownFrom(earlier, asker, log, reused, fresh, changing) : asker;
     /** @type {import('./tools.js').Context} */
     const context = { places, machine, frontEnd, downloads: options.downloads, keepDownloads: options.debug, log, attended: !unattended };
     // What's already on the laptop decides what's asked. Memory's sign is looked for before
@@ -264,39 +280,79 @@ async function main() {
     // So is whether GitHub's own tool is signed in, which leaves nothing to ask about GitHub. An
     // older answers file doesn't look, so it runs what it did.
     const githubSignedIn = olderAnswers ? undefined : await signedInBefore(context);
-    if (githubSignedIn) fresh.add('github');
-    // The team first, and on a re-run, what to change from last time. With a team saved, what
-    // to change comes first, so a ticked Team is asked next, in its usual place. From here on
-    // the run works from the profile with the team's entries merged in.
-    const teamSaved = earlier !== undefined && 'team' in earlier;
-    let team = teamSaved ? undefined : await askTeam(offered, ask, log);
-    if (earlier) for (const key of await askChange(offered, earlier, { memoryInUse, githubSignedIn, olderAnswers }, asker, log)) changing.set(key, []);
-    if (teamSaved) team = await askTeam(offered, ask, log);
-    const experience = await askExperience(ask, log);
-    // A question the new experience answers reveal is asked, rather than kept from last time.
-    if (earlier && !olderAnswers) for (const key of revealedBy(earlier, experience, log)) fresh.add(key);
-    const profile = withTeam(offered, team);
-    // A team joined or changed asks again each pick it ticks something new in, with its ticks added.
-    if (earlier) for (const [key, ticks] of teamTicksToAdd(profile, earlier, team, log)) changing.set(key, ticks);
-    // A list of versions that can't be read isn't a reason to stop yet (findT3 says so).
-    const foundT3 = await findT3(context);
-    const found = { earlier, memoryInUse, t3Channel: foundT3?.channel, experience, githubSignedIn };
-    const choices = {
-      ...(team === undefined ? {} : { team }),
-      ...experience,
-      ...(await askQuestions(profile, places, ask, log, found, { machine, frontEnd, attended: !unattended, keepDownloads: options.debug })),
+    // A list of versions that can't be read isn't a reason to stop yet (findT3 says so). Looked
+    // for once, however often the questions are asked.
+    /** @type {ReturnType<typeof findT3> | undefined} */
+    let lookingForT3;
+    const lookForT3 = () => (lookingForT3 ??= findT3(context));
+
+    // Every question, up to the settings being written. Nothing here changes the laptop (bar
+    // Google Drive's install, after which there's no going back), so a person who goes back on
+    // the page is asked them again from the start, the page answering those before the question
+    // gone back to as they were answered (see FrontEnd's `questions`).
+    const askEverything = async () => {
+      /** @type {Set<string>} */
+      const reused = new Set();
+      /** The keys of the answers the settings no longer give, which are put as on a first run. @type {Set<string>} */
+      const fresh = new Set();
+      /**
+       * The keys of the answers to ask again, which the settings no longer answer, each with the
+       * ticks a team adds to a pick's default.
+       * @type {Map<string, string[]>}
+       */
+      const changing = new Map();
+      const ask = earlier ? knownFrom(earlier, asker, log, reused, fresh, changing) : asker;
+      if (githubSignedIn) fresh.add('github');
+      // The team first, and on a re-run, what to change from last time. With a team saved, what
+      // to change comes first, so a ticked Team is asked next, in its usual place. From here on
+      // the run works from the profile with the team's entries merged in.
+      const teamSaved = earlier !== undefined && 'team' in earlier;
+      let team = teamSaved ? undefined : await askTeam(offered, ask, log);
+      if (earlier) for (const key of await askChange(offered, earlier, { memoryInUse, githubSignedIn, olderAnswers }, asker, log)) changing.set(key, []);
+      if (teamSaved) team = await askTeam(offered, ask, log);
+      const experience = await askExperience(ask, log);
+      // A question the new experience answers reveal is asked, rather than kept from last time.
+      if (earlier && !olderAnswers) for (const key of revealedBy(earlier, experience, log)) fresh.add(key);
+      const profile = withTeam(offered, team);
+      // A team joined or changed asks again each pick it ticks something new in, with its ticks added.
+      if (earlier) for (const [key, ticks] of teamTicksToAdd(profile, earlier, team, log)) changing.set(key, ticks);
+      const foundT3 = await lookForT3();
+      const found = { earlier, memoryInUse, t3Channel: foundT3?.channel, experience, githubSignedIn };
+      const choices = {
+        ...(team === undefined ? {} : { team }),
+        ...experience,
+        ...(await askQuestions(profile, places, ask, log, found, { machine, frontEnd, attended: !unattended, keepDownloads: options.debug, once })),
+      };
+      if (earlier) {
+        const rows = await reusedRows(earlier, choices, reused, olderAnswers ? [] : hiddenFor(experience), options.downloads);
+        if (rows.length > 0) frontEnd.summary(rows, 'Using your answers from last time');
+      }
+      return { profile, foundT3, choices };
     };
-    if (earlier) {
-      const rows = await reusedRows(earlier, choices, reused, olderAnswers ? [] : hiddenFor(experience), options.downloads);
-      if (rows.length > 0) frontEnd.summary(rows, 'Using your answers from last time');
+    /** Looks the questions make once a run, however often they're asked (see Reach). @type {Map<string, Promise<any>>} */
+    const once = new Map();
+    /** @type {Awaited<ReturnType<typeof askEverything>> | undefined} */
+    let asked;
+    while (!asked) {
+      frontEnd.questions?.begin();
+      try {
+        asked = await askEverything();
+      } catch (error) {
+        if (!(error instanceof GoBack)) throw error;
+        log.write(`Back: ${error.message}`);
+      }
     }
+    frontEnd.questions?.fix();
+    const { profile, foundT3, choices } = asked;
 
     // Keys this run doesn't write (another program's, or a later version's) are kept.
     /** @type {Record<string, unknown>} */
     const settings = { ...earlier, profile: profile.id, ...choices };
     await writeSettings(places.settings, settings);
     log.write(`Settings written to ${places.settings}`);
-    done.push(['Settings', 'Your answers, saved for next time']);
+    // The questions have no rows of their own, so what their busies did (Google Drive installed)
+    // stays among what's done.
+    recordDone([...doneInStep, ['Settings', 'Your answers, saved for next time']]);
 
     const workspaces = await createWorkspaces(choices.topWorkspace, choices.workspaces, log);
     record(workspaces.rows, 'Workspaces');
@@ -338,7 +394,7 @@ async function main() {
     // Settings' connectors are kept only when every one is still offered, so equal means known.
     const connectedBefore = JSON.stringify(earlier?.connectors) === JSON.stringify(choices.connectors);
     const connectors = await walkThroughConnectors(profile, choices.connectors, { ...context, connectedBefore });
-    done.push(['Connectors', connectors]);
+    recordDone([['Connectors', connectors]]);
     const extraTools = await setUpExtraTools(profile, choices.extraTools, context);
     record(extraTools);
     // Their steps are named as their manifest entries name them (installTools has read it).
@@ -403,7 +459,9 @@ async function main() {
     }
     log.write(`Stopped: ${error.message}`);
     // Only here is the person told what a stop left behind, so it's never claimed that nothing
-    // changed after something did.
+    // changed after something did: that's the steps done, and what the busies of the step it
+    // stopped in had done, such as the install a stop waited for.
+    done.push(...doneInStep);
     if (done.length === 0) {
       frontEnd.problem(`${error.message} Nothing has been changed.`);
     } else {

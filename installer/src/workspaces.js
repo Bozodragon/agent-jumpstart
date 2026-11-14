@@ -124,7 +124,9 @@ export async function addToT3(workspaces, t3, open, { machine, frontEnd, log }) 
       () => say(`T3 Code is still starting, so adding ${top} is tried again in 2 seconds`),
     );
   const { result: ran, waited } = await frontEnd.busy(`Adding ${name} to T3 Code`, add, ({ result }) =>
-    result.code === 0 ? { text: `Added ${name} to T3 Code`, ok: true } : { text: `${name} isn't added to T3 Code yet`, ok: /already exists/i.test(result.output) },
+    result.code === 0
+      ? { text: `Added ${name} to T3 Code`, ok: true, done: ['Workspaces', `${name}, added to T3 Code`] }
+      : { text: `${name} isn't added to T3 Code yet`, ok: /already exists/i.test(result.output) },
   );
   if (stillStarting(ran)) {
     say(`${top} not added: T3 Code was still starting after ${waited / 1000} seconds`);

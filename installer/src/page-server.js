@@ -13,6 +13,7 @@
 //                            named `closing` event, after which nothing more comes and the page
 //                            stops listening (rather than keep reconnecting to a closed server)
 //   POST /<secret>/answer    an answer, `{ question, answer }`, passed to `answer`
+//   POST /<secret>/back      going back to an earlier question, `{ to }`, passed to `back`
 //   POST /<secret>/seen      `{ connection, event }`: that page has every event up to `event`
 //   POST /<secret>/stop      the person pressed Stop, passed to `stop`
 //   GET  /favicon.ico        answered with nothing, so the browser stops asking
@@ -106,12 +107,12 @@ async function readPage(folder) {
 
 /**
  * Starts the server. It's open, and listening, once this resolves.
- * @param {{ answer: AnswerHandler, stop?: () => void, page?: string }} options `answer` is given
- *   every answer a page posts; `stop`, each press of Stop; `page` is the built page's folder
- *   (`builtPage`, if not given).
+ * @param {{ answer: AnswerHandler, back?: AnswerHandler, stop?: () => void, page?: string }} options
+ *   `answer` is given every answer a page posts; `back`, every going back (refused, if not given);
+ *   `stop`, each press of Stop; `page` is the built page's folder (`builtPage`, if not given).
  * @returns {Promise<PageServer>}
  */
-export async function openPageServer({ answer, stop = () => {}, page = builtPage }) {
+export async function openPageServer({ answer, back, stop = () => {}, page = builtPage }) {
   const files = await readPage(page);
   const secret = randomBytes(24).toString('base64url');
   /** @type {{ id: number, data: string }[]} */
@@ -214,8 +215,9 @@ export async function openPageServer({ answer, stop = () => {}, page = builtPage
       } catch (error) {
         return reply(response, 400, { reason: `The answer couldn't be read: ${/** @type {Error} */ (error).message}.` });
       }
-      if (rest === 'answer') {
-        const { status, body } = await answer(posted);
+      if (rest === 'answer' || rest === 'back') {
+        const handler = rest === 'answer' ? answer : back;
+        const { status, body } = handler ? await handler(posted) : { status: 409, body: { ok: false, reason: "There's nothing to go back to." } };
         return reply(response, status, body);
       }
       if (rest === 'seen') {

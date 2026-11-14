@@ -67,7 +67,9 @@ export const defaultClaude = '2.1.400';
  */
 export async function makeHome(t, answers = {}, { googleDrive = 'signed-in' } = {}) {
   const root = await mkdtemp(join(tmpdir(), 'jumpstart-test-'));
-  t.after(() => rm(root, { recursive: true, force: true }));
+  // A run a test has just killed can still be closing its log, which Windows reports as ENOTEMPTY
+  // or EBUSY, so the removal retries for a moment rather than failing the test.
+  t.after(() => rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }));
   const home = join(root, 'home');
   const downloads = join(root, 'downloads');
   const answersFile = join(root, 'answers.json');

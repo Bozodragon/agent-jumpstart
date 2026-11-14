@@ -97,7 +97,7 @@
 // given, each time it changes.
 import { spawn } from 'node:child_process';
 import { EventEmitter } from 'node:events';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { access, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { basename, dirname, join, relative, resolve } from 'node:path';
 import { PassThrough } from 'node:stream';
@@ -409,24 +409,39 @@ function fakeMachine(folder, home, screen) {
   /** @type {{ patience?: number, appears?: { after: number, folders: string[] }[], outside?: number }} */
   const waiting = existsSync(join(folder, 'waiting.json')) ? JSON.parse(readFileSync(join(folder, 'waiting.json'), 'utf8')) : {};
   let waited = 0;
-  /** The browser's downloads under way, each with the counted time its address was opened and how much of it is written. @type {{ download: BrowserDownload, opened: number, written: number }[]} */
+  /**
+   * The browser's downloads under way, each with the counted time its address was opened, how
+   * much of it is written, and its bytes once it has begun.
+   * @type {{ download: BrowserDownload, opened: number, written: number, bytes?: Buffer }[]}
+   */
   const downloading = [];
-  /** @param {typeof downloading[number]} under @returns {Promise<boolean>} whether it's whole */
-  const grow = async (under) => {
+  /**
+   * Grows a download to where the counted time has got it. Called on every counted wait, so a
+   * download that takes minutes is grown hundreds of times in a run that has only the harness's
+   * 30 seconds of real time. Its bytes are read and its folder made once, the file is written only
+   * when it has grown, and all of it synchronously: each asynchronous file call is a round trip
+   * through Node's thread pool, which a loaded machine (the whole suite running at once) can make
+   * slow enough, hundreds of times over, to run out that real time.
+   * @param {typeof downloading[number]} under @returns {boolean} whether it's whole
+   */
+  const grow = (under) => {
     const { from, saves, after = 0, perSecond, stopsAt } = under.download;
     const elapsed = waited - under.opened - after;
     if (elapsed < 0) return false;
-    const bytes = await readFile(from);
+    const target = inside(home, saves);
+    if (!under.bytes) {
+      under.bytes = readFileSync(from);
+      mkdirSync(dirname(target), { recursive: true });
+    }
+    const { bytes } = under;
     const due = perSecond === undefined ? bytes.length : Math.floor((elapsed / 1000) * perSecond);
     const reached = Math.min(bytes.length, stopsAt ?? bytes.length, due);
-    const target = inside(home, saves);
-    await mkdir(dirname(target), { recursive: true });
     if (reached === bytes.length) {
-      await writeFile(target, bytes);
-      await rm(`${target}.crdownload`, { force: true });
+      writeFileSync(target, bytes);
+      rmSync(`${target}.crdownload`, { force: true });
       return true;
     }
-    if (reached !== under.written) await writeFile(`${target}.crdownload`, bytes.subarray(0, reached));
+    if (reached !== under.written) writeFileSync(`${target}.crdownload`, bytes.subarray(0, reached));
     under.written = reached;
     return false;
   };
@@ -439,7 +454,7 @@ function fakeMachine(folder, home, screen) {
       if (after <= before || after > waited) continue;
       for (const path of folders) await mkdir(inside(home, path), { recursive: true });
     }
-    for (const under of [...downloading]) if (await grow(under)) downloading.splice(downloading.indexOf(under), 1);
+    for (const under of [...downloading]) if (grow(under)) downloading.splice(downloading.indexOf(under), 1);
   };
 
   return {

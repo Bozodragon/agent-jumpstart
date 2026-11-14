@@ -1,5 +1,6 @@
 // The header's Stop button. It asks "Are you sure?" first, then tells the Installer, which throws
-// a Stop from whatever the run is waiting on (installer/src/installer-page.js); the page then shows
+// a Stop from whatever the run is waiting on, once a step that's installing something has
+// finished (installer/src/installer-page.js); the page then shows
 // what was done before it stopped. It's there until the run's last screen, and says "Stopping" in
 // every window once one of them has pressed it.
 import { useRef, useState } from 'react';
@@ -49,7 +50,7 @@ export function StopButton({ page, over }) {
           Are you sure?
         </h2>
         <p id="stop-text" className="lede small">
-          The Installer stops now. Anything it has already set up stays as it is, and you can run the same line again later to carry on.
+          The Installer stops as soon as it can: a step that's installing something finishes first. Anything it has already set up stays as it is, and you can run the same line again later to carry on.
         </p>
         <form method="dialog" className="actions">
           <button type="button" className="primary is-stop" onClick={stop}>

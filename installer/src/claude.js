@@ -81,11 +81,16 @@ export async function setUpClaude(context, ask) {
 
   // Claude Code takes a few seconds to answer each time, with nothing on screen of its own.
   const look = () =>
-    frontEnd.busy(`Checking ${entry.name}`, async () => {
-      const state = await lookAt(program, machine);
-      say(describe(state, program));
-      return state;
-    });
+    frontEnd.busy(
+      `Checking ${entry.name}`,
+      async () => {
+        const state = await lookAt(program, machine);
+        say(describe(state, program));
+        return state;
+      },
+      undefined,
+      { changesNothing: true },
+    );
 
   let state = await look();
   // A failed install is offered again, as often as it fails, each time the whole thing afresh.
@@ -317,7 +322,7 @@ async function install(entry, program, context, say) {
     },
     ({ there }) =>
       there
-        ? { text: `${entry.name} installed`, ok: true }
+        ? { text: `${entry.name} installed`, ok: true, done: [entry.name, 'Installed'] }
         : { text: `${entry.name} not installed: its installer didn't finish`, ok: false },
   );
   // The machine has logged what the script printed after a non-zero exit, and in a debug run.
@@ -387,6 +392,8 @@ async function ownRoute(entry, program, { places, machine, frontEnd, downloads, 
     },
     // A download that fails gives way quietly to Anthropic's script, with no mark of failure.
     (fetched) => ('file' in fetched ? { text: `${entry.name} downloaded`, ok: true } : { text: message }),
+    // On its own it changes nothing: a stop during it isn't kept waiting for 300 MB to come.
+    { changesNothing: true },
   );
   if (!('file' in fetched)) return { installed: false, reason: fetched.reason, fallBack: true };
   const { file } = fetched;
@@ -414,7 +421,7 @@ async function ownRoute(entry, program, { places, machine, frontEnd, downloads, 
       },
       (outcome) =>
         outcome.installed
-          ? { text: `${entry.name} installed`, ok: true }
+          ? { text: `${entry.name} installed`, ok: true, done: [entry.name, 'Installed'] }
           : outcome.fallBack
             ? { text: `Setting up ${entry.name}` }
             : { text: `${entry.name} not installed: ${outcome.reason}`, ok: false },
