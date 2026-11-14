@@ -115,11 +115,11 @@ export async function runOnPage(where, profile, extra = [], { internet } = {}) {
  * the next one a test is looking for.
  * @param {URL} events @param {{ lastEventId?: number }} [options]
  */
-export function connect(events, { lastEventId } = {}) {
+function connect(events, { lastEventId } = {}) {
   const abort = new AbortController();
   /** @type {PageEvent[]} */
   const seen = [];
-  /** @type {{ match: (event: PageEvent) => boolean, resolve: (event: PageEvent) => void, from: number }[]} */
+  /** @type {{ match: (event: PageEvent) => boolean, resolve: (event: PageEvent) => void }[]} */
   let waiting = [];
   let closed = false;
   /** The id the server gives this connection, once its stream has opened. @type {number | undefined} */
@@ -199,19 +199,17 @@ export function connect(events, { lastEventId } = {}) {
     /** Resolves when the stream ends, by the server's doing or the test's. */
     reading,
     /**
-     * The next event (counting from those already received, unless `fresh`) that matches.
+     * The first event that matches, counting from those already received.
      * @param {(event: PageEvent) => boolean} match
-     * @param {{ timeout?: number, fresh?: boolean }} [options]
+     * @param {{ timeout?: number }} [options]
      * @returns {Promise<PageEvent>}
      */
-    next(match, { timeout = 20_000, fresh = false } = {}) {
-      if (!fresh) {
-        const found = seen.find(match);
-        if (found) return Promise.resolve(found);
-      }
+    next(match, { timeout = 20_000 } = {}) {
+      const found = seen.find(match);
+      if (found) return Promise.resolve(found);
       return /** @type {Promise<PageEvent>} */ (
         Promise.race([
-          new Promise((resolve) => waiting.push({ match, resolve, from: seen.length })),
+          new Promise((resolve) => waiting.push({ match, resolve })),
           finished.then((error) => Promise.reject(error)),
           new Promise((_, reject) =>
             setTimeout(() => reject(new Error(`no matching event within ${timeout} ms; had:\n${seen.map((e) => JSON.stringify(e)).join('\n')}`)), timeout).unref(),
