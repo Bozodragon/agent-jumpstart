@@ -145,15 +145,24 @@ export async function readyGoogleDrive(profile, places, ask, drive, context) {
       (found) => found.status === 'signed-in' && found.folder !== undefined,
     );
   const message = 'Looking for My Drive, which can take a few seconds to appear after Google Drive signs in';
-  const { result, waited } = machine.patience > 0 ? await frontEnd.busy(message, look, ({ result }) => ({ text: 'Looked for My Drive', ok: result.status === 'signed-in' && result.folder !== undefined })) : await look();
-  const folder = result.status === 'signed-in' ? result.folder : undefined;
-  say(folder ? `My Drive found at ${folder} after ${waited / 1000} seconds` : `My Drive not found after ${waited / 1000} seconds, so where it is is asked`);
-  return { status: 'signed-in', folder };
+  // Looked for once a run: the questions asked again after going back don't wait for it again.
+  /** @type {Promise<string | undefined>} */
+  const looking =
+    context.once?.get('myDrive') ??
+    (machine.patience > 0 ? frontEnd.busy(message, look, ({ result }) => ({ text: 'Looked for My Drive', ok: result.status === 'signed-in' && result.folder !== undefined })) : look()).then(({ result, waited }) => {
+      const found = result.status === 'signed-in' ? result.folder : undefined;
+      say(found ? `My Drive found at ${found} after ${waited / 1000} seconds` : `My Drive not found after ${waited / 1000} seconds, so where it is is asked`);
+      return found;
+    });
+  context.once?.set('myDrive', looking);
+  return { status: 'signed-in', folder: await looking };
 }
 
 /**
  * `keepDownloads`: a debug run, which leaves the downloaded Drive installer in Downloads.
- * @typedef {{ machine: import('./machine.js').Machine, frontEnd: import('./front-end.js').FrontEnd, log: { write(line: string): void }, attended: boolean, keepDownloads?: boolean }} Context
+ * `once`: looks made once a run, however often the questions are asked (main asks them again
+ * after going back on the page), by name.
+ * @typedef {{ machine: import('./machine.js').Machine, frontEnd: import('./front-end.js').FrontEnd, log: { write(line: string): void }, attended: boolean, keepDownloads?: boolean, once?: Map<string, Promise<any>> }} Context
  */
 
 /** What's said when Software Center offers Drive, unless the profile words it its own way. */

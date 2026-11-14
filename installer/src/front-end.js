@@ -59,6 +59,20 @@
  */
 
 /**
+ * Going back during the questions. `main` asks every question up to the settings being written
+ * between `begin` and `fix`, and nothing there changes the laptop, except what's done in a page
+ * opened in the browser (Google Drive's installer, or Software Center), which `showPage` fixes
+ * the answers for. Until they're fixed, the question being waited at may throw GoBack
+ * (questions.js); `main` calls `begin` and asks the questions again from the start, and the front
+ * end answers those before the one gone back to as they were answered, without showing anything
+ * again, then asks the rest with the answers given before as their defaults.
+ * @typedef {object} Questions
+ * @property {() => void} begin The questions start, or start again after a GoBack.
+ * @property {() => void} fix Back and Change are gone for good: the questions are over, or
+ *   something has acted on the answers. A going back still on its way is refused.
+ */
+
+/**
  * @typedef {object} FrontEnd
  * @property {(title: string, links?: Links) => void} start The run's first words. `links` are
  *   the profile's, for a front end that shows them (the page does; the terminal doesn't).
@@ -91,6 +105,8 @@
  *   they can see and answer them directly. A sign-in whose steps differ picks its version by this.
  * @property {Screen} screen Where programs run on screen go (see openMachine).
  * @property {string} description One line saying which front end this is, for the log.
+ * @property {Questions} [questions] Back and Change, for a front end that offers them (the page).
+ *   The terminal doesn't: once a question is answered there, it stays answered.
  * @property {(text: string) => void} finish The run's last words. A second line, if there is
  *   one, lines up under the first.
  * @property {() => Promise<void>} close Called once, as the run ends, whichever way it ends.
