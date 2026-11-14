@@ -1,6 +1,8 @@
 // The lock that says an Installer is running, which the Bootstrap reads before it starts another
 // (see places.js's `pageAddress`): its first line is the Installer page's address, empty for a
-// run kept in the window, and its second the Installer's process id. Written and removed only here.
+// run kept in the window, and its second the Installer's process id. Within the Installer it's
+// written and removed only here; the Bootstrap (bootstrap/*.ps1) also reads it, and removes one
+// left by an Installer that has stopped.
 import { mkdir, rename, rm, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 
