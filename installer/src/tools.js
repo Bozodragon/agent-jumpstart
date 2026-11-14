@@ -87,24 +87,20 @@ export async function installTools(context) {
 export async function installTool(tool, { places, machine, frontEnd, downloads, keepDownloads, log }) {
   const say = (/** @type {string} */ line) => log.write(`${tool.name}: ${line}`);
   const folder = join(places.programs, tool.install.folder);
-  const marker = join(folder, installedMarker);
   /** @type {Command | undefined} */
   let here;
   try {
-    here = await commandIn(tool, folder);
-    const ours = await exists(marker);
-    if (here && !ours) {
+    const found = await locate(tool, { places, machine });
+    if (found.onPath) {
+      say(`found on the PATH at ${found.onPath.join(', ')}`);
+      return await leaveTheirs(tool, found.command, found.onPath[0], { machine, frontEnd, say });
+    }
+    here = found.command;
+    if (here && !found.ours) {
       say(`${folder} holds it, but the installer didn't put it there`);
       return await leaveTheirs(tool, here, folder, { machine, frontEnd, say });
     }
-    if (!here && !ours) {
-      // A tool only the installer runs (no PATH entry) is always its own copy.
-      const name = basename(tool.install.check);
-      const elsewhere = tool.install.path.length === 0 ? [] : (await machine.findOnPath(name)).filter((found) => !isInside(found, folder));
-      if (elsewhere.length > 0) {
-        say(`found on the PATH at ${elsewhere.join(', ')}`);
-        return await leaveTheirs(tool, { file: join(elsewhere[0], name), args: [] }, elsewhere[0], { machine, frontEnd, say });
-      }
+    if (!here && !found.ours) {
       if (await holdsAnything(folder)) {
         say(`${folder} holds other things, not ${tool.install.check}, and the installer didn't put them there, so it's left as it is`);
         throw new NotInstalled(`${folder} already holds something else`);
@@ -131,13 +127,28 @@ export async function installTool(tool, { places, machine, frontEnd, downloads, 
  * @param {Pick<Context, 'places' | 'machine'>} context
  * @returns {Promise<Command | undefined>}
  */
-export async function findTool(tool, { places, machine }) {
+export async function findTool(tool, context) {
+  return (await locate(tool, context)).command;
+}
+
+/**
+ * Where a tool already is, the one rule installTool and findTool share: in its folder here
+ * (`ours` when the installer put it there), or, when that folder has none and the installer
+ * hasn't put it there, the person's own on the PATH (`onPath`: the folders that hold it, the
+ * first of them the one taken). A tool only the installer runs (no PATH entry) is always its own
+ * copy, so the PATH isn't looked at for it. Changes nothing.
+ * @param {import('./manifest.js').Tool} tool
+ * @param {Pick<Context, 'places' | 'machine'>} context
+ * @returns {Promise<{ command?: Command, ours: boolean, onPath?: undefined } | { command: Command, ours: false, onPath: string[] }>}
+ */
+async function locate(tool, { places, machine }) {
   const folder = join(places.programs, tool.install.folder);
-  const here = await commandIn(tool, folder);
-  if (here || (await exists(join(folder, installedMarker))) || tool.install.path.length === 0) return here;
+  const command = await commandIn(tool, folder);
+  const ours = await exists(join(folder, installedMarker));
+  if (command || ours || tool.install.path.length === 0) return { command, ours };
   const name = basename(tool.install.check);
-  const elsewhere = (await machine.findOnPath(name)).filter((found) => !isInside(found, folder));
-  return elsewhere.length > 0 ? { file: join(elsewhere[0], name), args: [] } : undefined;
+  const onPath = (await machine.findOnPath(name)).filter((found) => !isInside(found, folder));
+  return onPath.length > 0 ? { command: { file: join(onPath[0], name), args: [] }, ours: false, onPath } : { ours: false };
 }
 
 /**
