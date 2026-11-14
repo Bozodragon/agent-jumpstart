@@ -15,19 +15,27 @@ import { installerProcess, stateFolder } from './harness.js';
  */
 
 /**
+ * The names of the two files the Installer and the Bootstrap share, in the Installer's own folder
+ * in local AppData. The tests know them only as written here: the page tests look for them, and
+ * the Bootstrap's text checks look for them in the scripts.
+ */
+export const addressFileName = 'page-address.txt';
+export const connectedFileName = 'page-connected.txt';
+
+/**
  * The file the Installer writes the page's address to, in its own folder in local AppData, where
  * the Bootstrap looks for it. It's also the lock that says an Installer is running: its first line
  * is the address, its second the Installer's process id, and it's removed as the run ends.
  * @param {string} home
  */
-export const addressFile = (home) => join(stateFolder(home), 'page-address.txt');
+export const addressFile = (home) => join(stateFolder(home), addressFileName);
 
 /**
  * The file the Installer writes once a page has connected, holding that page's address, so the
  * Bootstrap knows it can close the window.
  * @param {string} home
  */
-export const connectedFile = (home) => join(stateFolder(home), 'page-connected.txt');
+export const connectedFile = (home) => join(stateFolder(home), connectedFileName);
 
 /**
  * Starts the real Installer with the page front end: `--home`, `--downloads` and no answers file.

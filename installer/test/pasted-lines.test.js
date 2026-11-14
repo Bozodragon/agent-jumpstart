@@ -5,9 +5,9 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
-import { basename, join } from 'node:path';
-import { findPlaces } from '../src/places.js';
+import { join } from 'node:path';
 import { repo } from './harness.js';
+import { addressFileName, connectedFileName } from './page-harness.js';
 
 const bootstrap = join(repo, 'bootstrap');
 const lines = { 'york.ps1': ['york', false], 'install.ps1': ['default', false], 'york-debug.ps1': ['york', true] };
@@ -109,8 +109,7 @@ const running = (text) => text.slice(text.indexOf("Write-Host 'Agent Jumpstart'"
 
 test("before it changes anything, the Bootstrap looks for a running Installer's lock, the Installer's own address file, and while its process runs reopens that page and does nothing else", async () => {
   const text = await bootstrapCode();
-  const places = findPlaces(join(repo, 'a-home'));
-  assert.match(text, new RegExp(`\\$addressFile = Join-Path \\$root '${basename(places.pageAddress).replace('.', '\\.')}'`));
+  assert.match(text, new RegExp(`\\$addressFile = Join-Path \\$root '${addressFileName.replace('.', '\\.')}'`));
   const body = running(text);
   const lockCheck = body.indexOf('if (Test-RunningInstaller) { return }');
   assert.ok(lockCheck >= 0, 'the lock is looked for');
@@ -162,8 +161,7 @@ test("the Bootstrap opens the address from the Installer's file as an app window
 
 test('once the page has connected, the Installer writes its address to the connected file, and the Bootstrap closes the window with its one exit', async () => {
   const text = await bootstrapCode();
-  const places = findPlaces(join(repo, 'a-home'));
-  assert.match(text, new RegExp(`\\$connectedFile = Join-Path \\$root '${basename(places.pageConnected).replace('.', '\\.')}'`));
+  assert.match(text, new RegExp(`\\$connectedFile = Join-Path \\$root '${connectedFileName.replace('.', '\\.')}'`));
   // The connected file names the page it's for, so one left by an earlier run is never taken for this one's.
   assert.match(text, /\$connected = \$address -and @\(Get-Content -LiteralPath \$connectedFile[^)]*\)\[0\] -eq \$address/);
   const [, block] = /\n\s*if \(\$connected\) \{\n([^}]*)\}/.exec(text) ?? [];
