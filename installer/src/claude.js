@@ -18,9 +18,11 @@
 // signed in. If it isn't, Claude Code's own sign-in runs in the person's window, reading a
 // pasted code from the window (nothing shows in the window as it's pasted, which the notice
 // says), while what it prints is kept for the log. The sign-in runs with BROWSER=explorer.exe,
-// for that run only, so Claude opens its page in the default browser by itself. A sign-in that
-// fails can be tried again, as often as it fails, or skipped for now, and the ending then says
-// how to finish. The signed-in email is what Jumpstart reads.
+// for that run only, so Claude opens its page in the default browser by itself. On the Installer
+// page, it runs piped instead, and the page shows its link and a box for the code; where its
+// local listener can't start, it runs again in a console window of its own (see `onThePage`).
+// A sign-in that fails can be tried again, as often as it fails, or skipped for now, and the
+// ending then says how to finish. The signed-in email is what Jumpstart reads.
 //
 // Claude Code isn't pinned: both routes install Anthropic's current release.
 import { createHash } from 'node:crypto';
@@ -118,12 +120,12 @@ export async function setUpClaude(context, ask) {
     // One rejected code ends Claude's sign-in, so a failed one is offered again, as often as it
     // fails. Each try is a fresh `claude auth login`, with a new link and code.
     for (;;) {
-      const { code, output } = await login.run();
+      const { code, output, reason: otherwise } = await login.run();
       for (const line of withoutWhatWasTyped(output)) say(`sign-in said: ${line}`);
       say(`sign-in finished with code ${code}`);
       state = await look();
       if (state.signedIn) break;
-      const reason = reasonFrom(output) ?? `${entry.name}'s sign-in ended with code ${code}`;
+      const reason = reasonFrom(output) ?? otherwise ?? `${entry.name}'s sign-in ended with code ${code}`;
       frontEnd.problem(reason);
       const choice = await ask.choose({
         key: 'claudeSignIn',
@@ -150,8 +152,10 @@ export async function setUpClaude(context, ask) {
 
 /**
  * Claude's sign-in: one try at it, with what's said before it. Either way it runs as `claude auth
- * login`, with BROWSER=explorer.exe for that run only, and what it prints comes back for the log.
- * @typedef {{ run: () => Promise<import('./machine.js').Ran> }} Login
+ * login`, with BROWSER=explorer.exe for that run only, and what it prints comes back for the log,
+ * with `reason`, why it didn't sign the person in, for a try whose output can't hold Claude's own
+ * (one in a window of its own).
+ * @typedef {{ run: () => Promise<import('./machine.js').Ran & { reason?: string }> }} Login
  */
 
 /** For BROWSER: Claude runs it with the address as its only argument, which opens the default browser. */
@@ -185,6 +189,13 @@ function inTheWindow(name, program, { machine, frontEnd }) {
 /**
  * On the page: Claude runs piped. Its paste-a-code link, taken from what it prints, goes to the
  * page with a box for the code, which the page writes into Claude's input.
+ *
+ * Piped, Claude can't take a pasted code without its local listener (the one the browser hands
+ * the sign-in back to), and fails at once with no link if that can't start, as on a laptop that
+ * blocks it: it offers its paste-a-code prompt in its place only when its input is a terminal.
+ * Then its sign-in runs again in a console window of its own, which is one, and the page says
+ * so, and what to do there. That laptop's listener stays blocked, so every try after it starts
+ * in a window too.
  * @param {string} name @param {string} program @param {import('./tools.js').Context} context @param {(line: string) => void} say
  * @returns {Login}
  */
@@ -202,25 +213,54 @@ function onThePage(name, program, { machine, frontEnd }, say) {
     `  ${bullet} If no tab opens, use the link below.`,
     `  ${bullet} If the page shows a code, copy it, then paste it into the box below.`,
   ].join('\n');
+  const title = `Sign in to ${name}`;
+  const inAWindow = [
+    `${name} can't sign you in from this page on this laptop, so a window has opened for its sign-in. If you can't see it, look for it on the taskbar.`,
+    '',
+    `  ${bullet} In that window, ${name} shows a link. Select it with the mouse, right-click to copy it, then paste it into your browser's address bar.`,
+    `  ${bullet} Sign in there. The page then shows a code. Copy it, then right-click in the window to paste it there. Nothing appears when you paste. Paste once, then press Enter.`,
+    `  ${bullet} The window closes by itself once you're signed in. ${frontEnd.comeBack('that window')} It carries on by itself.`,
+  ].join('\n');
+  let listenerBlocked = false;
   return {
     // Said before every try: it's the sign-in screen's explanation, and each try is a screen of its own.
-    run() {
-      frontEnd.notice(notice, `Sign in to ${name}`);
-      return frontEnd.signIn((show) => {
-        let shown = false;
-        return machine.runOnScreenAndKeep(program, authLogin.args, {
-          env: authLogin.env,
-          watch(printed) {
-            const link = pasteLinkIn(printed);
-            if (shown || link === undefined) return;
-            shown = true;
-            show({ link: { url: link, label: 'If no tab opens, use this link' }, codeBox: checkCode });
-          },
+    async run() {
+      if (!listenerBlocked) {
+        frontEnd.notice(notice, title);
+        const ran = await frontEnd.signIn((show) => {
+          let shown = false;
+          return machine.runOnScreenAndKeep(program, authLogin.args, {
+            env: authLogin.env,
+            watch(printed) {
+              const link = pasteLinkIn(printed);
+              if (shown || link === undefined) return;
+              shown = true;
+              show({ link: { url: link, label: 'If no tab opens, use this link' }, codeBox: checkCode });
+            },
+          });
         });
-      });
+        if (!listenerCouldntStart(ran.output)) return ran;
+        listenerBlocked = true;
+        for (const line of withoutWhatWasTyped(ran.output)) say(`sign-in said: ${line}`);
+        say(`sign-in finished with code ${ran.code}`);
+        say("its local listener couldn't start, and without it Claude takes a pasted code only in a terminal, so its sign-in runs in a window of its own");
+      }
+      frontEnd.notice(inAWindow, title);
+      const ran = await frontEnd.signIn(() => machine.runInItsOwnWindow(program, authLogin.args, { env: authLogin.env, title }));
+      return {
+        ...ran,
+        reason: ran.code === -1 ? `The window for ${name}'s sign-in couldn't be opened` : `${name}'s sign-in window closed before you were signed in`,
+      };
     },
   };
 }
+
+/**
+ * Whether `claude auth login` failed because its local listener couldn't start ("Login failed:
+ * Couldn't start the local listener that receives the browser sign-in. Try again.").
+ * @param {string} output
+ */
+const listenerCouldntStart = (output) => plainLines(output).some((line) => /Login failed:.*\blocal listener\b/i.test(line));
 
 /**
  * The paste-a-code address `claude auth login` prints ("If the browser didn't open, visit: …"),

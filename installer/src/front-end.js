@@ -18,7 +18,9 @@
  *   reads too.
  * @property {(child: import('node:child_process').ChildProcess) => void} attach Joins a program,
  *   just started with `stdio`, to the screen: whatever of it is piped is relayed. Called before
- *   the caller listens for the program closing.
+ *   the caller listens for the program closing. A program in a console window of its own (the
+ *   machine's `runInItsOwnWindow`) is attached too, as the cmd.exe that opened the window, so
+ *   the screen can end it and the window with it.
  * @property {(text: string) => void} write Shows text as a program on the screen would print it.
  *   For the fake machine, whose runs print their recorded output here.
  * @property {<T>(running: Promise<T>) => Promise<T>} [wait] How the run waits for a program on the

@@ -18,8 +18,13 @@
 //                                         and `input`, what its input was: `pipe` (the
 //                                         Installer's, as every program's is), or `inherit`
 //                                         (the person's window, for a program on the terminal's
-//                                         screen), and `typed`, the line a run that reads one
-//                                         was given (see `readsALine` below)
+//                                         screen), or `own window`, and `typed`, the line a run
+//                                         that reads one was given (see `readsALine` below).
+//                                         `ownWindow` is the title of the console window a run
+//                                         was given of its own (`runInItsOwnWindow`); what it
+//                                         prints goes to that window, not to the screen
+//                                         (its reply's output stands for what `start`
+//                                         complained of, if anything)
 //   <home>/fake-machine/pages.json        every address it was asked to open in the browser
 //   <home>/fake-machine/replies.json      written by a test: what a run returns, keyed by the
 //                                         file name, or the file name and its first arguments
@@ -78,9 +83,10 @@
 // CLI wouldn't find Git, and T3 Code, which reads PATH only when it starts, wouldn't find Node or
 // Claude Code. On the fake machine the two PATHs are machine-path.json and environment.json's.
 //
-// Every program the installer runs goes through `run`, `runHere`, `runOnScreen`, `runOnScreenAndKeep`
-// or `launch`, real or fake, so a debug run's log holds each one with its exit code and full output
-// (for `runOnScreen`, the command and code only: its output goes to the person's window; for
+// Every program the installer runs goes through `run`, `runHere`, `runOnScreen`, `runOnScreenAndKeep`,
+// `runInItsOwnWindow` or `launch`, real or fake, so a debug run's log holds each one with its exit
+// code and full output (for `runOnScreen` and `runInItsOwnWindow`, the command and code only: its
+// output goes to a window; for
 // `runOnScreenAndKeep`, the step that ran it logs what it printed), and every run's log holds
 // each `run` or `runHere` that failed (a code other than 0), with its output. Nothing else has
 // to log a program's command or output, with one exception: the Claude Code step also logs what
@@ -125,6 +131,15 @@ import { setTimeout as sleep } from 'node:timers/promises';
  *   for what it reads but not for what it prints, such as `claude auth login`, which reads a
  *   pasted code as a plain line and checks only that what it reads from is a terminal. Never
  *   throws: a program that couldn't start gives code -1 and the reason as its output.
+ * @property {(file: string, args: string[], how: WindowOptions & { title: string }) => Promise<Ran>} runInItsOwnWindow
+ *   Runs a console program in a visible console window of its own, titled `title`, and waits for
+ *   it to end (the window closes with it). That window is its input and output, so it counts as
+ *   in a terminal, and the person reads and answers it there: for the page, whose screen is no
+ *   terminal, when a program needs one (`claude auth login`'s paste-a-code prompt). Nothing it
+ *   prints passes through the Installer. It's still attached to the front end's screen, which
+ *   can end it (a Stop on the page ends it, and its window closes). Its `output` is only what
+ *   opening the window said, which is nothing unless that failed. Never throws: a window that
+ *   couldn't be opened gives code -1 and the reason as its output.
  * @property {(file: string, args: string[]) => Promise<void>} launch Starts a program, such as an
  *   app with a window, and leaves it running without waiting for it. Rejects if it couldn't start.
  * @property {(url: string) => Promise<void>} openPage Opens an address in the person's default
@@ -198,7 +213,7 @@ export async function keepTrying({ machine, every, patience = machine.patience }
  * What the real and the fake machine each supply: everything but running programs, the two
  * PATHs a program's PATH is rebuilt from, and how to start a program with an environment.
  * @typedef {object} Parts
- * @property {Omit<Machine, 'run' | 'runHere' | 'runOnScreen' | 'runOnScreenAndKeep' | 'launch'>} machine
+ * @property {Omit<Machine, 'run' | 'runHere' | 'runOnScreen' | 'runOnScreenAndKeep' | 'runInItsOwnWindow' | 'launch'>} machine
  * @property {() => Promise<PathSources>} pathSources
  * @property {(file: string, args: string[], env: NodeJS.ProcessEnv, how?: RunOptions) => Promise<Ran>} start
  *   `how.env` is the part of `env` that the run was given of its own, which the fake machine records.
@@ -206,6 +221,7 @@ export async function keepTrying({ machine, every, patience = machine.patience }
  *   `env` is the whole environment to start it with; `extra` is the part of it that a run was
  *   given of its own, which the fake machine records.
  * @property {(file: string, args: string[], env: NodeJS.ProcessEnv, extra?: Record<string, string>, watch?: WindowOptions['watch']) => Promise<Ran>} startOnScreenAndKeep
+ * @property {(file: string, args: string[], env: NodeJS.ProcessEnv, title: string, extra?: Record<string, string>) => Promise<Ran>} startInItsOwnWindow
  * @property {(file: string, args: string[], env: NodeJS.ProcessEnv) => Promise<void>} startAndLeave
  */
 
@@ -255,7 +271,16 @@ export function openMachine(places, log, screen) {
     log.detail("  (what it printed went to the person's window, and is logged by the step that ran it)");
     return ran;
   };
-  const { machine, pathSources, start, startOnScreen, startOnScreenAndKeep, startAndLeave } = places.fakeMachine
+  // Its own window shows what it prints, so only the command and code are logged here.
+  /** @param {Machine['runInItsOwnWindow']} run @returns {Machine['runInItsOwnWindow']} */
+  const loggedInItsOwnWindow = (run) => async (file, args, how) => {
+    log.detail(`Running in a window of its own: ${commandLine(file, args)}${withEnv(how)}`);
+    const ran = await waitOnScreen(run(file, args, how));
+    log.detail(`Ran: ${basename(file)} (code ${ran.code})`);
+    log.detail(ran.output.trim() ? ran.output.trimEnd().split(/\r?\n/).map((line) => `  | ${line}`).join('\n') : '  (what it printed went to its own window, not the log)');
+    return ran;
+  };
+  const { machine, pathSources, start, startOnScreen, startOnScreenAndKeep, startInItsOwnWindow, startAndLeave } = places.fakeMachine
     ? fakeMachine(places.fakeMachine, places.home, screen)
     : realMachine(logged((file, args) => runProgram(file, args)), screen);
   /** @type {string | undefined} */
@@ -278,6 +303,9 @@ export function openMachine(places, log, screen) {
     runOnScreen: loggedOnScreen(async (file, args, how) => startOnScreen(file, args, { ...(await environment()), ...how?.env }, how?.env)),
     runOnScreenAndKeep: loggedOnScreenAndKept(async (file, args, how) =>
       startOnScreenAndKeep(file, args, { ...(await environment()), ...how?.env }, how?.env, how?.watch),
+    ),
+    runInItsOwnWindow: loggedInItsOwnWindow(async (file, args, how) =>
+      startInItsOwnWindow(file, args, { ...(await environment()), ...how.env }, how.title, how.env),
     ),
     async launch(file, args) {
       log.detail(`Starting, without waiting for it: ${commandLine(file, args)}`);
@@ -476,6 +504,15 @@ function fakeMachine(folder, home, screen) {
       screen.write(ran.output);
       return ran;
     },
+    // Attached to the screen as the real one is (through a stand-in for cmd.exe, with nothing to
+    // write to), so the screen knows it's running; what it prints is its own window's.
+    async startInItsOwnWindow(file, args, env, title, extra) {
+      const standIn = Object.assign(new EventEmitter(), { stdin: null, stdout: null, stderr: null });
+      screen.attach(/** @type {any} */ (standIn));
+      const ran = await reply(file, args, { file, args, path: env.Path ?? '', ...recordOf(extra), ownWindow: title, input: 'own window' });
+      standIn.emit('close', ran.code);
+      return ran;
+    },
     async startAndLeave(file, args, env) {
       const { code, output } = await reply(file, args, { file, args, path: env.Path ?? '', leftRunning: true, input: inputOf(leftRunning) });
       if (code === -1) throw new Error(output || `${basename(file)} couldn't be started`);
@@ -484,7 +521,7 @@ function fakeMachine(folder, home, screen) {
 
   /**
    * @param {string} file @param {string[]} args
-   * @param {{ file: string, args: string[], path: string, env?: Record<string, string>, onScreen?: boolean, leftRunning?: boolean, input: string, found?: string[], typed?: string }} record
+   * @param {{ file: string, args: string[], path: string, env?: Record<string, string>, onScreen?: boolean, leftRunning?: boolean, ownWindow?: string, input: string, found?: string[], typed?: string }} record
    * @param {RunOptions['onOutput']} [onOutput] given the reply's output as the run starts
    * @param {(found: Reply) => Promise<void>} [whileRunning] what the program does once it has
    *   started, before it returns; what it adds to the record is recorded too
@@ -747,12 +784,56 @@ function realMachine(loggedRun, screen) {
         child.once('close', (code) => resolve({ code: code ?? -1, output }));
       });
     },
+    startInItsOwnWindow(file, args, env, title) {
+      // A file that isn't there would make `start` ask Windows to open it, which can show a dialog.
+      if (!existsSync(file)) return Promise.resolve({ code: -1, output: `${file} isn't there` });
+      const how = inItsOwnWindow(file, args, title);
+      if ('refused' in how) return Promise.resolve({ code: -1, output: how.refused });
+      return new Promise((resolve) => {
+        let output = '';
+        // cmd.exe shares the Installer's console, hidden on the page, as every program on the
+        // screen does, so nothing flashes; only the window `start` opens is seen. Its own output
+        // is only what `start` says if it can't open it.
+        const child = spawn(how.file, how.args, { ...how.options, env, stdio: waitedFor });
+        for (const from of [child.stdout, child.stderr]) {
+          from?.setEncoding('utf8');
+          from?.on('data', (/** @type {string} */ chunk) => (output += chunk));
+        }
+        screen.attach(child);
+        child.once('error', (error) => resolve({ code: -1, output: error.message }));
+        child.once('close', (code) => resolve({ code: code ?? -1, output }));
+      });
+    },
     startAndLeave(file, args, env) {
       const how = startable(file, args);
       if ('refused' in how) return Promise.reject(new Error(how.refused));
       return leave(how.file, how.args, { ...how.options, env });
     },
   };
+}
+
+/**
+ * How to run a program in a console window of its own and wait for it: cmd.exe's `start /wait`.
+ * Node can't open one itself: `detached` leaves a console program with no console at all, and
+ * otherwise it shares the Installer's, which is hidden on the page. `start` gives it a new
+ * console, shown as any new window is (in Windows Terminal, where that's the default terminal),
+ * titled `title`, and `/wait` waits for the program, not for anything it leaves running. Alone,
+ * `cmd /c start /wait` exits 0 whatever the program's code, so the line ends by passing that on
+ * (`!errorlevel!`, with `/v:on`). The line is quoted for cmd and passed as it is: anything cmd
+ * would still expand inside quotes, `^` among them with `/v:on`, is refused rather than escaped.
+ * Checked on Windows 11 from a Node started hidden: the window opened, its program's input and
+ * output were a terminal, its exit code came back, and ending cmd.exe's tree closed the window.
+ * @param {string} file @param {string[]} args @param {string} title
+ * @returns {{ file: string, args: string[], options: import('node:child_process').SpawnOptions } | { refused: string }}
+ */
+function inItsOwnWindow(file, args, title) {
+  const unsafe = [title, file, ...args].find((arg) => /["%!^\r\n]/.test(arg));
+  if (unsafe !== undefined) return { refused: `can't pass ${unsafe} to a window of its own safely` };
+  const program = [file, ...args].map((arg, index) => (index === 0 || arg === '' || /[\s&|<>(),;=]/.test(arg) ? `"${arg}"` : arg)).join(' ');
+  const line = `start "${title}" /wait ${program} & exit !errorlevel!`;
+  // /d skips AutoRun commands; /s with the outer quotes keeps the line exactly as built.
+  const cmd = process.env.ComSpec ?? system32('cmd.exe');
+  return { file: cmd, args: ['/d', '/v:on', '/s', '/c', `"${line}"`], options: { windowsVerbatimArguments: true } };
 }
 
 /**

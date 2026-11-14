@@ -164,6 +164,104 @@ test("a code that isn't all of Claude's code is turned down on the page, with th
   assert.equal(JSON.stringify(page.events).includes('a1B2c3'), false);
 });
 
+/**
+ * What `claude auth login` prints, piped, when its local listener can't start (a laptop that
+ * blocks it): no link, only its reason, on stderr, and it exits 1. Taken from claude.exe 2.1.325.
+ */
+const listenerBlocked = {
+  code: 1,
+  output: "Login failed: Couldn't start the local listener that receives the browser sign-in. Try again. Run with --debug for the underlying error.\n",
+};
+
+test("when Claude's local listener can't start, its sign-in opens in a window of its own, the page says so, and the run waits for that window, then checks the sign-in", async (t) => {
+  const { where, logins } = await aLaptopSignedOutOfClaude(t, {
+    status: [signedOut, signedIn],
+    // Piped, it fails at once; in its own window, the person pastes the code there.
+    login: [listenerBlocked, { code: 0 }],
+  });
+
+  const run = await runOnPage(where, 'york');
+  t.after(run.kill);
+  const page = run.connect();
+  await answerEverything(page, run.answer, { channel: 'stable' });
+  const result = await run.ended;
+
+  assert.equal(result.code, 0, result.stdout + result.stderr);
+  const [piped, inAWindow, ...more] = await logins();
+  assert.equal(piped.input, 'pipe');
+  assert.equal(inAWindow?.ownWindow, 'Sign in to Claude Code', "a window of its own, with the sign-in's title");
+  assert.equal(inAWindow.input, 'own window', 'the window is its input, so Claude offers its own paste-a-code prompt there');
+  assert.deepEqual(inAWindow.env, { BROWSER: 'explorer.exe' });
+  assert.deepEqual(more, []);
+  // The second sign-in screen is the window's: its notice says a window has opened, what to do in
+  // it, and to come back to the page; it has no link and no code box, since Claude shows those there.
+  const [, windowSignIn] = page.events.filter((event) => event.type === 'signIn');
+  assert.ok(windowSignIn, 'the window has a sign-in screen of its own');
+  const notice = page.events.filter((event) => event.id < windowSignIn.id).at(-1);
+  assert.equal(notice?.type, 'notice');
+  assert.match(notice.text, /a window has opened for its sign-in/);
+  assert.match(notice.text, /come back to the Installer page/);
+  assert.deepEqual(page.events.filter((event) => event.type === 'signInShows' && event.signIn === windowSignIn.id), []);
+  assert.ok(page.events.some((event) => event.type === 'signInEnded' && event.signIn === windowSignIn.id));
+  assert.equal(page.events.some((event) => event.type === 'question' && event.key === 'claudeSignIn'), false, 'no Try again or Skip for now');
+  assert.ok(page.events.some((event) => event.type === 'summary' && event.rows.some((/** @type {[string, string]} */ [label, value]) => label === 'Claude Code' && /signed in as jo\.bloggs/.test(value))));
+  const log = (await readOnlyLog(where.home)).text;
+  assert.ok(log.includes("Claude Code: sign-in said: Login failed: Couldn't start the local listener"), log);
+  assert.match(log, /Claude Code: .*window of its own/);
+});
+
+test("a window sign-in that closes before Claude is signed in says so, with Try again or Skip for now, and Try again opens the window again, explained, with no try on the page first", async (t) => {
+  const { where, logins } = await aLaptopSignedOutOfClaude(t, {
+    status: [signedOut, signedOut, signedIn],
+    login: [listenerBlocked, { code: 1 }, { code: 0 }],
+  });
+
+  const run = await runOnPage(where, 'york');
+  t.after(run.kill);
+  const page = run.connect();
+  await answerEverything(page, run.answer, { channel: 'stable', claudeSignIn: 'again' });
+  const result = await run.ended;
+
+  assert.equal(result.code, 0, result.stdout + result.stderr);
+  assert.deepEqual(
+    (await logins()).map((login) => login.input),
+    ['pipe', 'own window', 'own window'],
+    "the listener stays blocked, so the second try is in a window from the start",
+  );
+  const question = page.events.find((event) => event.type === 'question' && event.key === 'claudeSignIn');
+  assert.ok(question, 'Try again or Skip for now was asked');
+  const before = page.events.filter((event) => event.id < question.id).at(-1);
+  assert.deepEqual([before?.type, before?.text], ['problem', "Claude Code's sign-in window closed before you were signed in"]);
+  const signIns = page.events.filter((event) => event.type === 'signIn');
+  assert.equal(signIns.length, 3);
+  for (const signIn of signIns.slice(1)) {
+    const notice = page.events.filter((event) => event.id < signIn.id).at(-1);
+    assert.match(notice?.text ?? '', /a window has opened/, 'each window is explained');
+  }
+});
+
+test("Stop, pressed while Claude's sign-in window is open, ends the run at once, without waiting for the window", async (t) => {
+  const { where } = await aLaptopSignedOutOfClaude(t, {
+    status: [signedOut],
+    // The person would still be in the window long after the Stop.
+    login: [listenerBlocked, { code: 0, takes: 30_000 }],
+  });
+
+  const run = await runOnPage(where, 'york');
+  t.after(run.kill);
+  const page = run.connect();
+  answerEverything(page, run.answer, { channel: 'stable' }).catch(() => {});
+  const notice = await page.next((event) => event.type === 'notice' && /a window has opened/.test(event.text));
+  await page.next((event) => event.type === 'signIn' && event.id > notice.id);
+  const pressed = performance.now();
+  assert.equal((await run.stop()).status, 200);
+  const result = await run.ended;
+
+  assert.ok(performance.now() - pressed < 15_000, 'the run ended without waiting for the window');
+  assert.equal(result.code, 1, result.stdout + result.stderr);
+  assert.equal((await page.next((event) => event.type === 'problem')).text, 'Stopped at your request.');
+});
+
 /** What `gh auth login --web --clipboard` prints to stderr when it isn't in a terminal, then once it's done. */
 const ghLines = [
   '! First copy your one-time code: 3A4B-7C8D',
