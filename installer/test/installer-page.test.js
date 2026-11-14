@@ -254,7 +254,15 @@ test("the page's server refuses a wrong secret and a wrong Host, answers /favico
   assert.match(policy, /default-src 'none'/);
   for (const kind of ['script-src', 'style-src', 'font-src', 'connect-src']) assert.match(policy, new RegExp(`${kind} 'self'(;|$)`), kind);
   const named = [...index.body.matchAll(/(?:src|href)="([^"]+)"/g)].map((match) => match[1]);
-  assert.deepEqual(named.sort(), ['app.js', 'style.css']);
+  assert.deepEqual(named.sort(), ['app.js', 'icon.svg', 'style.css']);
+  // The window's icon (its title bar and taskbar, as an app window shows the page's icon) is the
+  // Installer's own, the header's >_ mark, not the browser's globe.
+  assert.match(index.body, /<link rel="icon" href="icon.svg" type="image\/svg\+xml">/);
+  const icon = await run.request(`${secret}icon.svg`);
+  assert.equal(icon.headers['content-type'], 'image/svg+xml');
+  assert.match(icon.body, /^<svg [^>]*xmlns="http:\/\/www.w3.org\/2000\/svg"/);
+  assert.match(icon.body, /d="M4 17l6-6-6-6"/, 'the > of the mark');
+  assert.doesNotMatch(icon.body, /<script|href=|url\(/i, 'an icon that loads or runs nothing');
   const style = await run.request(`${secret}style.css`);
   const fonts = [...style.body.matchAll(/url\("([^"]+)"\)/g)].map((match) => match[1]);
   assert.ok(fonts.length >= 4, style.body);

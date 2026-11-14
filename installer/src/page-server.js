@@ -6,7 +6,7 @@
 // second window rebuilds the same screen; and it hands each answer a page posts to whoever opened
 // it (the page asker, installer-page.js).
 //
-//   GET  /<secret>/          the page (index.html), and its files beside it (app.js, fonts/...)
+//   GET  /<secret>/          the page (index.html), and its files beside it (app.js, icon.svg, fonts/...)
 //   GET  /<secret>/events    the event stream: first a named `connection` event, `{ connection,
 //                            before }` (how many events the run had sent by then), then every
 //                            event so far, then each as it's sent; and once the run is over, a
@@ -16,7 +16,8 @@
 //   POST /<secret>/back      going back to an earlier question, `{ to }`, passed to `back`
 //   POST /<secret>/seen      `{ connection, event }`: that page has every event up to `event`
 //   POST /<secret>/stop      the person pressed Stop, passed to `stop`
-//   GET  /favicon.ico        answered with nothing, so the browser stops asking
+//   GET  /favicon.ico        answered with nothing, so the browser stops asking: the page names its
+//                            own icon, under the secret path like its other files
 //
 // The page's files are read into memory as it opens, so nothing can change them under a running
 // Installer, and the page may load nothing from anywhere else (its Content-Security-Policy says so).

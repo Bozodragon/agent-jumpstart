@@ -19,7 +19,7 @@ test("the build ships the Installer page's bundle and its fonts, and none of Rea
   await run(tar, ['-xf', join(out, 'installer.zip'), '-C', out]);
 
   const page = join(out, 'installer', 'page', 'built');
-  assert.deepEqual((await readdir(page)).sort(), ['app.js', 'fonts', 'index.html', 'style.css']);
+  assert.deepEqual((await readdir(page)).sort(), ['app.js', 'fonts', 'icon.svg', 'index.html', 'style.css']);
   assert.deepEqual((await readdir(join(page, 'fonts'))).sort(), [
     'instrument-sans-latin-400-normal.woff2',
     'instrument-sans-latin-500-normal.woff2',

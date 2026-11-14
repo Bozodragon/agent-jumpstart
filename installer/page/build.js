@@ -2,7 +2,7 @@
 // Builds the Installer page into installer/page/built, which the Installer serves
 // (installer/src/page-server.js) and bootstrap/build.js ships in installer.zip:
 //
-//   index.html, style.css  copied as they are
+//   index.html, style.css, icon.svg  copied as they are (icon.svg: the window's icon, the >_ mark)
 //   app.js                 the page's code (app.js and what it imports, React among it), bundled
 //                          by esbuild into one file
 //   fonts/*.woff2          Instrument Sans and JetBrains Mono (OFL), from their @fontsource
@@ -49,7 +49,7 @@ export async function buildPage(out = builtFolder) {
     legalComments: 'none',
     logLevel: 'warning',
   });
-  for (const name of ['index.html', 'style.css']) await copyFile(join(here, name), join(out, name));
+  for (const name of ['index.html', 'style.css', 'icon.svg']) await copyFile(join(here, name), join(out, name));
   for (const font of fonts) await copyFile(join(repo, 'node_modules', '@fontsource', font), join(out, 'fonts', font.split('/').at(-1) ?? font));
   return out;
 }
