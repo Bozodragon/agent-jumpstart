@@ -779,45 +779,27 @@ function realMachine(loggedRun, screen) {
     startOnScreenAndKeep(file, args, env, extra, watch) {
       const how = startable(file, args);
       if ('refused' in how) return Promise.resolve({ code: -1, output: how.refused });
-      return new Promise((resolve) => {
-        let output = '';
-        // On the terminal's screen, the window stays the program's input, so its prompt reads what
-        // the person types (a paste shows nothing in the window, and nothing passes through the
-        // installer); what it prints is passed on to the window as it comes, and kept. On the
-        // page's, its input is a pipe the page's code box writes to. Decoded as it comes, so a
-        // character split between two chunks isn't broken.
-        const child = spawn(how.file, how.args, { ...how.options, env, stdio: screen.stdio(true) });
-        for (const from of [child.stdout, child.stderr]) {
-          from?.setEncoding('utf8');
-          from?.on('data', (/** @type {string} */ chunk) => {
-            output += chunk;
-            watch?.(output);
-          });
-        }
-        screen.attach(child);
-        child.once('error', (error) => resolve({ code: -1, output: error.message }));
-        child.once('close', (code) => resolve({ code: code ?? -1, output }));
-      });
+      // On the terminal's screen, the window stays the program's input, so its prompt reads what
+      // the person types (a paste shows nothing in the window, and nothing passes through the
+      // installer); what it prints is passed on to the window as it comes, and kept. On the
+      // page's, its input is a pipe the page's code box writes to.
+      const child = spawn(how.file, how.args, { ...how.options, env, stdio: screen.stdio(true) });
+      const ran = collect(child, (_, printed) => watch?.(printed));
+      screen.attach(child);
+      return ran;
     },
     startInItsOwnWindow(file, args, env, title) {
       // A file that isn't there would make `start` ask Windows to open it, which can show a dialog.
       if (!existsSync(file)) return Promise.resolve({ code: -1, output: `${file} isn't there` });
       const how = inItsOwnWindow(file, args, title);
       if ('refused' in how) return Promise.resolve({ code: -1, output: how.refused });
-      return new Promise((resolve) => {
-        let output = '';
-        // cmd.exe shares the Installer's console, hidden on the page, as every program on the
-        // screen does, so nothing flashes; only the window `start` opens is seen. Its own output
-        // is only what `start` says if it can't open it.
-        const child = spawn(how.file, how.args, { ...how.options, env: { ...env, ...how.env }, stdio: waitedFor });
-        for (const from of [child.stdout, child.stderr]) {
-          from?.setEncoding('utf8');
-          from?.on('data', (/** @type {string} */ chunk) => (output += chunk));
-        }
-        screen.attach(child);
-        child.once('error', (error) => resolve({ code: -1, output: error.message }));
-        child.once('close', (code) => resolve({ code: code ?? -1, output }));
-      });
+      // cmd.exe shares the Installer's console, hidden on the page, as every program on the
+      // screen does, so nothing flashes; only the window `start` opens is seen. Its own output
+      // is only what `start` says if it can't open it.
+      const child = spawn(how.file, how.args, { ...how.options, env: { ...env, ...how.env }, stdio: waitedFor });
+      const ran = collect(child);
+      screen.attach(child);
+      return ran;
     },
     startAndLeave(file, args, env) {
       const how = startable(file, args);
@@ -884,15 +866,26 @@ function startable(file, args) {
 function runProgram(file, args, env = process.env, { onOutput } = {}) {
   const how = startable(file, args);
   if ('refused' in how) return Promise.resolve({ code: -1, output: how.refused });
+  const child = spawn(how.file, how.args, { ...how.options, env, windowsHide: true, stdio: waitedFor });
+  return collect(child, (chunk) => onOutput?.(chunk));
+}
+
+/**
+ * What a program prints on stdout and stderr, kept as one text, and how it ended. Decoded as it
+ * comes, so a character split between two chunks isn't broken. `onChunk` is given each piece
+ * as it comes, and all that has come so far.
+ * @param {import('node:child_process').ChildProcess} child
+ * @param {(chunk: string, printed: string) => void} [onChunk]
+ * @returns {Promise<Ran>}
+ */
+function collect(child, onChunk) {
   return new Promise((resolve) => {
     let output = '';
-    const child = spawn(how.file, how.args, { ...how.options, env, windowsHide: true, stdio: waitedFor });
-    // Decoded as it comes, so a character split between two chunks isn't broken.
     for (const from of [child.stdout, child.stderr]) {
       from?.setEncoding('utf8');
       from?.on('data', (/** @type {string} */ chunk) => {
         output += chunk;
-        onOutput?.(chunk);
+        onChunk?.(chunk, output);
       });
     }
     child.once('error', (error) => resolve({ code: -1, output: error.message }));
