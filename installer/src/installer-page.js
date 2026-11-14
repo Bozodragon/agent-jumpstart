@@ -54,8 +54,8 @@
 // program on the screen, which needs the page) about 10 minutes for a page to come back (a
 // reload, the Bootstrap reopening it, a second window), and stops the same way if none does.
 import { spawn } from 'node:child_process';
-import { mkdir, rename, rm, writeFile } from 'node:fs/promises';
-import { dirname, join } from 'node:path';
+import { join } from 'node:path';
+import { holdLock, writeWhole } from './lock.js';
 import { openPageServer } from './page-server.js';
 import { GoBack } from './questions.js';
 import { Stop } from './stop.js';
@@ -101,18 +101,6 @@ const finishWithin = 10 * 60_000;
  * and the answer.
  * @typedef {{ id: number, key?: string, kind: string, answer: unknown }} Answered
  */
-
-/**
- * Writes a file under another name and renames it, so whoever looks for it (the Bootstrap, a
- * test) never reads it empty or half-written.
- * @param {string} path @param {string} text
- */
-export async function writeWhole(path, text) {
-  await mkdir(dirname(path), { recursive: true });
-  const writing = `${path}.${process.pid}.partial`;
-  await writeFile(writing, text);
-  await rename(writing, path);
-}
 
 /**
  * Opens the page front end: starts the page's server and writes its address to `addressFile`,
@@ -284,7 +272,7 @@ export async function openInstallerPage({ addressFile, connectedFile, page }) {
       return { status: 200, body: { ok: true } };
     },
   });
-  await writeWhole(addressFile, `${server.address}\n${process.pid}\n`);
+  const lock = await holdLock(addressFile, server.address);
   // For the first page only: the Bootstrap waits for it once, and knows a page has connected only
   // from it, so a page counts as connected only once it's written.
   let connectedWritten = Promise.resolve();
@@ -607,7 +595,7 @@ export async function openInstallerPage({ addressFile, connectedFile, page }) {
       await Promise.all(ending);
       await server.close();
       await connectedWritten;
-      await rm(addressFile, { force: true });
+      await lock.release();
     },
   };
 }

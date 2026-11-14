@@ -21,7 +21,7 @@
 //
 // A fourth, for tests only, which the bootstrap never passes:
 //   --profiles <folder>   take profiles from this folder instead of the repo's
-import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { basename, dirname } from 'node:path';
 import { parseArgs } from 'node:util';
 import { openLog } from './log.js';
@@ -43,7 +43,8 @@ import { End, messageOf, Stop } from './stop.js';
 import { installTools, isRecord } from './tools.js';
 import { openTerminal } from './terminal.js';
 import { inWordsOrNone } from './text.js';
-import { openInstallerPage, writeWhole } from './installer-page.js';
+import { openInstallerPage } from './installer-page.js';
+import { holdLock } from './lock.js';
 import { setWindowTitle } from './window.js';
 import { addToT3, createWorkspaces } from './workspaces.js';
 
@@ -508,13 +509,13 @@ async function openFrontEnd(options, places) {
     // Someone at the window holds the lock too, with no page's address, so a second paste of the
     // line leaves this run be (and says so) rather than replacing the program under it.
     const terminal = await openTerminal();
-    await writeWhole(places.pageAddress, `\n${process.pid}\n`);
+    const lock = await holdLock(places.pageAddress);
     return {
       frontEnd: {
         ...terminal,
         async close() {
           await terminal.close();
-          await rm(places.pageAddress, { force: true });
+          await lock.release();
         },
       },
     };
