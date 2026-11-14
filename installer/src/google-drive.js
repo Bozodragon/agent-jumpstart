@@ -340,7 +340,8 @@ async function fromHostedInstaller(profile, places, offered, context) {
   const downloaded = await frontEnd.busy(
     downloading,
     (progress) => watchDownloads(folder, before, hosted, machine, progress),
-    (outcome) => (outcome.status === 'found' ? { text: "Google Drive's installer downloaded", ok: true } : { text: downloading, ok: false }),
+    // One that isn't found gives way quietly to Software Center: the line saying why is its only mark.
+    (outcome) => (outcome.status === 'found' ? { text: "Google Drive's installer downloaded", ok: true } : { text: downloading }),
     // The browser downloads it: a stop needn't wait to watch it.
     { changesNothing: true },
   );
@@ -385,7 +386,7 @@ async function fromHostedInstaller(profile, places, offered, context) {
       const { result: there } = await keepTrying({ machine, every: softwareCenterEvery, patience: installPatience }, () => programThere(places), (found) => found);
       return { code: ran.code, there };
     },
-    ({ there }) => (there ? { text: 'Google Drive is installed', ok: true, done: ['Google Drive', 'Installed'] } : { text: 'Installing Google Drive', ok: false }),
+    ({ there }) => (there ? { text: 'Google Drive is installed', ok: true, done: ['Google Drive', 'Installed'] } : { text: 'Installing Google Drive' }),
   );
   await tidy(downloaded.file);
   if (!install.there) {

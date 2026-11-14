@@ -157,6 +157,29 @@ for (const [what, options, line, logged] of failures) {
   });
 }
 
+/**
+ * A York run of `options` with its output made to look like a terminal's, so its busies draw and end as on a real screen.
+ * @param {import('node:test').TestContext} t @param {Parameters<typeof aYorkLaptopWithoutDrive>[1]} options
+ */
+async function inATerminal(t, options) {
+  const { where, machine, flags } = await aYorkLaptopWithoutDrive(t, options);
+  const args = ['--profile', 'york', ...flags, '--home', where.home, '--answers', where.answersFile, '--downloads', where.downloads];
+  // The fake internet only to make the output look like a terminal: nothing is fetched.
+  const result = await runInstaller(args, { internet: { folder: join(where.downloads, 'nowhere'), terminal: true } });
+  return { where, machine, result, drawings: result.stdout.split(/[\r\n]/).map((line) => line.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '')) };
+}
+
+for (const [what, options, line] of [failures[0], failures[4]]) {
+  test(`in a terminal, ${what} is said in its one line, with no failed mark on the busy before it`, async (t) => {
+    const { result, drawings } = await inATerminal(t, { ...options, answers: { softwareCenter: 'documents' } });
+
+    assert.equal(result.code, 0, result.stderr);
+    assert.equal(flowing(result.stdout).split(line).length - 1, 1, result.stdout);
+    const crossed = drawings.filter((drawing) => /^x {2}(Downloading Google Drive's installer|Installing Google Drive)/.test(drawing));
+    assert.deepEqual(crossed, [], result.stdout);
+  });
+}
+
 test('a slow download that keeps growing for minutes, after starting within a minute, finishes and is installed', async (t) => {
   // 4,000 bytes at 10 a second, starting after 50 seconds: over 7 minutes in all.
   const { where, machine, run } = await aYorkLaptopWithoutDrive(t, { browser: { after: 50_000, perSecond: 10 } });
