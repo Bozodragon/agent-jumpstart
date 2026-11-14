@@ -145,6 +145,10 @@ test('Stop, pressed while a step installs something, waits for it to finish, the
   assert.match(log.text, new RegExp(`Installer page: the run stops once this step is done: Installing ${line}`));
   assert.match(log.text, /Stopped: Stopped at your request\./);
   assert.match(log.text, new RegExp(`Done before it stopped: Skills: Installed ${line}`));
+  // And they're written down as the Installer's, so the next run updates them rather than leaving them be as the person's own.
+  const source = busy.message.replace(/^Installing .* from /, '');
+  const entry = (await readProfile('york')).skills.find((/** @type {{ source: string }} */ each) => each.source === source);
+  assert.deepEqual((await readSettings(where.home)).skillsInstalled, entry.names ?? [source.split('/').at(-1)]);
 });
 
 test("Stop, pressed while the last skills install, stops as that install ends: the steps after it, which make no call that waits at first, don't run", async (t) => {
@@ -168,6 +172,9 @@ test("Stop, pressed while the last skills install, stops as that install ends: t
   assert.doesNotMatch(log.text, /Written to settings: skillsInstalled/);
   assert.ok(!summary.rows.some((/** @type {[string, string]} */ [label]) => label === 'Memory'), JSON.stringify(summary.rows));
   assert.deepEqual(await machine.pagesOpened(), []);
+  // Every source's skills, the last one's too, are written down as the Installer's.
+  const all = (await readProfile('york')).skills.flatMap((/** @type {{ source: string, names?: string[] }} */ { source, names }) => names ?? [source.split('/').at(-1)]);
+  assert.deepEqual([...(await readSettings(where.home)).skillsInstalled].sort(), [...all].sort());
 });
 
 test("Stop, pressed while a skills install says it worked but leaves no skills, doesn't count them as installed", async (t) => {

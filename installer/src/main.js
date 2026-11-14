@@ -376,7 +376,23 @@ async function main() {
       log.write(`Skills: fullSkills has grown from "${earlier?.fullSkills}" to "${choices.fullSkills}", so ${fullSet} is added again`);
       delete installedFrom[fullSet];
     }
-    const skills = await installSkills(withFullSkills(profile, choices.fullSkills), ours, installedFrom, context);
+    // What the step has installed when a stop cuts it short is written down, as the step's end
+    // would have, so the next run updates those skills rather than leave them be as the person's.
+    const skillsSoFar = { installed: /** @type {string[]} */ ([]), sources: { ...installedFrom } };
+    /** @type {Awaited<ReturnType<typeof installSkills>>} */
+    let skills;
+    try {
+      skills = await installSkills(withFullSkills(profile, choices.fullSkills), ours, installedFrom, context, skillsSoFar);
+    } catch (error) {
+      if (error instanceof Stop && skillsSoFar.installed.length > 0) {
+        const skillsInstalled = [...new Set([...ours, ...skillsSoFar.installed])];
+        Object.assign(settings, { skillsInstalled });
+        if (Object.keys(skillsSoFar.sources).length > 0 || 'skillSources' in settings) settings.skillSources = skillsSoFar.sources;
+        await writeSettings(places.settings, settings);
+        log.write(`Written to settings, as the run stopped during the skills: skillsInstalled: ${JSON.stringify(skillsInstalled)}, skillSources: ${JSON.stringify(skillsSoFar.sources)}`);
+      }
+      throw error;
+    }
     /** @type {[string, string][]} */
     const skillsRows = skills.cli === undefined ? [] : [['Skills CLI', skills.cli]];
     skillsRows.push(['Skills', skills.line]);
