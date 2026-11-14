@@ -114,11 +114,14 @@ export async function installSkills(profile, ours, installedFrom, context, soFar
       const args = ['add', source, '-g', '-a', 'claude-code', '-y', ...(names ? ['-s', ...wanted] : [])];
       const what = `${wanted.length === 1 ? 'the skill' : `${wanted.length} skills`} from ${source}`;
       const command = [...program.args, ...args];
+      /** Whether its installer ran and said it worked, which a stop's record needs, as the step's end does. */
+      let worked = false;
       try {
         ran = await frontEnd.busy(
           `Installing ${what}`,
           async (_, output) => {
             const ran = await machine.run(program.file, command, { env: forceColor, onOutput: output });
+            worked = ran.code === 0;
             // Whether they're all there, which alone says they're installed, should the run stop now.
             const arrived = (await Promise.all(wanted.map((name) => exists(join(folder, name, 'SKILL.md'))))).every(Boolean);
             return { ...ran, arrived };
@@ -127,12 +130,14 @@ export async function installSkills(profile, ours, installedFrom, context, soFar
             code === 0 ? { text: `Installed ${what}`, ok: true, ...(arrived ? { done: /** @type {[string, string]} */ (['Skills', `Installed ${what}`]) } : {}) } : { text: `Couldn't install ${what}`, ok: false },
         );
       } catch (error) {
-        // A stop that waited for this source: what of it arrived is the Installer's, as it would have been.
+        // A stop that waited for this source: if its installer worked, what of it arrived is the
+        // Installer's, as it would have been. One that failed, or never ran, is recorded as nothing,
+        // so the next run adds it again.
         if (soFar) {
           const arrived = [];
-          for (const name of wanted) if (await exists(join(folder, name, 'SKILL.md'))) arrived.push(name);
+          if (worked) for (const name of wanted) if (await exists(join(folder, name, 'SKILL.md'))) arrived.push(name);
           soFar.installed.push(...arrived);
-          if (commit !== undefined && arrived.length === wanted.length) soFar.sources[source] = commit;
+          if (worked && commit !== undefined && arrived.length === wanted.length) soFar.sources[source] = commit;
           else delete soFar.sources[source];
         }
         throw error;

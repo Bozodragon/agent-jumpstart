@@ -18,12 +18,12 @@ let answers = { team: 'Marketing', aiExperience: 'first-time', codingExperience:
  * ms of real time to, so a test can act while that step is under way. After the skills, the run
  * walks through the connectors and waits for the person to say they're done.
  * @param {import('node:test').TestContext} t
- * @param {{ skillsTake?: number, replies?: Record<string, import('../src/machine.js').Reply | import('../src/machine.js').Reply[]>, claudeThere?: boolean, skillsArrive?: boolean, googleDrive?: import('./harness.js').GoogleDriveState }} [options] `replies`: more of the fake machine's.
+ * @param {{ skillsTake?: number, replies?: Record<string, import('../src/machine.js').Reply | import('../src/machine.js').Reply[]>, claudeThere?: boolean, skillsArrive?: boolean, skillsCode?: number, googleDrive?: import('./harness.js').GoogleDriveState }} [options] `replies`: more of the fake machine's.
  *   `googleDrive`: Google Drive for desktop's state, as makeHome takes it (signed in, unless this says otherwise).
  *   `claudeThere`: whether Claude Code is already installed (it is, unless this says not).
- *   `skillsArrive`: whether the skills CLI, which always says it worked, leaves the skills in place
+ *   `skillsArrive`: whether the skills CLI leaves the skills in place; `skillsCode`: what it exits with (0, that it worked, unless this says otherwise)
  */
-async function aLaptop(t, { skillsTake = 0, replies = {}, claudeThere = true, skillsArrive = true, googleDrive = 'signed-in' } = {}) {
+async function aLaptop(t, { skillsTake = 0, replies = {}, claudeThere = true, skillsArrive = true, skillsCode = 0, googleDrive = 'signed-in' } = {}) {
   const where = await makeHome(t, {}, { googleDrive });
   const profile = await readProfile('york');
   await supplyDownloads(where, ['skills']);
@@ -42,7 +42,7 @@ async function aLaptop(t, { skillsTake = 0, replies = {}, claudeThere = true, sk
   await machine.setMachinePath([theirs]);
   await machine.setReplies({
     ...cli.install,
-    [cli.key('add')]: { ...(skillsArrive ? { writes: skillFiles } : {}), ...(skillsTake > 0 ? { takes: skillsTake } : {}) },
+    [cli.key('add')]: { ...(skillsArrive ? { writes: skillFiles } : {}), ...(skillsTake > 0 ? { takes: skillsTake } : {}), ...(skillsCode === 0 ? {} : { code: skillsCode }) },
     'node.exe --version': { output: 'v26.12.1\r\n' },
     'git.exe --version': { output: 'git version 2.56.0.windows.4\n' },
     'gh.exe --version': { output: 'gh version 2.103.1 (2026-10-01)\n' },
@@ -193,6 +193,25 @@ test("Stop, pressed while a skills install says it worked but leaves no skills, 
 
   assert.equal(result.code, 1, result.stdout + result.stderr);
   assert.ok(!summary.rows.some((/** @type {[string, string]} */ [label]) => label === 'Skills'), JSON.stringify(summary.rows));
+});
+
+test("Stop, pressed while a skills install that fails, though its files arrive, doesn't write its skills down as the Installer's", async (t) => {
+  const { where } = await aLaptop(t, { skillsTake: 1_500, skillsCode: 1 });
+  const run = await runOnPage(where, 'york');
+  t.after(run.kill);
+  const page = run.connect();
+  await answerUntil(page, run, (event) => event.type === 'busy' && /^Installing .* skills? from /.test(event.message));
+
+  assert.equal((await run.stop()).status, 200);
+  await page.next((event) => event.type === 'summary' && event.title === 'Done before it stopped');
+  await page.seen(page.events.at(-1)?.id ?? 0);
+  const result = await run.ended;
+
+  assert.equal(result.code, 1, result.stdout + result.stderr);
+  // As the step's own end would have it: a source whose installer stopped isn't recorded, nor are its skills.
+  const settings = await readSettings(where.home);
+  assert.equal(settings.skillsInstalled, undefined, JSON.stringify(settings));
+  assert.equal(settings.skillSources, undefined, JSON.stringify(settings));
 });
 
 test("Stop, pressed while an install has hung, waits 10 minutes of counted time for it, then stops without it", async (t) => {
