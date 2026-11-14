@@ -203,8 +203,10 @@ export async function openInstallerPage({ addressFile, connectedFile, page }) {
         pass.push({ ...again, answer: checked.value });
         return checked.value;
       }
-      // Asked differently this time (something on the laptop changed meanwhile): from here, it's asked.
+      // Asked differently this time (something on the laptop changed meanwhile, such as Google
+      // Drive signed in): from here, it's asked, and the page takes off what it had from here.
       replay = [];
+      server.send({ type: 'back', to: again.id });
     }
     quiet = false;
     return new Promise((resolve, reject) => {
@@ -259,6 +261,8 @@ export async function openInstallerPage({ addressFile, connectedFile, page }) {
       if (!quiet) server.send({ type: 'step', text });
     },
     async busy(message, task, ended) {
+      // Going back, it was shown the first time through.
+      if (quiet) return task(() => {});
       const busy = server.send({ type: 'busy', message });
       let last = -Infinity;
       let shownReceived = -1;

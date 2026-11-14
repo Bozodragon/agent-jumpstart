@@ -297,7 +297,7 @@ async function main() {
       const choices = {
         ...(team === undefined ? {} : { team }),
         ...experience,
-        ...(await askQuestions(profile, places, ask, log, found, { machine, frontEnd, attended: !unattended, keepDownloads: options.debug })),
+        ...(await askQuestions(profile, places, ask, log, found, { machine, frontEnd, attended: !unattended, keepDownloads: options.debug, once })),
       };
       if (earlier) {
         const rows = await reusedRows(earlier, choices, reused, olderAnswers ? [] : hiddenFor(experience), options.downloads);
@@ -305,6 +305,8 @@ async function main() {
       }
       return { profile, foundT3, choices };
     };
+    /** Looks the questions make once a run, however often they're asked (see Reach). @type {Map<string, Promise<any>>} */
+    const once = new Map();
     /** @type {Awaited<ReturnType<typeof askEverything>> | undefined} */
     let asked;
     while (!asked) {

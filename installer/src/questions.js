@@ -137,8 +137,9 @@ const anotherFolder = 'another';
 /**
  * How the questions reach the laptop and the person beyond the asker: to look again for Google
  * Drive for desktop, to install it, and to wait for someone at the screen to get it ready.
- * `keepDownloads`: a debug run, which keeps the Drive installer it downloaded.
- * @typedef {{ machine: import('./machine.js').Machine, frontEnd: import('./front-end.js').FrontEnd, attended: boolean, keepDownloads?: boolean }} Reach
+ * `keepDownloads`: a debug run, which keeps the Drive installer it downloaded. `once`: looks made
+ * once a run however often the questions are asked (see google-drive.js's Context).
+ * @typedef {{ machine: import('./machine.js').Machine, frontEnd: import('./front-end.js').FrontEnd, attended: boolean, keepDownloads?: boolean, once?: Map<string, Promise<any>> }} Reach
  */
 
 /**

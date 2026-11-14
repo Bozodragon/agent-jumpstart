@@ -21,6 +21,7 @@ const labels = /** @type {Record<string, string>} */ ({
   workspacesLocation: 'Workspaces folder',
   softwareCenter: 'Google Drive',
   googleDriveReady: 'Google Drive',
+  withoutGoogleDrive: 'Google Drive',
   channel: 'T3 Code',
   github: 'GitHub',
   workspaces: 'Workspaces',
@@ -60,12 +61,14 @@ function inWords(question, value) {
 
 /**
  * The answers given so far on this page, the question being answered last: one row per question
- * of the setup's (numbered, as on its screen), each with Change while Back lasts.
+ * of the setup's (numbered, as on its screen), each with Change while Back lasts and the run is
+ * waiting at a question it can go back from (between questions, it couldn't).
  * @param {Page} page
  * @returns {Answer[]}
  */
 export function answers(page) {
-  const lasts = backLasts(page);
+  const waiting = page.screens.some((screen) => screen.kind === 'question' && screen.answer === undefined && screen.question.back === true);
+  const lasts = backLasts(page) && waiting;
   return page.screens
     .filter((screen) => screen.kind === 'question' && screen.number !== undefined)
     .map((screen) => {

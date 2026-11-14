@@ -4,7 +4,9 @@
 // standing, and every answer given before as the default.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { fakeMachine, fixtureProfiles, ghAlreadyInstalled, makeHome, readOnlyLog, readProfile, readSettings, runWith } from './harness.js';
+import { mkdir } from 'node:fs/promises';
+import { join } from 'node:path';
+import { fakeGoogleDrive, fakeMachine, fixtureProfiles, ghAlreadyInstalled, makeHome, readOnlyLog, readProfile, readSettings, runWith } from './harness.js';
 import { runOnPage } from './page-harness.js';
 
 /** @typedef {import('./page-harness.js').PageEvent} PageEvent */
@@ -224,4 +226,54 @@ test("once something in the questions acts on the laptop (Google Drive's install
   const fixed = await page.next((event) => event.type === 'fixed');
   assert.ok(fixed.id < opened.id, "Back was gone before the installer's page was opened");
   assert.equal((await back(ai.question)).status, 409);
+});
+
+test('a question no longer asked when going back (Google Drive signed in meanwhile) takes it and what followed off the page, so Back and Change from what is asked next still work', async (t) => {
+  const where = await makeHome(t, {}, { googleDrive: 'signed-out' });
+  const { page, answer, nextQuestion, back } = await onPage(t, where);
+
+  for (const [key, value] of [['team', 'Marketing'], ['aiExperience', 'confident'], ['codingExperience', 'work']]) await answer(key, value);
+  const top = await answer('topWorkspace', 'new');
+  // Asked to sign in to Google Drive, the person does, and says so.
+  await page.next((event) => event.type === 'question' && event.key === 'googleDriveReady');
+  await fakeGoogleDrive(where.home, 'signed-in');
+  const ready = await answer('googleDriveReady', 'again');
+  await answer('googleDriveFolder');
+  const channel = await answer('channel', 'nightly');
+  assert.equal((await nextQuestion()).key, 'github');
+
+  assert.equal((await back(channel.question)).status, 200);
+  // Drive is signed in now, so that question isn't asked: the page is told to take it off, and
+  // what followed it is asked again.
+  const folder = await nextQuestion();
+  assert.equal(folder.key, 'googleDriveFolder');
+  const dropped = page.events.filter((event) => event.type === 'back').map((event) => event.to);
+  assert.deepEqual(dropped, [channel.question, ready.question]);
+  // Back from here goes to the question before it on the page, and the run takes it.
+  const went = await back(top.question);
+  assert.equal(went.status, 200, JSON.stringify(went.body));
+  assert.equal((await nextQuestion()).key, 'topWorkspace');
+});
+
+test('going back past a long look for My Drive neither waits for it again nor shows it again', async (t) => {
+  const where = await makeHome(t, {}, { googleDrive: 'signed-in, no My Drive yet' });
+  await fakeMachine(where.home).setWaiting({ patience: 120_000 });
+  const { page, answer, nextQuestion, back, finish, run } = await onPage(t, where);
+
+  for (const [key, value] of [['team', 'Marketing'], ['aiExperience', 'confident'], ['codingExperience', 'work'], ['topWorkspace', 'new']]) await answer(key, value);
+  // Not found while the Installer looked, so it's asked for.
+  await mkdir(join(where.home, 'Drive folder'));
+  await answer('googleDriveFolder', join(where.home, 'Drive folder'));
+  const channel = await answer('channel', 'nightly');
+  assert.equal((await nextQuestion()).key, 'github');
+  const looks = () => page.events.filter((event) => event.type === 'busy' && /^Looking for My Drive/.test(event.message)).length;
+  assert.equal(looks(), 1);
+
+  assert.equal((await back(channel.question)).status, 200);
+  await answer('channel');
+  await finish();
+  assert.equal((await run.ended).code, 0);
+  assert.equal(looks(), 1);
+  const log = await readOnlyLog(where.home);
+  assert.equal(log.text.split('My Drive not found after 120 seconds').length - 1, 1, 'it waited for My Drive again');
 });

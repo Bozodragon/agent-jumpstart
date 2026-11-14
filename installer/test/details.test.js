@@ -152,3 +152,14 @@ test("the panel's other half is what's been set up so far, as it happens, and th
     worked: 2,
   });
 });
+
+test("Change is offered only while the run waits at a question, which it goes back from, and every question has a name", () => {
+  // Between questions (looking for My Drive), there's no question to go back from.
+  const between = play([team, answered(1, 'Marketing'), { type: 'busy', message: 'Looking for My Drive' }]);
+  assert.deepEqual(answers(between).map((answer) => answer.change), [false]);
+  const asking = play([team, answered(1, 'Marketing'), { type: 'busy', message: 'Looking for My Drive' }, { type: 'ended', busy: 3, text: 'Looked for My Drive', ok: false }, folder]);
+  assert.deepEqual(answers(asking).map((answer) => answer.change), [true, false]);
+
+  const drive = play([{ type: 'question', question: 1, kind: 'choose', key: 'withoutGoogleDrive', message: 'Use Documents?', options: [{ value: 'documents', label: 'Use Documents' }], initial: 'documents', back: true }]);
+  assert.equal(answers(drive)[0].label, 'Google Drive');
+});
