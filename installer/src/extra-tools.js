@@ -98,7 +98,7 @@ async function signIn(tool, program, extra, { machine, frontEnd, log }) {
     const told = extra.signInOnPage ?? plainly;
     // On the page it runs piped. It opens the browser itself, and prints the address it opened,
     // which still comes back to it by itself, so the page offers it in case no window opened.
-    frontEnd.notice([told, '', `If no window opens, use the link below. ${frontEnd.comeBack()} It carries on by itself.`].join('\n'), `Sign in to ${tool.name}`);
+    frontEnd.notice([told, '', `If no window opens, use the link below. ${frontEnd.comeBack()} It carries on by itself.`].join('\n'), `Sign in to ${extra.name ?? tool.name}`);
     const ran = await frontEnd.signIn((show) => {
       let shown = false;
       return machine.runOnScreenAndKeep(program.file, [...program.args, ...how.run], {

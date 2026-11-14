@@ -341,7 +341,8 @@ test("clasp's sign-in on the page: clasp opens the browser itself, and the addre
   const signIn = await page.next((event) => event.type === 'signIn');
   const notice = page.events.filter((event) => event.id < signIn.id).at(-1);
   assert.equal(notice?.type, 'notice');
-  assert.equal(notice?.title, 'Sign in to clasp');
+  // Named as its question names it, not by its program's name.
+  assert.equal(notice?.title, 'Sign in to Apps Script');
   const shown = page.events.filter((event) => event.type === 'signInShows' && event.signIn === signIn.id);
   assert.deepEqual(shown.map((event) => event.link?.url), [claspsLink]);
   assert.ok(shown.every((event) => event.code === undefined && event.codeBox === undefined));

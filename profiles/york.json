@@ -114,6 +114,7 @@
   "extraTools": [
     {
       "id": "apps-script",
+      "name": "Apps Script",
       "question": "Would you like the agent to be able to publish and manage Apps Script projects for you?",
       "default": true,
       "signIn": "A browser window will open. Choose your York Google account and allow what clasp asks for. Come back here when the page says \"Logged in!\".",

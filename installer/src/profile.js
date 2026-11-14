@@ -99,6 +99,8 @@ export const fullSkillsSizes = /** @type {const} */ (['no', 'finished', 'beta'])
  * installed only when it's ticked.
  * @typedef {object} ExtraTool
  * @property {string} id
+ * @property {string} [name] What the person knows it as, where that isn't its program's name (Apps
+ *   Script, not clasp): the Installer page heads its sign-in with it.
  * @property {string} question
  * @property {boolean} default
  * @property {string} [signIn] Said in the terminal before a tool's browser sign-in starts in the
