@@ -142,6 +142,10 @@ function connect(events, { lastEventId } = {}) {
 
   /** @param {PageEvent} event */
   const arrive = (event) => {
+    // No question, nor what a Done waits for, names a key in its own words: how to answer is the
+    // front end's to show (spec #92). Checked on what every page test's run sends.
+    const words = event.type === 'question' ? `${event.message ?? ''} ${event.what ?? ''}` : '';
+    if (/\bEnter\b/i.test(words)) failed(new Error(`a question the page was sent names a key: ${JSON.stringify(event)}`));
     seen.push(event);
     waiting = waiting.filter((wait) => {
       if (!wait.match(event)) return true;
