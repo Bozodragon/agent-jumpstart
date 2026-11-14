@@ -46,10 +46,11 @@
  * @typedef {Shared & { kind: 'question', question: Asked, number?: number, answer?: { value: unknown }, refused?: { answer: unknown, reason: string }, problem?: string, notice?: { title: string, text: string } }} QuestionScreen
  *   `problem` or `notice`: the call just before it, joined to it. `number`: which question this
  *   is, counting only the person's answers to the setup's questions (not Done, not Try again).
- * @typedef {Shared & { kind: 'signIn', notice?: { title: string, text: string }, link?: { url: string, label: string }, code?: string, codeBox?: number, sent?: boolean, refused?: string, over?: boolean }} SignInScreen
+ * @typedef {Shared & { kind: 'signIn', notice?: { title: string, text: string }, link?: { url: string, label: string }, code?: string, codeBox?: number, sent?: boolean, refused?: { reason: string, by: number }, over?: boolean }} SignInScreen
  *   A sign-in in the browser, joined to the notice before it, which explains it: the link and
  *   code the person needs, as the program prints them, and a box for a code, posted as an answer
- *   to `codeBox` (`sent` once it's gone to the program, `refused` with why it wasn't taken).
+ *   to `codeBox` (`sent` once it's gone to the program, `refused` with why the last code wasn't
+ *   taken, `by` the event that said so, so the same reason twice is two refusals).
  *   `over` once the program has finished.
  * @typedef {Shared & { kind: 'ending' | 'problem', summaries: Summary[], problems: string[], lines: string[], next?: { title: string, text: string }, log?: string, closing?: string }} EndScreen
  *   The run's last screen, which gathers every call after it that isn't a question or a busy.
@@ -294,7 +295,7 @@ export function screensOf(events) {
         const screen = questions.get(event.question);
         if (screen) screen.refused = { answer: event.answer, reason: event.reason };
         const signIn = codeBoxes.get(event.question);
-        if (signIn) signIn.refused = event.reason;
+        if (signIn) signIn.refused = { reason: event.reason, by: event.id };
         break;
       }
       case 'output':

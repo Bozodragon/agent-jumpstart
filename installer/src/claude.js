@@ -115,7 +115,6 @@ export async function setUpClaude(context, ask) {
   let skipped;
   if (state.present && state.runs && !state.signedIn) {
     const login = frontEnd.inWindow ? inTheWindow(entry.name, program, context) : onThePage(entry.name, program, context, say);
-    frontEnd.notice(login.notice, `Sign in to ${entry.name}`);
     // One rejected code ends Claude's sign-in, so a failed one is offered again, as often as it
     // fails. Each try is a fresh `claude auth login`, with a new link and code.
     for (;;) {
@@ -150,9 +149,9 @@ export async function setUpClaude(context, ask) {
 }
 
 /**
- * Claude's sign-in: what's said before it, and one try at it. Either way it runs as `claude auth
+ * Claude's sign-in: one try at it, with what's said before it. Either way it runs as `claude auth
  * login`, with BROWSER=explorer.exe for that run only, and what it prints comes back for the log.
- * @typedef {{ notice: string, run: () => Promise<import('./machine.js').Ran> }} Login
+ * @typedef {{ run: () => Promise<import('./machine.js').Ran> }} Login
  */
 
 /** For BROWSER: Claude runs it with the address as its only argument, which opens the default browser. */
@@ -165,15 +164,21 @@ const authLogin = { args: ['auth', 'login'], env: { BROWSER: 'explorer.exe' } };
  * @returns {Login}
  */
 function inTheWindow(name, program, { machine, frontEnd }) {
+  const notice = [
+    `${name} signs you in next, in your browser.`,
+    '',
+    `  ${bullet} A browser window opens at Claude's sign-in page. Sign in there. ${frontEnd.comeBack()} It carries on by itself.`,
+    `  ${bullet} If no window opens, copy the link below into your browser: select it with the mouse, then right-click to copy it.`,
+    `  ${bullet} If the page shows a code, copy it, come back here and right-click to paste it. Nothing appears when you paste. Paste once, then press Enter.`,
+  ].join('\n');
+  let told = false;
   return {
-    notice: [
-      `${name} signs you in next, in your browser.`,
-      '',
-      `  ${bullet} A browser window opens at Claude's sign-in page. Sign in there. ${frontEnd.comeBack()} It carries on by itself.`,
-      `  ${bullet} If no window opens, copy the link below into your browser: select it with the mouse, then right-click to copy it.`,
-      `  ${bullet} If the page shows a code, copy it, come back here and right-click to paste it. Nothing appears when you paste. Paste once, then press Enter.`,
-    ].join('\n'),
-    run: () => machine.runOnScreenAndKeep(program, authLogin.args, { env: authLogin.env }),
+    // Said once: a try after a failed one is in the same window, under the problem and the choice.
+    run() {
+      if (!told) frontEnd.notice(notice, `Sign in to ${name}`);
+      told = true;
+      return machine.runOnScreenAndKeep(program, authLogin.args, { env: authLogin.env });
+    },
   };
 }
 
@@ -190,16 +195,18 @@ function onThePage(name, program, { machine, frontEnd }, say) {
     say('a code was pasted on the page, for the sign-in');
     return undefined;
   };
+  const notice = [
+    `${name} signs you in next, in your browser.`,
+    '',
+    `  ${bullet} A new tab opens at Claude's sign-in page. Sign in there. ${frontEnd.comeBack()} It carries on by itself.`,
+    `  ${bullet} If no tab opens, use the link below.`,
+    `  ${bullet} If the page shows a code, copy it, then paste it into the box below.`,
+  ].join('\n');
   return {
-    notice: [
-      `${name} signs you in next, in your browser.`,
-      '',
-      `  ${bullet} A new tab opens at Claude's sign-in page. Sign in there. ${frontEnd.comeBack()} It carries on by itself.`,
-      `  ${bullet} If no tab opens, use the link below.`,
-      `  ${bullet} If the page shows a code, copy it, then paste it into the box below.`,
-    ].join('\n'),
-    run: () =>
-      frontEnd.signIn((show) => {
+    // Said before every try: it's the sign-in screen's explanation, and each try is a screen of its own.
+    run() {
+      frontEnd.notice(notice, `Sign in to ${name}`);
+      return frontEnd.signIn((show) => {
         let shown = false;
         return machine.runOnScreenAndKeep(program, authLogin.args, {
           env: authLogin.env,
@@ -210,7 +217,8 @@ function onThePage(name, program, { machine, frontEnd }, say) {
             show({ link: { url: link, label: 'If no tab opens, use this link' }, codeBox: checkCode });
           },
         });
-      }),
+      });
+    },
   };
 }
 
@@ -494,7 +502,12 @@ export function endAfterSkipped(ending, { reason, missing }, { claude, t3 }) {
  * @param {string} output
  */
 function reasonFrom(output) {
-  return plainLines(output).find((line) => line.startsWith('Login failed:'));
+  // Anywhere in a line: piped, nothing ends the paste prompt's line, so the reason joins it.
+  for (const line of plainLines(output)) {
+    const reason = /Login failed:.*/.exec(line)?.[0];
+    if (reason) return reason;
+  }
+  return undefined;
 }
 
 /**

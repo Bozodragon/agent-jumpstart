@@ -66,6 +66,8 @@ export function announced(shown) {
       return shown.text;
     case 'busy':
       return shown.ended?.text ?? shown.message;
+    case 'signIn':
+      return shown.sent ? 'Checking the code' : 'Waiting for you to sign in';
     case 'ending':
       return shown.closing ?? '';
     case 'problem':
@@ -211,19 +213,27 @@ function SignIn({ screen, actions }) {
   const [typed, setTyped] = useState('');
   const [sending, setSending] = useState(false);
   const [edited, setEdited] = useState(false);
+  // Each refusal is shown, even for the same reason as the last.
   useEffect(() => {
     setEdited(false);
-  }, [refused]);
+  }, [refused?.by]);
   const ref = useFocus(codeBox !== undefined ? '.input' : link ? '.copybox-link' : '.title');
+  // A code sent disables the box, which would leave the focus nowhere: the heading takes it.
+  useEffect(() => {
+    const title = ref.current?.querySelector('.title');
+    if (sent && title instanceof HTMLElement) title.focus({ preventScroll: true });
+  }, [sent]);
   const showRefusal = refused !== undefined && !edited && !sent;
   const id = `code${codeBox ?? ''}`;
 
   /** @param {import('react').FormEvent} event */
   const submit = async (event) => {
     event.preventDefault();
-    if (codeBox === undefined || sending || sent || typed.trim() === '') return;
+    const code = typed.trim();
+    if (codeBox === undefined || sending || sent || code === '') return;
+    setTyped(code);
     setSending(true);
-    await actions.answer(codeBox, typed);
+    await actions.answer(codeBox, code);
     setSending(false);
   };
 
@@ -260,7 +270,7 @@ function SignIn({ screen, actions }) {
               value={typed}
               disabled={sent}
               spellCheck={false}
-              autoComplete="off"
+              autoComplete="one-time-code"
               aria-invalid={showRefusal}
               aria-describedby={showRefusal ? `${id}-error` : undefined}
               onChange={(event) => {
@@ -274,7 +284,7 @@ function SignIn({ screen, actions }) {
           </div>
           {showRefusal && (
             <p className="error" id={`${id}-error`} role="alert">
-              <Line text={refused} />
+              <Line text={refused.reason} />
             </p>
           )}
         </form>

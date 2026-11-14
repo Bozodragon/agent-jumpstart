@@ -53,8 +53,11 @@ test("GitHub's code joins the screen too, and a code pasted shows as sent, or th
   ]);
   assert.equal(at(page, 30).code, '3A4B-7C8D');
   assert.deepEqual(at(page, 30).link, link, 'what a later show adds joins what was there');
-  assert.equal(at(page, 30).refused, "That isn't the whole code.");
+  assert.deepEqual(at(page, 30).refused, { reason: "That isn't the whole code.", by: 5 });
   assert.equal(at(page, 30).sent, undefined);
+  // The same reason a second time is a refusal of its own, for the screen to show again.
+  const twice = reduce(page, { type: 'event', event: { id: 6, type: 'refused', question: 9, reason: "That isn't the whole code." }, now: 30 });
+  assert.deepEqual(at(twice, 31).refused, { reason: "That isn't the whole code.", by: 6 });
 
   page = reduce(page, { type: 'event', event: { id: 6, type: 'answered', question: 9, answer: 'sent' }, now: 40 });
   assert.equal(at(page, 50).sent, true);

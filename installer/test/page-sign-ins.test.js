@@ -75,6 +75,40 @@ test("Claude's sign-in on the page: one screen with the explanation, Claude's pa
   assert.equal((await readOnlyLog(where.home)).text.includes('a1B2c3'), false, 'nor logged');
 });
 
+test("a code Claude turns down shows Claude's own reason with Try again or Skip for now, and Try again is the whole explained sign-in screen again", async (t) => {
+  // Piped, Claude doesn't echo the code or end its prompt's line, so its reason, on stderr, joins it.
+  const turnedDown = "Login failed: That code wasn't accepted. It may be incomplete, expired, already used, or from an earlier sign-in attempt.";
+  const { where, logins } = await aLaptopSignedOutOfClaude(t, {
+    status: [signedOut, signedOut, signedIn],
+    login: [
+      { code: 1, output: `${claudesLines.join('\n')}${turnedDown}\n`, readsALine: true },
+      { output: `${claudesLines.join('\n')}Login successful.\n` },
+    ],
+  });
+
+  const run = await runOnPage(where, 'york');
+  t.after(run.kill);
+  const page = run.connect();
+  const answering = answerEverything(page, run.answer, { channel: 'stable', claudeSignIn: 'again' });
+  const shows = await page.next((event) => event.type === 'signInShows' && event.codeBox !== undefined);
+  await run.answer(shows.codeBox, 'old#code');
+  await answering;
+  const result = await run.ended;
+
+  assert.equal(result.code, 0, result.stdout + result.stderr);
+  assert.equal((await logins()).length, 2);
+  const question = page.events.find((event) => event.type === 'question' && event.key === 'claudeSignIn');
+  assert.ok(question, 'Try again or Skip for now was asked');
+  const before = page.events.filter((event) => event.id < question.id).at(-1);
+  assert.deepEqual([before?.type, before?.text], ['problem', turnedDown], "Claude's reason, just before Try again or Skip for now");
+  const signIns = page.events.filter((event) => event.type === 'signIn');
+  assert.equal(signIns.length, 2);
+  for (const signIn of signIns) {
+    const notice = page.events.filter((event) => event.id < signIn.id).at(-1);
+    assert.equal(notice?.title, 'Sign in to Claude Code', 'each try is explained');
+  }
+});
+
 test("a code that isn't all of Claude's code is turned down on the page, with the reason, before Claude sees it, and the box stays open for the whole one", async (t) => {
   const { where, logins } = await aLaptopSignedOutOfClaude(t, {
     status: [signedOut, signedIn],
