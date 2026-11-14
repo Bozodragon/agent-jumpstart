@@ -377,7 +377,20 @@ async function addToPath(tool, folder, machine, say) {
  * @param {{ downloads?: string, saveIn: string, say: (line: string) => void, progress?: import('./front-end.js').Progress }} where
  * @returns {Promise<string>} the file
  */
-export async function obtain({ url, size, from }, { downloads, saveIn, say, progress = () => {} }) {
+export async function obtain(download, where) {
+  return (await openDownload(download, where)).receive(where.progress ?? (() => {}));
+}
+
+/**
+ * The first half of `obtain`: reaches the server (or finds the file in the downloads folder), so
+ * that the size to count against is known before anything comes, then `receive` brings the file.
+ * `total` is `size` when the caller knows it, or else the size the server gives (when it sends
+ * the file as it is, not compressed); for a copy, `size`.
+ * @param {{ url: string, size?: number, from?: string }} download
+ * @param {{ downloads?: string, saveIn: string, say: (line: string) => void }} where
+ * @returns {Promise<{ total: number | undefined, receive: (progress: import('./front-end.js').Progress) => Promise<string> }>}
+ */
+export async function openDownload({ url, size, from }, { downloads, saveIn, say }) {
   const name = basename(new URL(url).pathname);
   const file = join(saveIn, name);
   if (downloads) {
@@ -386,48 +399,68 @@ export async function obtain({ url, size, from }, { downloads, saveIn, say, prog
       say(`${source} isn't there`);
       throw new NotInstalled("it wasn't in the downloads folder");
     }
-    say(`taking ${source}`);
-    await mkdir(saveIn, { recursive: true });
-    await copyFile(source, file);
-    say(`downloaded to ${file}`);
-    return file;
+    return {
+      total: size,
+      async receive() {
+        say(`taking ${source}`);
+        await mkdir(saveIn, { recursive: true });
+        await copyFile(source, file);
+        say(`downloaded to ${file}`);
+        return file;
+      },
+    };
   }
   // Written under a name of its own until it's whole, so a download cut short, even by the run
   // ending partway, is never taken for the file, and antivirus doesn't lock it half-written. One
   // left from an earlier run is replaced, as is the file itself, kept by a debug run.
   const partial = `${file}.partial`;
-  await mkdir(saveIn, { recursive: true });
-  await rm(file, { force: true });
-  await rm(partial, { force: true });
-  say(`downloading ${url}`);
-  try {
-    const response = await fetch(url);
-    if (!response.ok || !response.body) throw new Error(`the server said ${response.status} ${response.statusText}`);
-    // Bytes are counted once fetch has unpacked them, so a size the caller knows (Claude Code's,
-    // from Anthropic's manifest) is the right total even when the server compresses the file.
-    const total = size ?? sizeOf(response);
-    let received = 0;
-    progress(received, total);
-    await pipeline(
-      Readable.fromWeb(/** @type {any} */ (response.body)),
-      async function* (/** @type {AsyncIterable<Buffer>} */ pieces) {
-        for await (const piece of pieces) {
-          received += piece.length;
-          progress(received, total);
-          yield piece;
-        }
-      },
-      createWriteStream(partial),
-    );
-    await rename(partial, file);
-  } catch (error) {
+  /** @param {unknown} error @returns {Promise<never>} */
+  const failed = async (error) => {
     await rm(partial, { force: true });
     const cause = error instanceof Error && error.cause ? error.cause : error;
     say(`download failed: ${messageOf(cause)}`);
     throw new NotInstalled(`it couldn't be downloaded (${messageOf(cause)})`);
+  };
+  await mkdir(saveIn, { recursive: true });
+  await rm(file, { force: true });
+  await rm(partial, { force: true });
+  say(`downloading ${url}`);
+  /** @type {Response} */
+  let response;
+  try {
+    response = await fetch(url);
+    if (!response.ok || !response.body) throw new Error(`the server said ${response.status} ${response.statusText}`);
+  } catch (error) {
+    return failed(error);
   }
-  say(`downloaded to ${file}`);
-  return file;
+  // Bytes are counted once fetch has unpacked them, so a size the caller knows (Claude Code's,
+  // from Anthropic's manifest) is the right total even when the server compresses the file.
+  const total = size ?? sizeOf(response);
+  return {
+    total,
+    async receive(progress) {
+      let received = 0;
+      progress(received, total);
+      try {
+        await pipeline(
+          Readable.fromWeb(/** @type {any} */ (response.body)),
+          async function* (/** @type {AsyncIterable<Buffer>} */ pieces) {
+            for await (const piece of pieces) {
+              received += piece.length;
+              progress(received, total);
+              yield piece;
+            }
+          },
+          createWriteStream(partial),
+        );
+        await rename(partial, file);
+      } catch (error) {
+        return failed(error);
+      }
+      say(`downloaded to ${file}`);
+      return file;
+    },
+  };
 }
 
 /**

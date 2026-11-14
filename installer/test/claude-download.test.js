@@ -282,7 +282,7 @@ const percentages = (drawn) => drawn.flatMap((drawing) => [.../(\d+)% \[/.exec(d
 
 for (const { from, release, internet, message } of [
   { from: "Anthropic's manifest, when the server doesn't give it", release: { size: 3_000_000 }, internet: { unsized: ['claude.exe'] }, message: 'Downloading Claude Code (3 MB)' },
-  { from: "the server, when Anthropic's manifest doesn't give it", release: { size: 3_000_000, unsized: true }, internet: {}, message: 'Downloading Claude Code' },
+  { from: "the server, when Anthropic's manifest doesn't give it", release: { size: 3_000_000, unsized: true }, internet: {}, message: 'Downloading Claude Code (3 MB)' },
 ]) {
   test(`in a terminal, the download shows a percentage that rises to 100%, against the size from ${from}, then a separate step to set it up`, async (t) => {
     const { where, internet: folder } = await online(t, release);
@@ -292,7 +292,6 @@ for (const { from, release, internet, message } of [
     assert.equal(result.code, 0, result.stdout + result.stderr);
     const drawn = drawings(result.stdout, 'Downloading Claude Code');
     assert.ok(drawn.every((drawing) => drawing.includes(message)), drawn.join('\n'));
-    if (message === 'Downloading Claude Code') assert.ok(!drawn.some((drawing) => drawing.includes(' MB)')), drawn.join('\n'));
     const shown = percentages(drawn);
     assert.ok(new Set(shown).size >= 3, `it rose in steps: ${shown.join(', ')}`);
     assert.deepEqual(shown, [...shown].sort((a, b) => a - b), `it only ever rose: ${shown.join(', ')}`);
@@ -315,6 +314,7 @@ test('in a terminal, a download whose size neither the manifest nor the server g
   const amounts = [...new Set(drawn.flatMap((drawing) => [.../(\d+\.\d) MB \[/.exec(drawing) ?? []].slice(1, 2)))];
   assert.deepEqual(amounts, ['0.0', '0.5', '1.0', '1.5'], drawn.join('\n'));
   assert.deepEqual(percentages(drawn), []);
+  assert.ok(!drawn.some((drawing) => drawing.includes(' MB)')), drawn.join('\n'));
 });
 
 test('in a terminal, a download that fails closes quietly, with no cross, and the small release spinner follows', async (t) => {
