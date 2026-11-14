@@ -7,6 +7,7 @@ import { useEffect, useRef, useState } from 'react';
 import { CopyBox, Line, Path, Status, Words, icons } from './parts.js';
 import { Terminal } from './terminal-panel.js';
 import { soFar } from '../src/text.js';
+import { checklistOf, failedIn } from './pacing.js';
 import { split } from './words.js';
 
 /** @typedef {import('./pacing.js').Shown} Shown */
@@ -551,10 +552,10 @@ function Ending({ screen }) {
   const [first = '', ...after] = (closing ?? '').split('\n');
   const [heading, rest] = split(first);
   const more = rest ? [rest, ...after] : after;
-  const checklist = summaries.find(({ title }) => title === 'Checklist');
+  const checklist = checklistOf(screen);
   const others = summaries.filter((summary) => summary !== checklist);
   /** A checklist row whose step the ending says didn't work. @param {string} label */
-  const failed = (label) => problems.some((problem) => problem.startsWith(`${label}: `));
+  const failed = (label) => failedIn(screen, label);
   return (
     <div className="ending">
       <div>

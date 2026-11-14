@@ -7,6 +7,7 @@
 // `back`, which pacing.js reads.
 
 import { inWordsOrNone } from '../src/text.js';
+import { checklistOf, failedIn } from './pacing.js';
 
 /** @typedef {import('./pacing.js').Page} Page */
 /** @typedef {import('./pacing.js').Shown} Shown */
@@ -118,14 +119,14 @@ export function backTo(page, shown) {
  * @returns {SetUp}
  */
 export function setUp(page) {
-  const end = page.screens.find((screen) => screen.kind === 'ending' || screen.kind === 'problem');
-  const checklist = end?.kind === 'ending' || end?.kind === 'problem' ? end.summaries.find(({ title }) => title === 'Checklist') : undefined;
+  const last = page.screens.find((screen) => screen.kind === 'ending' || screen.kind === 'problem');
+  const end = last?.kind === 'ending' || last?.kind === 'problem' ? last : undefined;
+  const checklist = end && checklistOf(end);
   if (end && checklist) {
-    const problems = 'problems' in end ? end.problems : [];
     const rows = checklist.rows.map(([label, value]) => ({
       label,
       value,
-      state: /** @type {'done' | 'bad'} */ (problems.some((problem) => problem.startsWith(`${label}: `)) ? 'bad' : 'done'),
+      state: /** @type {'done' | 'bad'} */ (failedIn(end, label) ? 'bad' : 'done'),
     }));
     return { rows, of: rows.length, worked: rows.filter((row) => row.state === 'done').length };
   }

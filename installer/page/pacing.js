@@ -117,6 +117,16 @@ export const behindToCatchUp = 4;
  */
 export const endingSummaries = ['Skills', 'Workspaces', 'Checklist'];
 
+/** The ending's checklist, the last of those summaries, if it has come. @param {EndScreen} end */
+export const checklistOf = (end) => end.summaries.find(({ title }) => title === 'Checklist');
+
+/**
+ * Whether the ending says a checklist row's step didn't work: one of its problems names the row
+ * first (installer/src/ending.js says each as `<step>: <why>`).
+ * @param {EndScreen} end @param {string} label
+ */
+export const failedIn = (end, label) => end.problems.some((problem) => problem.startsWith(`${label}: `));
+
 /** @type {Page} */
 export const begin = {
   events: [],
