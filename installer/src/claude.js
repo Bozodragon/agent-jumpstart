@@ -359,17 +359,21 @@ async function ownRoute(entry, program, { places, machine, frontEnd, downloads, 
     return { installed: false, reason: why(error), fallBack: true };
   }
 
-  // The server is reached first, so the size shown is the manifest's, or else the server's.
   const started = performance.now();
   const took = () => `${((performance.now() - started) / 1000).toFixed(1)} s`;
-  /** @type {Awaited<ReturnType<typeof openDownload>>} */
-  let download;
-  try {
-    download = await openDownload({ url: release.url, size: release.size, from: inFolder(release.url) }, { downloads, saveIn: join(places.state, 'downloads'), say });
-  } catch (error) {
-    return { installed: false, reason: why(error), fallBack: true };
+  const open = () => openDownload({ url: release.url, size: release.size, from: inFolder(release.url) }, { downloads, saveIn: join(places.state, 'downloads'), say });
+  // The label gives the size: the manifest's, or, when it has none, the server's, which means
+  // reaching the server before the busy starts. With the manifest's, the busy covers it all.
+  /** @type {Awaited<ReturnType<typeof openDownload>> | undefined} */
+  let opened;
+  if (release.size === undefined) {
+    try {
+      opened = await open();
+    } catch (error) {
+      return { installed: false, reason: why(error), fallBack: true };
+    }
   }
-  const { total } = download;
+  const total = release.size ?? opened?.total;
   const megabytes = total === undefined ? '' : ` (${Math.round(total / 1_000_000)} MB)`;
   const message = `Downloading ${entry.name}${megabytes}`;
   const expected = total === undefined ? '' : `, of the ${total} expected`;
@@ -379,7 +383,7 @@ async function ownRoute(entry, program, { places, machine, frontEnd, downloads, 
     /** @returns {Promise<{ file: string } | { reason: string }>} */
     async (progress) => {
       try {
-        const file = await download.receive((bytes, all) => {
+        const file = await (opened ?? (await open())).receive((bytes, all) => {
           received = bytes;
           progress(bytes, all);
         });
