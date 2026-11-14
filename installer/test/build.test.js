@@ -10,7 +10,7 @@ import { promisify } from 'node:util';
 import { repo } from './harness.js';
 
 const run = promisify(execFile);
-const tar = join(process.env.SystemRoot ?? 'C:\Windows', 'System32', 'tar.exe');
+const tar = join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'tar.exe');
 
 test("the build ships the Installer page's bundle and its fonts, and none of React's, esbuild's or the fonts' packages", async (t) => {
   const out = await mkdtemp(join(tmpdir(), 'jumpstart-build-'));
