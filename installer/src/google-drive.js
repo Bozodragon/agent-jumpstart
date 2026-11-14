@@ -9,14 +9,12 @@
 // would, so the person does nothing until Drive asks them to sign in. Anything that goes wrong
 // there leads to Software Center, where the person clicks Install, which needs no admin rights,
 // and Documents is always one choice away.
-import { createHash } from 'node:crypto';
-import { createReadStream } from 'node:fs';
 import { readdir, rm, stat } from 'node:fs/promises';
 import { join } from 'node:path';
-import { pipeline } from 'node:stream/promises';
 import { keepTrying, registryMiss, system32 } from './machine.js';
 import { showPage } from './open-page.js';
 import { End, messageOf, Stop } from './stop.js';
+import { sha256Of } from './tools.js';
 
 /**
  * `never-opened`: installed, but never started, so it holds nothing for this user yet.
@@ -491,13 +489,6 @@ async function watchDownloads(folder, before, hosted, machine, progress) {
     await machine.wait(downloadEvery);
     waited += downloadEvery;
   }
-}
-
-/** @param {string} file */
-async function sha256Of(file) {
-  const hash = createHash('sha256');
-  await pipeline(createReadStream(file), hash);
-  return hash.digest('hex');
 }
 
 /**

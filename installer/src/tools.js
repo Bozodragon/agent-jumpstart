@@ -476,11 +476,19 @@ function sizeOf(response) {
   return Number.isSafeInteger(length) && length > 0 ? length : undefined;
 }
 
-/** @param {string} file @param {string} expected @param {(line: string) => void} say */
-async function checkSum(file, expected, say) {
+/**
+ * A file's SHA-256, in lower-case hex. Each caller compares it, and words a mismatch, its own way.
+ * @param {string} file
+ */
+export async function sha256Of(file) {
   const hash = createHash('sha256');
   await pipeline(createReadStream(file), hash);
-  const actual = hash.digest('hex');
+  return hash.digest('hex');
+}
+
+/** @param {string} file @param {string} expected @param {(line: string) => void} say */
+async function checkSum(file, expected, say) {
+  const actual = await sha256Of(file);
   if (actual !== expected.toLowerCase()) {
     say(`checksum ${actual} isn't the pinned ${expected}`);
     throw new NotInstalled("the download didn't match its pinned checksum");

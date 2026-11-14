@@ -25,15 +25,12 @@
 // ending then says how to finish. The signed-in email is what Jumpstart reads.
 //
 // Claude Code isn't pinned: both routes install Anthropic's current release.
-import { createHash } from 'node:crypto';
-import { createReadStream } from 'node:fs';
 import { readFile, rm, stat } from 'node:fs/promises';
 import { join } from 'node:path';
-import { pipeline } from 'node:stream/promises';
 import { system32 } from './machine.js';
 import { loadManifest, toolEntry } from './manifest.js';
 import { messageOf } from './stop.js';
-import { exists, isRecord, NotInstalled, openDownload } from './tools.js';
+import { exists, isRecord, NotInstalled, openDownload, sha256Of } from './tools.js';
 import { bullet, plainLines, wholeLines } from './text.js';
 
 /**
@@ -520,9 +517,7 @@ function platformIn(text, platform, say) {
 
 /** @param {string} file @param {string} expected @param {(line: string) => void} say */
 async function checkSha256(file, expected, say) {
-  const hash = createHash('sha256');
-  await pipeline(createReadStream(file), hash);
-  const actual = hash.digest('hex');
+  const actual = await sha256Of(file);
   if (actual !== expected.toLowerCase()) {
     say(`checksum ${actual} isn't Anthropic's ${expected}`);
     throw new NotInstalled("the download didn't match Anthropic's checksum");
