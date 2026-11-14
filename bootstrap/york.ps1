@@ -108,7 +108,7 @@ function Start-AgentJumpstart {
       Write-Host 'The Installer is already running, so its page is opening again.'
       Open-InstallerPage $lock[0]
     } else {
-      Write-Host 'The installer is already running in another window. Carry on there.'
+      Write-Host 'The Installer is already running in another window. Carry on there.'
     }
     return $true
   }
@@ -248,7 +248,7 @@ function Start-AgentJumpstart {
         try {
           Move-Item -LiteralPath $nodeDir -Destination $replaced
         } catch {
-          throw "The installer's Node.js $have needs replacing with $nodeVersion, but something is using it. If the installer is still running, let it finish or stop it, then paste the line again."
+          throw "The Installer's Node.js $have needs replacing with $nodeVersion, but something is using it. If the Installer is still running, let it finish or stop it, then paste the line again."
         }
       }
       Move-Item -LiteralPath (Join-Path $unpacking $nodeName) -Destination $nodeDir
@@ -283,9 +283,9 @@ function Start-AgentJumpstart {
   $installer = $null
   try {
     $installer = Start-Process -FilePath $nodeExe -ArgumentList $arguments -WorkingDirectory $root -WindowStyle Hidden -PassThru
-    if ($DebugOn) { Write-Host "Debug: the installer started out of sight, as process $($installer.Id)" }
+    if ($DebugOn) { Write-Host "Debug: the Installer started out of sight, as process $($installer.Id)" }
   } catch {
-    if ($DebugOn) { Write-Host "Debug: the installer couldn't start out of sight ($($_.Exception.Message))" }
+    if ($DebugOn) { Write-Host "Debug: the Installer couldn't start out of sight ($($_.Exception.Message))" }
   }
 
   # Its page is opened once its address is written, then this waits for a page to connect. The
@@ -317,11 +317,11 @@ function Start-AgentJumpstart {
     Remove-Item -LiteralPath $addressFile -Force -ErrorAction SilentlyContinue
   }
   if (-not $installer) {
-    $why = "The installer couldn't start out of sight, so it carries on in this window instead."
+    $why = "The Installer couldn't start out of sight, so it carries on in this window instead."
   } elseif (-not $address) {
-    $why = "The Installer page couldn't be started, so the installer carries on in this window instead."
+    $why = "The Installer page couldn't be started, so the Installer carries on in this window instead."
   } else {
-    $why = "The Installer page didn't open within 20 seconds, so the installer carries on in this window instead."
+    $why = "The Installer page didn't open within 20 seconds, so the Installer carries on in this window instead."
   }
   Write-Host $why -ForegroundColor Yellow
   $fallback = @($main, '--profile', $ProfileId, '--terminal')
