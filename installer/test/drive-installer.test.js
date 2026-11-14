@@ -193,7 +193,20 @@ test('a file that arrives in Downloads during the minute but isn\'t the installe
   assert.equal(await exists(join(where.home, pdf)), true);
 });
 
-test('a download that finishes only after the Installer has moved on to Software Center is deleted once the run is done with it, and the run\'s other new files are left', async (t) => {
+test("an unfinished download that starts only after the Installer has moved on, which it can't tell for its own, is left in Downloads", async (t) => {
+  // A download of the person's own, say, under way as the run ends: it starts after 61 seconds and stops partway.
+  const { where, run } = await aYorkLaptopWithoutDrive(t, {
+    browser: { after: 61_000, perSecond: 10, stopsAt: 1000, saves: join('Downloads', 'holiday.mov') },
+    answers: { softwareCenter: 'install', withoutGoogleDrive: 'documents' },
+  });
+
+  const result = await run();
+
+  assert.equal(result.code, 0, result.stdout + result.stderr);
+  assert.equal(await exists(join(where.home, 'Downloads', 'holiday.mov.crdownload')), true);
+});
+
+test('a download that finishes only after the Installer has moved on to Software Center is deleted once the run is done with it', async (t) => {
   // Software Center never installs it, so its 15-minute wait runs out, long after the download, which starts after 61 seconds, has arrived.
   const { where, run } = await aYorkLaptopWithoutDrive(t, { browser: { after: 61_000 }, answers: { softwareCenter: 'install', withoutGoogleDrive: 'documents' } });
   const downloaded = join(where.home, 'Downloads', 'GoogleDriveFSSetup.exe');

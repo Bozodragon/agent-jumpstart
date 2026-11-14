@@ -335,10 +335,12 @@ async function fromHostedInstaller(profile, places, offered, context) {
     'Google Drive',
   );
   await showPage("Google Drive's installer", `https://drive.usercontent.google.com/download?id=${encodeURIComponent(hosted.id)}&export=download&confirm=t`, context);
+  /** The new files the watch took for the download, or its start: all of them the run's, as far as it can tell. @type {Set<string>} */
+  const counted = new Set();
   const downloading = `Downloading Google Drive's installer (${Math.round(hosted.size / 1_000_000)} MB)`;
   const downloaded = await frontEnd.busy(
     downloading,
-    (progress) => watchDownloads(folder, before, hosted, machine, progress),
+    (progress) => watchDownloads(folder, before, hosted, machine, progress, counted),
     // One that isn't found gives way quietly to Software Center: the line saying why is its only mark.
     (outcome) => (outcome.status === 'found' ? { text: "Google Drive's installer downloaded", ok: true } : { text: downloading }),
     // The browser downloads it: a stop needn't wait to watch it.
@@ -363,7 +365,7 @@ async function fromHostedInstaller(profile, places, offered, context) {
     // agrees to keep an .exe): what's there of it now goes, and so does whatever of it has
     // arrived by the time the run is over.
     const leftovers = async () => {
-      for (const file of await ourDownloads(folder, before, hosted)) await tidy(file);
+      for (const file of await ourDownloads(folder, before, hosted, counted)) await tidy(file);
     };
     await leftovers();
     context.atEnd?.push(leftovers);
@@ -445,9 +447,10 @@ const mayBeIt = ({ name, size }, hosted, grew) => size === hosted.size || (size 
  * @param {HostedInstaller} hosted
  * @param {import('./machine.js').Machine} machine
  * @param {import('./front-end.js').Progress} progress
+ * @param {Set<string>} counted given the name of each file it takes for the download
  * @returns {Promise<{ status: 'found', file: string } | { status: 'mismatch', file: string, sha256: string } | { status: 'stopped', file: string, size: number } | { status: 'none' }>}
  */
-async function watchDownloads(folder, before, hosted, machine, progress) {
+async function watchDownloads(folder, before, hosted, machine, progress, counted) {
   let waited = 0;
   let changedAt = 0;
   let seen = '';
@@ -466,7 +469,9 @@ async function watchDownloads(folder, before, hosted, machine, progress) {
       const firstSize = first.get(name);
       if (firstSize === undefined) first.set(name, size);
       else if (size > firstSize) grown.add(name);
-      if (mayBeIt({ name, size }, hosted, grown.has(name))) fresh.push({ name, size });
+      if (!mayBeIt({ name, size }, hosted, grown.has(name))) continue;
+      fresh.push({ name, size });
+      counted.add(name);
     }
     for (const { name, size } of fresh) {
       if (size !== hosted.size || unfinished(name)) continue;
@@ -493,19 +498,21 @@ async function watchDownloads(folder, before, hosted, machine, progress) {
 
 /**
  * What the run can tell is its own download of the hosted installer, among the files that
- * weren't in Downloads before: a finished one of its size whose SHA-256 matches, or a smaller
- * one with an unfinished download's name. Anything else is left be.
+ * weren't in Downloads before: a finished one of its size whose SHA-256 matches, or a smaller one
+ * with an unfinished download's name that the watch took for the download. Anything else, such
+ * as a download of the person's own that started after the Installer moved on, is left be.
  * @param {string} folder @param {Set<string>} before the names already there @param {HostedInstaller} hosted
+ * @param {Set<string>} counted the names the watch took for the download
  * @returns {Promise<string[]>} their paths
  */
-async function ourDownloads(folder, before, hosted) {
+async function ourDownloads(folder, before, hosted, counted) {
   const ours = [];
   for (const name of await filesIn(folder)) {
     if (before.has(name)) continue;
     const file = join(folder, name);
     const size = await stat(file).then((found) => found.size, () => undefined);
     if (size === undefined || size > hosted.size) continue;
-    if (size < hosted.size ? unfinished(name) : (await sha256Of(file).catch(() => undefined)) === hosted.sha256.toLowerCase()) ours.push(file);
+    if (size < hosted.size ? unfinished(name) && counted.has(name) : (await sha256Of(file).catch(() => undefined)) === hosted.sha256.toLowerCase()) ours.push(file);
   }
   return ours;
 }
