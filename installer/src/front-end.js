@@ -33,6 +33,14 @@
  */
 
 /**
+ * What a program run during a busy prints, passed on as it prints it, escape codes and all. The
+ * page shows it in a small terminal under the busy line; the terminal front end shows only its
+ * own spinner, as ever, so it ignores it. Only the skills step passes anything on: it's the one
+ * step whose program's own output is shown (issue #88).
+ * @typedef {(text: string) => void} Output
+ */
+
+/**
  * @typedef {object} Links
  * @property {string} [setupPage] The profile's setup page, which the person came from.
  * @property {string} [shareLogLine] The line that copies the newest installer log, for asking for help.
@@ -43,13 +51,14 @@
  * @property {(title: string, links?: Links) => void} start The run's first words. `links` are
  *   the profile's, for a front end that shows them (the page does; the terminal doesn't).
  * @property {(text: string) => void} step A line saying what's happening.
- * @property {<T>(message: string, task: (progress: Progress) => Promise<T>, ended?: (result: T) => { text: string, ok?: boolean }) => Promise<T>} busy
+ * @property {<T>(message: string, task: (progress: Progress, output: Output) => Promise<T>, ended?: (result: T) => { text: string, ok?: boolean }) => Promise<T>} busy
  *   Shows that something slow is under way while `task` runs, then how it ended (`ended`, or
  *   the message, if not given): done (`ok` true), failed (false), or, with no `ok`, simply over,
  *   with no mark either way (a step that gave way quietly to another, such as Claude Code's own
  *   download to Anthropic's script). Nothing else may be shown while it runs. The task may report
  *   how far it has got through `progress` (the terminal shows a percentage beside the message,
- *   or the amount so far when the total isn't known); it needn't.
+ *   or the amount so far when the total isn't known); it needn't. It may pass on what a program
+ *   it runs prints through `output`, for a front end that shows it.
  * @property {(text: string) => void} problem Something that didn't work, or why the run stopped.
  * @property {(rows: [string, string][], title: string) => void} summary Labelled rows, such as the checklist.
  * @property {(text: string, title: string) => void} notice Something to read before what comes next.

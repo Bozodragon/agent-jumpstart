@@ -17,7 +17,10 @@
 //            message, answered with anything)
 //   answered { question, answer }           the first answer, which counts; the page moves on
 //   refused  { question, answer, reason }   a folder that won't do; the question is still open
-//   output   { text }                       what a program on screen printed
+//   output   { text, busy? }                what a program on screen printed; with `busy`, what
+//                                            the skills installer printed during that busy (the
+//                                            one program whose own output the page shows), as
+//                                            it printed it, escape codes and all
 //   finish   { text }                       the run's last words
 //   stopping {}                             the run is stopping (Stop was pressed, or the page was
 //                                            closed and none came back): nothing before this is
@@ -302,10 +305,15 @@ export async function openInstallerPage({ addressFile, connectedFile, page }) {
         shownReceived = received;
         server.send({ type: 'progress', busy, received, ...(total === undefined ? {} : { total }) });
       };
+      /** @type {import('./front-end.js').Output} */
+      const output = (text) => {
+        // A task left to itself by a stop says nothing after the stop screen.
+        if (text !== '' && !stopped) server.send({ type: 'output', busy, text });
+      };
       let result;
       try {
         // A stop doesn't wait for the task: what it started is left to finish by itself.
-        result = await Promise.race([task(progress), stopping]);
+        result = await Promise.race([task(progress, output), stopping]);
       } catch (error) {
         // Stopped, it simply ended, with no mark of failure.
         server.send({ type: 'ended', busy, text: message, ...(error === stopped ? {} : { ok: false }) });
