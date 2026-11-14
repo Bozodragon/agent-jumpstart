@@ -91,6 +91,33 @@ code, kbd {
 .setup:hover { color: var(--text); background: var(--hover); }
 .setup:focus-visible { border-radius: 999px; outline-offset: 2px; }
 
+/* Stop: quiet until it's wanted, amber under the pointer, and it asks first. */
+.stop {
+  display: inline-flex; align-items: center; gap: .4375rem; flex: none;
+  height: 2.25rem; padding: 0 .875rem; border-radius: 999px; cursor: pointer;
+  font: inherit; font-size: .8125rem; font-weight: 500; color: var(--secondary);
+  background: none; border: 1px solid var(--hairline);
+}
+.stop svg { width: .625rem; height: .625rem; }
+.stop:hover { color: var(--warn-text); border-color: var(--warn-line); background: var(--warn-fill); }
+.stop:disabled { cursor: default; color: var(--muted); border-color: var(--hairline); background: none; }
+.stop:focus-visible { border-radius: 999px; }
+/* With Stop beside them, the dashes give way, not the name (they squeeze by design), unless the
+   name is long. At 640px and narrower the dashes have a line of their own. */
+@media (min-width: 641px) { .brand { flex-shrink: 0; max-width: 45%; } }
+.confirm {
+  width: min(29rem, calc(100vw - 2rem)); padding: 1.75rem 1.75rem 1.625rem;
+  color: var(--text); background: var(--panel); border: 1px solid var(--outline); border-radius: 1.125rem;
+  box-shadow: var(--lit), 0 1.5rem 4rem rgba(0, 0, 0, .6);
+}
+.confirm::backdrop { background: rgba(0, 0, 0, .66); }
+.confirm[open] { animation: come-in .22s var(--ease) both; }
+.confirm-title { margin: 0; font-size: 1.375rem; line-height: 1.25; font-weight: 600; letter-spacing: -0.015em; }
+.confirm .actions { margin-top: 1.5rem; }
+.primary.is-stop { background: var(--warn); color: #261400; }
+.primary.is-stop:hover { background: #f5b773; }
+@media (prefers-reduced-motion: reduce) { .confirm[open] { animation: none; } }
+
 /* How far along: a dash per question, a dash per thing done, and the ending's. Nothing says how
    many are to come, so the work run squeezes its dashes rather than grow past its room. */
 .progress {
@@ -237,6 +264,52 @@ form { margin: 0; }
 .bar i { display: block; height: 100%; width: 0; border-radius: 999px; background: var(--accent); transition: width .2s linear; }
 .readout { margin: 1rem 0 0; font-size: 1.1875rem; color: var(--secondary); font-variant-numeric: tabular-nums; }
 .readout b { color: var(--text); font-weight: 600; }
+
+/* ---- The skills installer: the one terminal on the page, as the person would see it ----
+   Set in Windows' own terminal fonts, not the page's mono face: those have the CLI's box-drawing
+   and block characters, so its logo and boxes join up and line up, and it looks as it will when
+   the person adds a skill themselves. The 16 colours are tuned to the page's dark ground. */
+.term {
+  --term-bg: #050506;
+  --term-text: #d4d6db;
+  --ansi-0: #16171a; --ansi-1: #f07a7a; --ansi-2: #6fcf97; --ansi-3: #e8c46f;
+  --ansi-4: #5b95ff; --ansi-5: #c99bff; --ansi-6: #5fc8d6; --ansi-7: #d4d6db;
+  --ansi-8: #5e626b; --ansi-9: #ff9d9d; --ansi-10: #94e0b4; --ansi-11: #f5d993;
+  --ansi-12: #8fb6ff; --ansi-13: #dcbcff; --ansi-14: #92e2ec; --ansi-15: #f2f3f5;
+  margin-top: 1.75rem; border: 1px solid var(--hairline); border-radius: .875rem; overflow: hidden;
+  background: var(--term-bg); box-shadow: var(--lit);
+}
+.term-head {
+  display: flex; align-items: center; gap: .5625rem; padding: .5625rem 1rem;
+  border-bottom: 1px solid var(--hairline); background: var(--panel);
+  font-size: .8125rem; font-weight: 500; color: var(--secondary);
+}
+.term-icon svg { display: block; width: .8125rem; height: .8125rem; stroke: var(--muted); }
+.term-body {
+  height: 17.5rem; overflow-y: auto; padding: .875rem 1.125rem 1rem;
+  font-family: "Cascadia Mono", Consolas, monospace; font-size: .8125rem; line-height: 1.42; color: var(--term-text);
+  scrollbar-width: thin; scrollbar-color: var(--outline) transparent; overflow-anchor: none;
+}
+.term-body:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.t-line { min-height: 1.42em; white-space: pre-wrap; overflow-wrap: anywhere; }
+/* The logo's blocks meet, as they do in a terminal. */
+.t-line.t-blocks { min-height: 1em; line-height: 1; white-space: pre; }
+.t-cell { display: inline-block; width: 1ch; text-align: center; }
+.t-blk { display: inline-block; height: 1em; vertical-align: top; background: currentColor; }
+.t-bold { font-weight: 700; }
+.t-dim { opacity: .6; }
+.t-italic { font-style: italic; }
+.t-under { text-decoration: underline; }
+.t-strike { text-decoration: line-through; }
+.t-under.t-strike { text-decoration: underline line-through; }
+.t-caret { display: inline-block; width: .55em; height: 1.05em; vertical-align: -.15em; background: var(--secondary); animation: blink 1s steps(1) infinite; }
+@keyframes blink { 50% { opacity: 0; } }
+@media (max-width: 560px) {
+  .term-body { height: 16rem; padding: .75rem .875rem; font-size: .75rem; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .t-caret { animation: none; }
+}
 
 /* ---- A line to copy, in the setup page's copy box ---- */
 .copybox { margin-top: 1.25rem; background: var(--bg); border: 1px solid var(--hairline); border-radius: .875rem; overflow: hidden; }

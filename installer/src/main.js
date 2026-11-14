@@ -194,6 +194,8 @@ async function main() {
   if (options.downloads) log.write(`Downloads from: ${options.downloads}`);
   if (options.profiles) log.write(`Profiles from: ${options.profiles}`);
   const machine = openMachine(places, log, frontEnd.screen);
+  // A page closed partway is waited for at the next question by the machine's clock, as above.
+  page?.use({ waitFor: machine.waitFor, say: (line) => log.write(`Installer page: ${line}`) });
   // Nothing happens until a page is there to show it. With none, the run stops before it has run
   // or changed anything, and the Bootstrap, seeing it end with no page, runs it in the window.
   /** Why no page can be counted on, if none can: the Bootstrap knows of one only from the connected file. @type {string | undefined} */
@@ -276,13 +278,8 @@ async function main() {
     const profile = withTeam(offered, team);
     // A team joined or changed asks again each pick it ticks something new in, with its ticks added.
     if (earlier) for (const [key, ticks] of teamTicksToAdd(profile, earlier, team, log)) changing.set(key, ticks);
-    // A list of versions that can't be read isn't a reason to stop yet: the first install stops
-    // on it, once the answers are saved.
-    const foundT3 = await findT3(context).catch((error) => {
-      if (!(error instanceof Stop)) throw error;
-      log.write(`T3 Code: couldn't look for an earlier install: ${error.message}`);
-      return undefined;
-    });
+    // A list of versions that can't be read isn't a reason to stop yet (findT3 says so).
+    const foundT3 = await findT3(context);
     const found = { earlier, memoryInUse, t3Channel: foundT3?.channel, experience, githubSignedIn };
     const choices = {
       ...(team === undefined ? {} : { team }),

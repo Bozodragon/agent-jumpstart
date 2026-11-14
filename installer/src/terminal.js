@@ -229,16 +229,19 @@ export async function openTerminal() {
     /**
      * Where the output isn't a terminal (a test) there's no spinner, which would fill it with
      * cursor movements: the message is a step, as any other, and how far the task has got isn't shown.
+     * A program's own output, passed on during a busy, isn't shown either way: the spinner is the
+     * terminal's own, as it always has been.
      */
     async busy(message, task, ended) {
+      const output = () => {};
       if (!process.stdout.isTTY) {
         step(message);
-        return task(() => {});
+        return task(() => {}, output);
       }
       const { progress, stop } = spin(message);
       let result;
       try {
-        result = await task(progress);
+        result = await task(progress, output);
       } catch (error) {
         stop(message, false);
         throw error;

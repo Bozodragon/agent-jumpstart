@@ -21,6 +21,8 @@
  *   the caller listens for the program closing.
  * @property {(text: string) => void} write Shows text as a program on the screen would print it.
  *   For the fake machine, whose runs print their recorded output here.
+ * @property {<T>(running: Promise<T>) => Promise<T>} [wait] How the run waits for a program on the
+ *   screen to finish, if not simply: the page throws a Stop from it, as from any call that waits.
  */
 
 /**
@@ -28,6 +30,14 @@
  * the total is known. It may be called very often (once per piece of a download), with the same
  * figures more than once, so a front end shows only what has changed. Nothing it's told is logged.
  * @typedef {(received: number, total?: number) => void} Progress
+ */
+
+/**
+ * What a program run during a busy prints, passed on as it prints it, escape codes and all. The
+ * page shows it in a small terminal under the busy line; the terminal front end shows only its
+ * own spinner, as ever, so it ignores it. Only the skills step passes anything on: it's the one
+ * step whose program's own output is shown (issue #88).
+ * @typedef {(text: string) => void} Output
  */
 
 /**
@@ -53,13 +63,14 @@
  * @property {(title: string, links?: Links) => void} start The run's first words. `links` are
  *   the profile's, for a front end that shows them (the page does; the terminal doesn't).
  * @property {(text: string) => void} step A line saying what's happening.
- * @property {<T>(message: string, task: (progress: Progress) => Promise<T>, ended?: (result: T) => { text: string, ok?: boolean }) => Promise<T>} busy
+ * @property {<T>(message: string, task: (progress: Progress, output: Output) => Promise<T>, ended?: (result: T) => { text: string, ok?: boolean }) => Promise<T>} busy
  *   Shows that something slow is under way while `task` runs, then how it ended (`ended`, or
  *   the message, if not given): done (`ok` true), failed (false), or, with no `ok`, simply over,
  *   with no mark either way (a step that gave way quietly to another, such as Claude Code's own
  *   download to Anthropic's script). Nothing else may be shown while it runs. The task may report
  *   how far it has got through `progress` (the terminal shows a percentage beside the message,
- *   or the amount so far when the total isn't known); it needn't.
+ *   or the amount so far when the total isn't known); it needn't. It may pass on what a program
+ *   it runs prints through `output`, for a front end that shows it.
  * @property {<T>(task: (show: (shown: SignInShown) => void) => Promise<T>) => Promise<T>} signIn
  *   A sign-in under way in the person's browser, for a front end whose screen isn't the person's
  *   window (`inWindow` false), so the program can't be seen or answered there: `task` runs it and

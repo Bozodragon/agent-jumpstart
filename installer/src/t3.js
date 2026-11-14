@@ -19,7 +19,7 @@ import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { basename, join } from 'node:path';
 import { keepTrying, registryMiss, system32 } from './machine.js';
 import { loadManifest, toolEntry } from './manifest.js';
-import { messageOf } from './stop.js';
+import { messageOf, Stop } from './stop.js';
 import { checkSha512, findRelease } from './t3-release.js';
 import { change, exists, isRecord, NotInstalled, obtain } from './tools.js';
 
@@ -40,11 +40,19 @@ import { change, exists, isRecord, NotInstalled, obtain } from './tools.js';
  * Looks for a T3 already installed: Windows' record of its version, or either channel's program
  * in its folder. The channel is the one whose tags the version matches (a nightly's version
  * names it), or else the one whose program is there, or else stable.
+ * A list of versions that can't be read isn't a reason to stop yet: the first install stops on
+ * it, once the answers are saved. Any other Stop (the person pressing Stop) stops the run.
  * @param {import('./tools.js').Context} context
  * @returns {Promise<FoundT3 | undefined>}
  */
 export async function findT3({ places, machine, frontEnd, downloads, log }) {
-  const entry = toolEntry(await loadManifest(downloads), 't3');
+  const manifest = await loadManifest(downloads).catch((error) => {
+    if (!(error instanceof Stop)) throw error;
+    log.write(`T3 Code: couldn't look for an earlier install: ${error.message}`);
+    return undefined;
+  });
+  if (!manifest) return undefined;
+  const entry = toolEntry(manifest, 't3');
   if (!entry) return undefined;
   /** @type {('stable' | 'nightly')[]} */
   const channels = ['stable', 'nightly'];

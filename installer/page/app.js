@@ -7,6 +7,7 @@ import { createRoot } from 'react-dom/client';
 import { begin, dashes, onScreen, reduce, wakeAt } from './pacing.js';
 import { icons } from './parts.js';
 import { Screen, announced, postAnswer } from './screens.js';
+import { StopButton } from './stop.js';
 
 /** @typedef {import('./pacing.js').PageEvent} PageEvent */
 /** @typedef {import('./pacing.js').Shown} Shown */
@@ -14,6 +15,7 @@ import { Screen, announced, postAnswer } from './screens.js';
 function App() {
   const [page, dispatch] = useReducer(reduce, begin);
   const connection = useRef(/** @type {number | undefined} */ (undefined));
+  const [over, setOver] = useState(false);
 
   useEffect(() => {
     const events = new EventSource('events');
@@ -29,6 +31,12 @@ function App() {
       // The run's last words: the server is about to close, and the page keeps them on screen.
       if (event.type === 'finish') events.close();
     };
+    // However the run ended (a stop sends no last words), the server says so as it closes, and
+    // the page stops listening rather than keep trying a server that's gone.
+    events.addEventListener('closing', () => {
+      events.close();
+      setOver(true);
+    });
     return () => events.close();
   }, []);
 
@@ -54,7 +62,7 @@ function App() {
   const ending = shown.kind === 'ending';
   return (
     <div className={`shell${ending ? ' is-ending' : ''}`}>
-      <Header page={page} />
+      <Header page={page} over={over} />
       <Stage
         shown={shown}
         actions={{
@@ -68,10 +76,10 @@ function App() {
 }
 
 /**
- * The name, the way back to the setup page, and the dashes that say how far along the run is.
- * @param {{ page: import('./pacing.js').Page }} props
+ * The name, the way back to the setup page, the dashes that say how far along the run is, and Stop.
+ * @param {{ page: import('./pacing.js').Page, over: boolean }} props
  */
-function Header({ page }) {
+function Header({ page, over }) {
   const { questions, work, ending } = dashes(page);
   const count = (/** @type {string[]} */ run) => run.filter((dash) => dash !== 'to-come' && dash !== 'now').length;
   const said = `${count(questions)} ${count(questions) === 1 ? 'question' : 'questions'} answered, ${count(work)} ${count(work) === 1 ? 'step' : 'steps'} done${ending === 'now' ? ', and finished' : ''}`;
@@ -97,6 +105,7 @@ function Header({ page }) {
           <i className={`dash is-${ending}`} />
         </span>
       </div>
+      <StopButton page={page} over={over} />
     </header>
   );
 }

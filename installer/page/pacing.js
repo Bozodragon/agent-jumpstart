@@ -42,7 +42,9 @@
  * @typedef {Shared & { kind: 'step', text: string }} StepScreen
  * @typedef {Shared & { kind: 'notice', title: string, text: string }} NoticeScreen
  * @typedef {Shared & { kind: 'summary', title: string, rows: [string, string][] }} SummaryScreen
- * @typedef {Shared & { kind: 'busy', message: string, received?: number, total?: number, ended?: { text: string, ok?: boolean }, endedBy?: number }} BusyScreen
+ * @typedef {Shared & { kind: 'busy', message: string, received?: number, total?: number, ended?: { text: string, ok?: boolean }, endedBy?: number, terminal?: string }} BusyScreen
+ *   `terminal`: what the skills installer printed during it, which the page shows in a small
+ *   terminal (output events with this busy's id).
  * @typedef {Shared & { kind: 'question', question: Asked, number?: number, answer?: { value: unknown }, refused?: { answer: unknown, reason: string }, problem?: string, notice?: { title: string, text: string } }} QuestionScreen
  *   `problem` or `notice`: the call just before it, joined to it. `number`: which question this
  *   is, counting only the person's answers to the setup's questions (not Done, not Try again).
@@ -96,6 +98,8 @@ export const holds = {
   step: 2200,
   /** A busy line once it has ended, with its tick or its warning. */
   done: 1700,
+  /** A busy that showed the skills installer's own output, once it has ended: its terminal, to be looked at. */
+  terminal: 3400,
   /** Either, while the page is a long way behind the run. */
   catchUp: 600,
 };
@@ -159,7 +163,8 @@ export function reduce(page, action) {
  *   about, or `finish`, everything up to the end that isn't a question or a busy. Those that do
  *   come then (T3 Code that couldn't be opened, say) are shown before it.
  *
- * What a program prints goes with the newest screen.
+ * What a program prints goes with the newest screen; what the skills installer prints, with its
+ * busy, as its `terminal`.
  * @param {PageEvent[]} events
  * @returns {Screen[]}
  */
@@ -298,9 +303,12 @@ export function screensOf(events) {
         if (signIn) signIn.refused = { reason: event.reason, by: event.id };
         break;
       }
-      case 'output':
-        if (newest) newest.output += event.text;
+      case 'output': {
+        const busy = event.busy === undefined ? undefined : busies.get(event.busy);
+        if (busy) busy.terminal = (busy.terminal ?? '') + event.text;
+        else if (newest && event.busy === undefined) newest.output += event.text;
         break;
+      }
     }
   });
 
@@ -319,6 +327,9 @@ const makesAScreen = new Set(['step', 'notice', 'problem', 'summary', 'finish', 
  * @param {Screen} screen @param {Page} page @param {number} now @param {number} behind
  */
 function isThrough(screen, page, now, behind) {
+  // Once the run is stopping, nothing is waited on but the stop screen: not what came before, nor
+  // a notice or step the run sends on its way to the call that throws the Stop.
+  if (screen.kind !== 'ending' && screen.kind !== 'problem' && page.events.some((event) => event.type === 'stopping')) return true;
   switch (screen.kind) {
     case 'question':
       return screen.answer !== undefined;
@@ -353,7 +364,7 @@ function dueAt(screen, page, behind) {
   if (done === undefined) return undefined;
   const at = page.times[done];
   if (at === -Infinity) return -Infinity;
-  const hold = behind >= behindToCatchUp ? holds.catchUp : screen.kind === 'step' ? holds.step : holds.done;
+  const hold = behind >= behindToCatchUp ? holds.catchUp : screen.kind === 'step' ? holds.step : screen.terminal ? holds.terminal : holds.done;
   return Math.max(shown, at) + hold;
 }
 
@@ -429,6 +440,8 @@ export function dashes(page) {
   /** @param {Screen} screen @param {number} index @returns {Dash} */
   const dash = (screen, index) => {
     if ((screen.kind === 'busy' && screen.ended?.ok === false) || (screen.kind === 'question' && screen.problem !== undefined) || screen.kind === 'problem') return 'warn';
+    // Never answered (the run stopped): not one of those done.
+    if (screen.kind === 'question' && screen.answer === undefined) return index === page.current ? 'now' : 'to-come';
     if (page.current === -1 || index < page.current) return 'done';
     return index === page.current ? 'now' : 'to-come';
   };

@@ -27,6 +27,15 @@ import { loadManifest, toolEntry } from './manifest.js';
 import { skillNames } from './profile.js';
 import { exists, installTool } from './tools.js';
 
+/**
+ * The CLI keeps its look on a pipe (issue #88): its logo, rails, boxes and a spinner that redraws
+ * itself. On Windows its own colours stay on too; FORCE_COLOR=1 brings back the rest (the grey
+ * rails, the spinner's colour) and changes nothing else. What it prints is passed on to the front
+ * end as it prints it, for the page's small terminal; the terminal front end shows its own
+ * spinner instead, as it always has.
+ */
+const forceColor = { FORCE_COLOR: '1' };
+
 const leftAlone = 'Already there, left as it is';
 const upToDate = 'Up to date';
 
@@ -99,7 +108,8 @@ export async function installSkills(profile, ours, installedFrom, context) {
     if (program && git.length > 0 && wanted.length > 0 && !unchanged) {
       const args = ['add', source, '-g', '-a', 'claude-code', '-y', ...(names ? ['-s', ...wanted] : [])];
       const what = `${wanted.length === 1 ? 'the skill' : `${wanted.length} skills`} from ${source}`;
-      ran = await frontEnd.busy(`Installing ${what}`, () => machine.run(program.file, [...program.args, ...args]), ({ code }) =>
+      const command = [...program.args, ...args];
+      ran = await frontEnd.busy(`Installing ${what}`, (_, output) => machine.run(program.file, command, { env: forceColor, onOutput: output }), ({ code }) =>
         code === 0 ? { text: `Installed ${what}`, ok: true } : { text: `Couldn't install ${what}`, ok: false },
       );
     }

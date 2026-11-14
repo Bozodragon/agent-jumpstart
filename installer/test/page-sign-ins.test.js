@@ -109,6 +109,29 @@ test("a code Claude turns down shows Claude's own reason with Try again or Skip 
   }
 });
 
+test("Stop, pressed while Claude's sign-in waits for a code, ends the run at once, and a code posted after it goes nowhere", async (t) => {
+  const { where, logins } = await aLaptopSignedOutOfClaude(t, {
+    status: [signedOut],
+    login: { output: `${claudesLines.join('\n')}\n`, readsALine: true },
+  });
+
+  const run = await runOnPage(where, 'york');
+  t.after(run.kill);
+  const page = run.connect();
+  answerEverything(page, run.answer, { channel: 'stable' }).catch(() => {});
+  const shows = await page.next((event) => event.type === 'signInShows' && event.codeBox !== undefined);
+  assert.equal((await run.stop()).status, 200);
+  const late = await run.answer(shows.codeBox, 'a1B2c3#state-9z');
+  await page.next((event) => event.type === 'step' && /^Running the same line again/.test(event.text));
+  await page.seen(page.events.at(-1)?.id ?? 0);
+  const result = await run.ended;
+
+  assert.equal(result.code, 1, result.stdout + result.stderr);
+  assert.equal(late.status, 409, 'the box is gone with the run');
+  assert.equal((await page.next((event) => event.type === 'problem')).text, 'Stopped at your request.');
+  assert.equal((await logins())[0].typed, undefined, "nothing reached Claude's input");
+});
+
 test("a code that isn't all of Claude's code is turned down on the page, with the reason, before Claude sees it, and the box stays open for the whole one", async (t) => {
   const { where, logins } = await aLaptopSignedOutOfClaude(t, {
     status: [signedOut, signedIn],

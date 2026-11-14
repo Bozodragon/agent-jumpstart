@@ -102,6 +102,11 @@ export async function runOnPage(where, profile, extra = [], { internet } = {}) {
      */
     answer: (question, answer) => post(new URL('answer', page), { question, answer }),
     /**
+     * Presses Stop, as the page does once the person has said they're sure.
+     * @returns {Promise<{ status: number, body: any }>}
+     */
+    stop: () => post(new URL('stop', page), {}),
+    /**
      * Any request to the page's server, by path from its root, for the tests of what it refuses.
      * @param {string} path such as `/<secret>/` or `/favicon.ico`
      * @param {{ method?: string, headers?: Record<string, string>, body?: string }} [init]
@@ -127,6 +132,8 @@ export function connect(events, { lastEventId } = {}) {
   let id;
   /** How many events the run had sent when this connection opened. @type {number | undefined} */
   let before;
+  /** Whether the server has said the run is over and it's closing, so the page can stop listening. */
+  let over = false;
   /** @type {(error: unknown) => void} */
   let failed = () => {};
   const finished = new Promise((resolve) => (failed = resolve));
@@ -164,6 +171,10 @@ export function connect(events, { lastEventId } = {}) {
           ({ connection: id, before } = JSON.parse(fields.data));
           continue;
         }
+        if (fields.event === 'closing') {
+          over = true;
+          continue;
+        }
         if (fields.data === undefined) continue;
         arrive({ ...JSON.parse(fields.data), id: Number(fields.id) });
       }
@@ -180,6 +191,10 @@ export function connect(events, { lastEventId } = {}) {
     /** How many events the run had sent when the stream opened: those it sends first, as history. */
     get before() {
       return before;
+    },
+    /** Whether the server has said the run is over, as it closes: nothing more is to come. */
+    get over() {
+      return over;
     },
     /** Every event received so far, in the order received. */
     events: seen,
