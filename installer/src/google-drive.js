@@ -161,8 +161,9 @@ export async function readyGoogleDrive(profile, places, ask, drive, context) {
 /**
  * `keepDownloads`: a debug run, which leaves the downloaded Drive installer in Downloads.
  * `once`: looks made once a run, however often the questions are asked (main asks them again
- * after going back on the page), by name.
- * @typedef {{ machine: import('./machine.js').Machine, frontEnd: import('./front-end.js').FrontEnd, log: { write(line: string): void }, attended: boolean, keepDownloads?: boolean, once?: Map<string, Promise<any>> }} Context
+ * after going back on the page), by name. `atEnd`: what's done once the run is over, however it
+ * ends, such as deleting a Drive installer that arrived after the Installer had moved on.
+ * @typedef {{ machine: import('./machine.js').Machine, frontEnd: import('./front-end.js').FrontEnd, log: { write(line: string): void }, attended: boolean, keepDownloads?: boolean, once?: Map<string, Promise<any>>, atEnd?: (() => Promise<void>)[] }} Context
  */
 
 /** What's said when Software Center offers Drive, unless the profile words it its own way. */
@@ -354,17 +355,20 @@ async function fromHostedInstaller(profile, places, offered, context) {
     );
   };
   if (downloaded.status === 'none') say(`no download appeared in ${folder} within ${downloadStarts / 1000} seconds`);
-  if (downloaded.status === 'stopped') {
-    say(`the download stopped growing for ${downloadStalls / 1000} seconds, at ${downloaded.size} bytes`);
-    // The browser's unfinished download, which it may finish later (such as once the person
-    // agrees to keep an .exe), unless it's removed. A finished file of another size isn't ours.
-    if (unfinished(downloaded.file)) await tidy(downloaded.file);
-  }
+  if (downloaded.status === 'stopped') say(`the download stopped growing for ${downloadStalls / 1000} seconds, at ${downloaded.size} bytes`);
   if (downloaded.status === 'mismatch') {
     say(`${downloaded.file} is the hosted installer's size, but its SHA-256 is ${downloaded.sha256}, not ${hosted.sha256}`);
     await tidy(downloaded.file);
   }
   if (downloaded.status !== 'found') {
+    // The browser may still be downloading it, or finish it later (such as once the person
+    // agrees to keep an .exe): what's there of it now goes, and so does whatever of it has
+    // arrived by the time the run is over.
+    const leftovers = async () => {
+      for (const file of await ourDownloads(folder, before, hosted)) await tidy(file);
+    };
+    await leftovers();
+    context.atEnd?.push(leftovers);
     frontEnd.step(missed[downloaded.status]);
     return undefined;
   }
@@ -494,6 +498,25 @@ async function sha256Of(file) {
   const hash = createHash('sha256');
   await pipeline(createReadStream(file), hash);
   return hash.digest('hex');
+}
+
+/**
+ * What the run can tell is its own download of the hosted installer, among the files that
+ * weren't in Downloads before: a finished one of its size whose SHA-256 matches, or a smaller
+ * one with an unfinished download's name. Anything else is left be.
+ * @param {string} folder @param {Set<string>} before the names already there @param {HostedInstaller} hosted
+ * @returns {Promise<string[]>} their paths
+ */
+async function ourDownloads(folder, before, hosted) {
+  const ours = [];
+  for (const name of await filesIn(folder)) {
+    if (before.has(name)) continue;
+    const file = join(folder, name);
+    const size = await stat(file).then((found) => found.size, () => undefined);
+    if (size === undefined || size > hosted.size) continue;
+    if (size < hosted.size ? unfinished(name) : (await sha256Of(file).catch(() => undefined)) === hosted.sha256.toLowerCase()) ours.push(file);
+  }
+  return ours;
 }
 
 /**

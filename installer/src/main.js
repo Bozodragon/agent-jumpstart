@@ -247,6 +247,8 @@ async function main() {
     done.push(...rows);
     doneInStep = [];
   };
+  /** What's done once the run is over, however it ends (see google-drive.js's Context). @type {(() => Promise<void>)[]} */
+  const atEnd = [];
   /** What the ending says: the steps that didn't work, noted as the run meets them. */
   const ending = newEnding();
   /**
@@ -321,7 +323,7 @@ async function main() {
       const choices = {
         ...(team === undefined ? {} : { team }),
         ...experience,
-        ...(await askQuestions(profile, places, ask, log, found, { machine, frontEnd, attended: !unattended, keepDownloads: options.debug, once })),
+        ...(await askQuestions(profile, places, ask, log, found, { machine, frontEnd, attended: !unattended, keepDownloads: options.debug, once, atEnd })),
       };
       if (earlier) {
         const rows = await reusedRows(earlier, choices, reused, olderAnswers ? [] : hiddenFor(experience), options.downloads);
@@ -472,6 +474,7 @@ async function main() {
     }
     return 1;
   } finally {
+    for (const each of atEnd) await each().catch((error) => log.write(`Tidying up once the run was over failed: ${messageOf(error)}`));
     if (options.debug) await logUserPath(machine, log, 'after');
     await frontEnd.close();
   }

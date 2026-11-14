@@ -195,6 +195,20 @@ test('a file that arrives in Downloads during the minute but isn\'t the installe
   assert.equal(await exists(join(where.home, pdf)), true);
 });
 
+test('a download that finishes only after the Installer has moved on to Software Center is deleted once the run is done with it, and the run\'s other new files are left', async (t) => {
+  // Software Center never installs it, so its 15-minute wait runs out, long after the download, which starts after 61 seconds, has arrived.
+  const { where, run } = await aYorkLaptopWithoutDrive(t, { browser: { after: 61_000 }, answers: { softwareCenter: 'install', withoutGoogleDrive: 'documents' } });
+  const downloaded = join(where.home, 'Downloads', 'GoogleDriveFSSetup.exe');
+
+  const result = await run();
+
+  assert.equal(result.code, 0, result.stdout + result.stderr);
+  assert.ok(flowing(result.stdout).includes(failures[0][2]), result.stdout);
+  assert.equal(await exists(downloaded), false);
+  const log = (await readOnlyLog(where.home)).text;
+  assert.ok(log.includes(`Google Drive for desktop: deleted ${downloaded}`), log);
+});
+
 test('a slow download that keeps growing for minutes, after starting within a minute, finishes and is installed', async (t) => {
   // 4,000 bytes at 10 a second, starting after 50 seconds: over 7 minutes in all.
   const { where, machine, run } = await aYorkLaptopWithoutDrive(t, { browser: { after: 50_000, perSecond: 10 } });
