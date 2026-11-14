@@ -5,6 +5,7 @@
 // in `screensOf` that makes it, then a case in `Screen` below. See the notes for #101.
 import { useEffect, useRef, useState } from 'react';
 import { CopyBox, Line, Path, Status, Words, icons } from './parts.js';
+import { Terminal } from './terminal-panel.js';
 import { soFar, split } from './words.js';
 
 /** @typedef {import('./pacing.js').Shown} Shown */
@@ -173,7 +174,8 @@ function Rows({ rows }) {
  * @param {{ screen: import('./pacing.js').BusyScreen }} props
  */
 function Busy({ screen }) {
-  const { message, received, total, ended } = screen;
+  const { message, received, total, ended, terminal } = screen;
+  if (terminal) return <Skills screen={screen} terminal={terminal} />;
   if (ended) {
     return (
       <>
@@ -205,6 +207,25 @@ function Busy({ screen }) {
           <b>{soFar(received, undefined)}</b> so far
         </p>
       )}
+    </>
+  );
+}
+
+/**
+ * Installing one source's skills: the busy line, and under it the skills installer's own output
+ * in a small terminal, which stays once it has ended, for a moment, to be looked at.
+ * @param {{ screen: import('./pacing.js').BusyScreen, terminal: string }} props
+ */
+function Skills({ screen, terminal }) {
+  const { message, ended } = screen;
+  return (
+    <>
+      <Status kind={!ended || ended.ok === undefined ? 'ring' : ended.ok ? 'tick' : 'warn'} />
+      <h1 className="title">
+        <Line text={ended?.text ?? message} />
+      </h1>
+      <p className="lede">This is the skills installer at work. Adding a skill yourself later looks just like this.</p>
+      <Terminal text={terminal} running={!ended} />
     </>
   );
 }

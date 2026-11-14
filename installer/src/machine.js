@@ -167,6 +167,12 @@ export async function keepTrying({ machine, every, patience = machine.patience }
  * @property {(ran: Ran) => boolean} [expected] Whether a run that failed failed as expected: a
  *   miss the caller looks for, such as a registry value that isn't there or T3 Code still
  *   starting, rather than something going wrong. Only a debug run's log holds it.
+ * @property {Record<string, string>} [env] Environment variables for this one run, as for a
+ *   program on screen (`WindowOptions`).
+ * @property {(text: string) => void} [onOutput] Called with what the program prints, stdout and
+ *   stderr together, as it prints it, while it runs; it all still comes back in `output` too. The
+ *   fake machine passes on its reply's output in one piece, as soon as the run starts (before
+ *   the reply's `takes`).
  */
 
 /** @typedef {{ code: number, output: string }} Ran */
@@ -183,7 +189,8 @@ export async function keepTrying({ machine, every, patience = machine.patience }
  * @typedef {object} Parts
  * @property {Omit<Machine, 'run' | 'runHere' | 'runOnScreen' | 'runOnScreenAndKeep' | 'launch'>} machine
  * @property {() => Promise<PathSources>} pathSources
- * @property {(file: string, args: string[], env: NodeJS.ProcessEnv) => Promise<Ran>} start
+ * @property {(file: string, args: string[], env: NodeJS.ProcessEnv, how?: RunOptions) => Promise<Ran>} start
+ *   `how.env` is the part of `env` that the run was given of its own, which the fake machine records.
  * @property {(file: string, args: string[], env: NodeJS.ProcessEnv, extra?: Record<string, string>) => Promise<number>} startOnScreen
  *   `env` is the whole environment to start it with; `extra` is the part of it that a run was
  *   given of its own, which the fake machine records.
@@ -203,9 +210,9 @@ export function openMachine(places, log, screen) {
   // still shows. In any run, a program that fails is logged once it has, with its output.
   /** @param {Runner} run @returns {Runner} */
   const logged = (run) => async (file, args, how = {}) => {
-    const running = `Running: ${commandLine(file, args)}`;
+    const running = `Running: ${commandLine(file, args)}${withEnv(how)}`;
     log.detail(running);
-    const ran = await run(file, args);
+    const ran = await run(file, args, how);
     const output = ran.output.trimEnd();
     const lines = [
       `Ran: ${basename(file)} (code ${ran.code})`,
@@ -253,7 +260,7 @@ export function openMachine(places, log, screen) {
   };
   return {
     ...machine,
-    run: logged(async (file, args) => start(file, args, await environment())),
+    run: logged(async (file, args, how) => start(file, args, { ...(await environment()), ...how?.env }, how)),
     runHere: logged(async (file, args) => runProgram(file, args, await environment())),
     runOnScreen: loggedOnScreen(async (file, args, how) => startOnScreen(file, args, { ...(await environment()), ...how?.env }, how?.env)),
     runOnScreenAndKeep: loggedOnScreenAndKept(async (file, args, how) =>
@@ -270,7 +277,7 @@ export function openMachine(places, log, screen) {
 /** @param {string} arg */
 const quoted = (arg) => (/[\s"]/.test(arg) ? `"${arg}"` : arg);
 
-/** What a run was given of its own environment, for the log line that starts it. @param {WindowOptions} [how] */
+/** What a run was given of its own environment, for the log line that starts it. @param {{ env?: Record<string, string> }} [how] */
 const withEnv = (how) => (how?.env && Object.keys(how.env).length > 0 ? ` (with ${Object.entries(how.env).map(([name, value]) => `${name}=${value}`).join(' ')})` : '');
 
 /** A program and its arguments as one line, for the log. @param {string} file @param {string[]} args */
@@ -435,7 +442,7 @@ function fakeMachine(folder, home, screen) {
       },
     },
     pathSources,
-    start: (file, args, env) => reply(file, args, { file, args, path: env.Path ?? '', input: inputOf(waitedFor) }),
+    start: (file, args, env, how) => reply(file, args, { file, args, path: env.Path ?? '', ...recordOf(how?.env), input: inputOf(waitedFor) }, how?.onOutput),
     startOnScreen: async (file, args, env, extra) =>
       (await reply(file, args, { file, args, path: env.Path ?? '', ...recordOf(extra), onScreen: true, input: inputOf(screen.stdio(false)) })).code,
     // The reply's output is what the program prints, so it's shown on the screen, as it would be.
@@ -453,9 +460,10 @@ function fakeMachine(folder, home, screen) {
   /**
    * @param {string} file @param {string[]} args
    * @param {{ file: string, args: string[], path: string, env?: Record<string, string>, onScreen?: boolean, leftRunning?: boolean, input: string, found?: string[] }} record
+   * @param {RunOptions['onOutput']} [onOutput] given the reply's output as the run starts
    * @returns {Promise<Ran>}
    */
-  async function reply(file, args, record) {
+  async function reply(file, args, record, onOutput) {
     /** @type {{ file: string, args: string[] }[]} */
     const runs = await read('runs.json', []);
     /** @type {Record<string, Reply | Reply[]>} */
@@ -488,6 +496,7 @@ function fakeMachine(folder, home, screen) {
       await mkdir(dirname(target), { recursive: true });
       await writeFile(target, contents);
     }
+    if (onOutput && found.output) onOutput(found.output);
     if (found.takes) await sleep(found.takes);
     return { code: found.code ?? 0, output: found.output ?? '' };
   }
@@ -711,16 +720,23 @@ function startable(file, args) {
 /**
  * @param {string} file @param {string[]} args
  * @param {NodeJS.ProcessEnv} [env] what to start it with; this process's environment if none
+ * @param {RunOptions} [options] `onOutput`, given what it prints as it prints it
  * @returns {Promise<Ran>}
  */
-function runProgram(file, args, env = process.env) {
+function runProgram(file, args, env = process.env, { onOutput } = {}) {
   const how = startable(file, args);
   if ('refused' in how) return Promise.resolve({ code: -1, output: how.refused });
   return new Promise((resolve) => {
     let output = '';
     const child = spawn(how.file, how.args, { ...how.options, env, windowsHide: true, stdio: waitedFor });
-    child.stdout?.on('data', (chunk) => (output += chunk));
-    child.stderr?.on('data', (chunk) => (output += chunk));
+    // Decoded as it comes, so a character split between two chunks isn't broken.
+    for (const from of [child.stdout, child.stderr]) {
+      from?.setEncoding('utf8');
+      from?.on('data', (/** @type {string} */ chunk) => {
+        output += chunk;
+        onOutput?.(chunk);
+      });
+    }
     child.once('error', (error) => resolve({ code: -1, output: error.message }));
     child.once('close', (code) => resolve({ code: code ?? -1, output }));
   });

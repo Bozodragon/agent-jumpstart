@@ -23,7 +23,10 @@
 //                                            everything since are asked again, as new questions
 //   fixed    {}                              Back and Change are gone for good: the questions are
 //                                            over, or something has acted on the answers
-//   output   { text }                       what a program on screen printed
+//   output   { text, busy? }                what a program on screen printed; with `busy`, what
+//                                            the skills installer printed during that busy (the
+//                                            one program whose own output the page shows), as
+//                                            it printed it, escape codes and all
 //   finish   { text }                       the run's last words
 import { mkdir, rename, rm, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
@@ -262,7 +265,7 @@ export async function openInstallerPage({ addressFile, connectedFile, page }) {
     },
     async busy(message, task, ended) {
       // Going back, it was shown the first time through.
-      if (quiet) return task(() => {});
+      if (quiet) return task(() => {}, () => {});
       const busy = server.send({ type: 'busy', message });
       let last = -Infinity;
       let shownReceived = -1;
@@ -275,9 +278,13 @@ export async function openInstallerPage({ addressFile, connectedFile, page }) {
         shownReceived = received;
         server.send({ type: 'progress', busy, received, ...(total === undefined ? {} : { total }) });
       };
+      /** @type {import('./front-end.js').Output} */
+      const output = (text) => {
+        if (text !== '') server.send({ type: 'output', busy, text });
+      };
       let result;
       try {
-        result = await task(progress);
+        result = await task(progress, output);
       } catch (error) {
         server.send({ type: 'ended', busy, text: message, ok: false });
         throw error;
