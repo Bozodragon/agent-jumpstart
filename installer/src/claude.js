@@ -85,7 +85,9 @@ export async function setUpClaude(context, ask) {
         say(describe(state, program));
         return state;
       },
-      undefined,
+      // Done, it says so: the page holds a finished busy a moment, and in the words it began
+      // with it would still read as under way.
+      () => ({ text: `Checked ${entry.name}`, ok: true }),
       { changesNothing: true },
     );
 

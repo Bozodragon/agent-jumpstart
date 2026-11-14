@@ -69,7 +69,7 @@ export async function findT3({ places, machine, frontEnd, downloads, log }) {
       }
       return { version, programsThere };
     },
-    undefined,
+    () => ({ text: `Checked whether ${entry.name} is installed`, ok: true }),
     { changesNothing: true },
   );
   if (!version && programsThere.length === 0) {

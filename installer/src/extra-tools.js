@@ -75,7 +75,9 @@ async function signIn(tool, program, extra, { machine, frontEnd, log }) {
   const how = /** @type {import('./manifest.js').SignIn} */ (tool.signIn);
   const whoIsSignedIn = async () => {
     // clasp takes a few seconds to answer, with nothing on screen of its own.
-    const ran = await frontEnd.busy(`Checking ${tool.name}'s sign-in`, () => machine.run(program.file, [...program.args, ...how.check]), undefined, { changesNothing: true });
+    const ran = await frontEnd.busy(`Checking ${tool.name}'s sign-in`, () => machine.run(program.file, [...program.args, ...how.check]), () => ({ text: `Checked ${tool.name}'s sign-in`, ok: true }), {
+      changesNothing: true,
+    });
     const match = ran.code === 0 ? new RegExp(how.signedInAs, 'm').exec(ran.output) : null;
     if (!match) say('not signed in');
     return match?.[1];
