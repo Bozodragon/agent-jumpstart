@@ -254,6 +254,8 @@ form { margin: 0; }
 .copybox-link:focus-visible { outline: 2px solid var(--accent); outline-offset: .25rem; border-radius: .25rem; }
 .signin .copybox-text { font-size: 1.375rem; letter-spacing: .08em; color: var(--text); }
 .signin-form { margin-top: 1.5rem; }
+/* The heading takes the focus only so it isn't lost once a code is sent; it isn't a control. */
+.signin .title:focus { outline: none; }
 .label { display: block; margin: 0 2px .625rem; font-size: .9375rem; font-weight: 500; }
 .coderow { display: flex; gap: .75rem; align-items: center; }
 .coderow .input { flex: 1; min-width: 0; }
