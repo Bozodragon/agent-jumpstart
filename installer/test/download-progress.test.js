@@ -27,11 +27,17 @@ const t3Replies = (installer) => ({
 /** The Installer's own downloads folder, where every download lands first. @param {string} home */
 const downloadsFolder = (home) => join(stateFolder(home), 'downloads');
 
-/** What the Installer's own downloads folder holds, by name and size. @param {string} home */
+/**
+ * What the Installer's own downloads folder holds, by name and size. It's read while a run may
+ * still be downloading, so a file listed and then renamed or removed before its size is read
+ * (Claude Code's `.partial` becoming `claude.exe`) isn't held any more, and is left out.
+ * @param {string} home
+ */
 async function heldIn(home) {
   const folder = downloadsFolder(home);
   const names = await readdir(folder).catch(() => []);
-  return Promise.all(names.map(async (name) => ({ name, size: (await stat(join(folder, name))).size })));
+  const held = await Promise.all(names.map(async (name) => ({ name, size: await stat(join(folder, name)).then((found) => found.size, () => -1) })));
+  return held.filter(({ size }) => size >= 0);
 }
 
 /**

@@ -4,6 +4,7 @@
 // and is then sent to the profile's settings page for anything only they can switch on.
 import { loadManifest } from './manifest.js';
 import { showPage } from './open-page.js';
+import { plainLines, wholeLines } from './text.js';
 import { installTool } from './tools.js';
 
 /**
@@ -60,8 +61,8 @@ async function walkThroughSettings(extra, { attended, machine, frontEnd, log }) 
 
 /**
  * Someone already signed in (a re-run) is left signed in. Otherwise the tool's own browser
- * sign-in runs in the person's window, so they see its address if no browser opens, and the
- * installer waits for it to finish.
+ * sign-in runs in the person's window, so they see its address if no browser opens, or, on the
+ * page, piped, with the address it prints on the page; and the installer waits for it to finish.
  * @param {import('./manifest.js').Tool} tool
  * @param {import('./tools.js').Command} program
  * @param {import('./profile.js').ExtraTool} extra
@@ -85,8 +86,31 @@ async function signIn(tool, program, extra, { machine, frontEnd, log }) {
     say(`already signed in as ${before}, so the sign-in was skipped`);
     return { account: before, already: true };
   }
-  frontEnd.notice(extra.signIn ?? 'A browser window will open for you to sign in.', `Sign in to ${tool.name}`);
-  const code = await machine.runOnScreen(program.file, [...program.args, ...how.run]);
+  // The profile's words name neither a key nor the window; where to come back to is the front end's.
+  const told = extra.signIn ?? 'A browser window will open for you to sign in.';
+  /** @type {number} */
+  let code;
+  if (frontEnd.inWindow) {
+    frontEnd.notice(`${told} ${frontEnd.comeBack()}`, `Sign in to ${tool.name}`);
+    code = await machine.runOnScreen(program.file, [...program.args, ...how.run]);
+  } else {
+    // On the page it runs piped. It opens the browser itself, and prints the address it opened,
+    // which still comes back to it by itself, so the page offers it in case no window opened.
+    frontEnd.notice([told, '', `If no window opens, use the link below. ${frontEnd.comeBack()} It carries on by itself.`].join('\n'), `Sign in to ${tool.name}`);
+    const ran = await frontEnd.signIn((show) => {
+      let shown = false;
+      return machine.runOnScreenAndKeep(program.file, [...program.args, ...how.run], {
+        watch(printed) {
+          const url = wholeLines(printed).map((line) => /\b(https:\/\/\S+)/.exec(line)?.[1]).find(Boolean);
+          if (shown || !url) return;
+          shown = true;
+          show({ link: { url, label: 'If no window opens, use this link' } });
+        },
+      });
+    });
+    for (const line of plainLines(ran.output)) say(`sign-in said: ${line}`);
+    code = ran.code;
+  }
   say(`sign-in finished with code ${code}`);
   const after = await whoIsSignedIn();
   if (after) say(`signed in as ${after}`);

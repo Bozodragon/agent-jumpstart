@@ -49,6 +49,12 @@
  * @typedef {Shared & { kind: 'question', question: Asked, number?: number, answer?: { value: unknown }, refused?: { answer: unknown, reason: string }, problem?: string, notice?: { title: string, text: string } }} QuestionScreen
  *   `problem` or `notice`: the call just before it, joined to it. `number`: which question this
  *   is, counting only the person's answers to the setup's questions (not Done, not Try again).
+ * @typedef {Shared & { kind: 'signIn', notice?: { title: string, text: string }, link?: { url: string, label: string }, code?: string, codeBox?: number, sent?: boolean, refused?: { reason: string, by: number }, over?: boolean }} SignInScreen
+ *   A sign-in in the browser, joined to the notice before it, which explains it: the link and
+ *   code the person needs, as the program prints them, and a box for a code, posted as an answer
+ *   to `codeBox` (`sent` once it's gone to the program, `refused` with why the last code wasn't
+ *   taken, `by` the event that said so, so the same reason twice is two refusals).
+ *   `over` once the program has finished.
  * @typedef {Shared & { kind: 'ending' | 'problem', summaries: Summary[], problems: string[], lines: string[], next?: { title: string, text: string }, log?: string, closing?: string }} EndScreen
  *   The run's last screen, which gathers every call after it that isn't a question or a busy.
  *   `ending`: the checklist onwards. `problem`: a problem nothing is asked about, which only
@@ -56,7 +62,7 @@
  * @typedef {Shared & { kind: 'between' }} BetweenScreen Nothing to show yet: the page has
  *   finished with the last screen (answered, continued) and the run hasn't said what's next.
  *
- * @typedef {StepScreen | NoticeScreen | SummaryScreen | BusyScreen | QuestionScreen | EndScreen} Screen
+ * @typedef {StepScreen | NoticeScreen | SummaryScreen | BusyScreen | QuestionScreen | SignInScreen | EndScreen} Screen
  * @typedef {Screen | BetweenScreen} Shown
  */
 
@@ -153,6 +159,7 @@ export function reduce(page, action) {
  *
  * - a problem and the question straight after it (Try again or Skip for now);
  * - a notice and the Done straight after it (waitForDone);
+ * - a notice and the sign-in straight after it (signIn), which it explains;
  * - the run's last screen: from the first of `endingSummaries`, or a problem nothing is asked
  *   about, or `finish`, everything up to the end that isn't a question or a busy. Those that do
  *   come then (T3 Code that couldn't be opened, say) are shown before it.
@@ -173,6 +180,10 @@ export function screensOf(events) {
   const questions = new Map();
   /** @type {Map<number, BusyScreen>} */
   const busies = new Map();
+  /** Sign-ins by their id. @type {Map<number, SignInScreen>} */
+  const signIns = new Map();
+  /** Sign-ins by their code box's id. @type {Map<number, SignInScreen>} */
+  const codeBoxes = new Map();
   /** A problem or notice the question coming next joins. @type {{ key: number, problem?: string, notice?: { title: string, text: string } } | undefined} */
   let joining;
 
@@ -202,7 +213,7 @@ export function screensOf(events) {
       }
       case 'notice': {
         const next = nextCall(index);
-        if (next?.type === 'question' && next.kind === 'done') joining = { key: event.id, notice: { title: event.title, text: event.text } };
+        if ((next?.type === 'question' && next.kind === 'done') || next?.type === 'signIn') joining = { key: event.id, notice: { title: event.title, text: event.text } };
         else if (end) {
           if (end.next) end.lines.push(event.text);
           else end.next = { title: event.title, text: event.text };
@@ -249,17 +260,48 @@ export function screensOf(events) {
         questions.set(event.question, screen);
         break;
       }
+      case 'signIn': {
+        /** @type {SignInScreen} */
+        const screen = { kind: 'signIn', key: joining?.key ?? event.id, output: '', ...(joining?.notice && { notice: joining.notice }) };
+        joining = undefined;
+        add(screen);
+        signIns.set(event.id, screen);
+        break;
+      }
+      case 'signInShows': {
+        const screen = signIns.get(event.signIn);
+        if (!screen) break;
+        if (event.link) screen.link = event.link;
+        if (event.code !== undefined) screen.code = event.code;
+        if (event.codeBox !== undefined) {
+          screen.codeBox = event.codeBox;
+          codeBoxes.set(event.codeBox, screen);
+        }
+        break;
+      }
+      case 'signInEnded': {
+        const screen = signIns.get(event.signIn);
+        if (screen) screen.over = true;
+        break;
+      }
       case 'answered': {
         const screen = questions.get(event.question);
         if (screen) {
           screen.answer = { value: event.answer };
           delete screen.refused;
         }
+        const signIn = codeBoxes.get(event.question);
+        if (signIn) {
+          signIn.sent = true;
+          delete signIn.refused;
+        }
         break;
       }
       case 'refused': {
         const screen = questions.get(event.question);
         if (screen) screen.refused = { answer: event.answer, reason: event.reason };
+        const signIn = codeBoxes.get(event.question);
+        if (signIn) signIn.refused = { reason: event.reason, by: event.id };
         break;
       }
       case 'output': {
@@ -284,7 +326,7 @@ export function screensOf(events) {
 }
 
 /** The events that make a screen or join one, as opposed to changing one. */
-const makesAScreen = new Set(['step', 'notice', 'problem', 'summary', 'finish', 'busy', 'question']);
+const makesAScreen = new Set(['step', 'notice', 'problem', 'summary', 'finish', 'busy', 'question', 'signIn']);
 
 /**
  * Whether a screen has had its time, at `now`, `behind` screens waiting after it.
@@ -299,6 +341,9 @@ function isThrough(screen, page, now, behind) {
   switch (screen.kind) {
     case 'question':
       return screen.answer !== undefined;
+    case 'signIn':
+      // The person's turn, however long it takes; over as soon as its program has finished.
+      return screen.over === true;
     case 'notice':
     case 'summary':
       // Continued here, or the person has moved on past it: answered a later question, on this

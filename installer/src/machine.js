@@ -18,7 +18,8 @@
 //                                         and `input`, what its input was: `pipe` (the
 //                                         Installer's, as every program's is), or `inherit`
 //                                         (the person's window, for a program on the terminal's
-//                                         screen)
+//                                         screen), and `typed`, the line a run that reads one
+//                                         was given (see `readsALine` below)
 //   <home>/fake-machine/pages.json        every address it was asked to open in the browser
 //   <home>/fake-machine/replies.json      written by a test: what a run returns, keyed by the
 //                                         file name, or the file name and its first arguments
@@ -39,7 +40,12 @@
 //                                         It may give a time it takes ("takes": ms): a real
 //                                         wait before the run returns, so a spinner over a fake
 //                                         run can be watched. Tests that don't watch one leave
-//                                         it out.
+//                                         it out. A run on the page's screen, whose input is a
+//                                         pipe, may wait for a line on it ("readsALine": true),
+//                                         as `claude auth login` waits for a pasted code: its
+//                                         output is printed first, and the line is recorded as
+//                                         the run's `typed`. On the terminal's screen, whose
+//                                         input is the window, it reads nothing.
 //   <home>/fake-machine/machine-path.json written by a test: the machine-wide PATH, a list of
 //                                         folders. The real one is read from the registry.
 //   <home>/fake-machine/waiting.json      written by a test: time, which the fake only counts.
@@ -84,9 +90,11 @@
 // logs what it means in plain words. A debug run's log also holds the PATH programs are
 // given, each time it changes.
 import { spawn } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
+import { EventEmitter } from 'node:events';
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { access, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { basename, dirname, join, relative, resolve } from 'node:path';
+import { PassThrough } from 'node:stream';
 import { setTimeout as sleep } from 'node:timers/promises';
 
 /**
@@ -160,6 +168,9 @@ export async function keepTrying({ machine, every, patience = machine.patience }
  * @property {Record<string, string>} [env] Environment variables for this one run, added to the
  *   environment the machine builds (the rebuilt PATH among it). The person's own environment
  *   variables never gain them.
+ * @property {(printed: string) => void} [watch] For `runOnScreenAndKeep`: called with everything
+ *   the program has printed so far, each time it prints more, so the caller can act on a line
+ *   (show a link it prints) while the program still runs.
  */
 
 /**
@@ -177,7 +188,7 @@ export async function keepTrying({ machine, every, patience = machine.patience }
 
 /** @typedef {{ code: number, output: string }} Ran */
 
-/** @typedef {Partial<Ran> & { creates?: string[], writes?: Record<string, string>, reads?: string[], takes?: number }} Reply What a fake run returns, leaves behind, and looks for as it starts, and how many milliseconds it really takes before it returns. */
+/** @typedef {Partial<Ran> & { creates?: string[], writes?: Record<string, string>, reads?: string[], takes?: number, readsALine?: boolean }} Reply What a fake run returns, leaves behind, and looks for as it starts, how many milliseconds it really takes before it returns, and whether it waits for a line on its input first. */
 
 /** @typedef {{ from: string, saves: string, after?: number, perSecond?: number, stopsAt?: number }} BrowserDownload What the fake browser downloads when an address is opened (see browser.json above). */
 
@@ -194,7 +205,7 @@ export async function keepTrying({ machine, every, patience = machine.patience }
  * @property {(file: string, args: string[], env: NodeJS.ProcessEnv, extra?: Record<string, string>) => Promise<number>} startOnScreen
  *   `env` is the whole environment to start it with; `extra` is the part of it that a run was
  *   given of its own, which the fake machine records.
- * @property {(file: string, args: string[], env: NodeJS.ProcessEnv, extra?: Record<string, string>) => Promise<Ran>} startOnScreenAndKeep
+ * @property {(file: string, args: string[], env: NodeJS.ProcessEnv, extra?: Record<string, string>, watch?: WindowOptions['watch']) => Promise<Ran>} startOnScreenAndKeep
  * @property {(file: string, args: string[], env: NodeJS.ProcessEnv) => Promise<void>} startAndLeave
  */
 
@@ -266,7 +277,7 @@ export function openMachine(places, log, screen) {
     runHere: logged(async (file, args) => runProgram(file, args, await environment())),
     runOnScreen: loggedOnScreen(async (file, args, how) => startOnScreen(file, args, { ...(await environment()), ...how?.env }, how?.env)),
     runOnScreenAndKeep: loggedOnScreenAndKept(async (file, args, how) =>
-      startOnScreenAndKeep(file, args, { ...(await environment()), ...how?.env }, how?.env),
+      startOnScreenAndKeep(file, args, { ...(await environment()), ...how?.env }, how?.env, how?.watch),
     ),
     async launch(file, args) {
       log.detail(`Starting, without waiting for it: ${commandLine(file, args)}`);
@@ -370,24 +381,39 @@ function fakeMachine(folder, home, screen) {
   /** @type {{ patience?: number, appears?: { after: number, folders: string[] }[], outside?: number }} */
   const waiting = existsSync(join(folder, 'waiting.json')) ? JSON.parse(readFileSync(join(folder, 'waiting.json'), 'utf8')) : {};
   let waited = 0;
-  /** The browser's downloads under way, each with the counted time its address was opened and how much of it is written. @type {{ download: BrowserDownload, opened: number, written: number }[]} */
+  /**
+   * The browser's downloads under way, each with the counted time its address was opened, how
+   * much of it is written, and its bytes once it has begun.
+   * @type {{ download: BrowserDownload, opened: number, written: number, bytes?: Buffer }[]}
+   */
   const downloading = [];
-  /** @param {typeof downloading[number]} under @returns {Promise<boolean>} whether it's whole */
-  const grow = async (under) => {
+  /**
+   * Grows a download to where the counted time has got it. Called on every counted wait, so a
+   * download that takes minutes is grown hundreds of times in a run that has only the harness's
+   * 30 seconds of real time. Its bytes are read and its folder made once, the file is written only
+   * when it has grown, and all of it synchronously: each asynchronous file call is a round trip
+   * through Node's thread pool, which a loaded machine (the whole suite running at once) can make
+   * slow enough, hundreds of times over, to run out that real time.
+   * @param {typeof downloading[number]} under @returns {boolean} whether it's whole
+   */
+  const grow = (under) => {
     const { from, saves, after = 0, perSecond, stopsAt } = under.download;
     const elapsed = waited - under.opened - after;
     if (elapsed < 0) return false;
-    const bytes = await readFile(from);
+    const target = inside(home, saves);
+    if (!under.bytes) {
+      under.bytes = readFileSync(from);
+      mkdirSync(dirname(target), { recursive: true });
+    }
+    const { bytes } = under;
     const due = perSecond === undefined ? bytes.length : Math.floor((elapsed / 1000) * perSecond);
     const reached = Math.min(bytes.length, stopsAt ?? bytes.length, due);
-    const target = inside(home, saves);
-    await mkdir(dirname(target), { recursive: true });
     if (reached === bytes.length) {
-      await writeFile(target, bytes);
-      await rm(`${target}.crdownload`, { force: true });
+      writeFileSync(target, bytes);
+      rmSync(`${target}.crdownload`, { force: true });
       return true;
     }
-    if (reached !== under.written) await writeFile(`${target}.crdownload`, bytes.subarray(0, reached));
+    if (reached !== under.written) writeFileSync(`${target}.crdownload`, bytes.subarray(0, reached));
     under.written = reached;
     return false;
   };
@@ -400,7 +426,7 @@ function fakeMachine(folder, home, screen) {
       if (after <= before || after > waited) continue;
       for (const path of folders) await mkdir(inside(home, path), { recursive: true });
     }
-    for (const under of [...downloading]) if (await grow(under)) downloading.splice(downloading.indexOf(under), 1);
+    for (const under of [...downloading]) if (grow(under)) downloading.splice(downloading.indexOf(under), 1);
   };
 
   return {
@@ -447,9 +473,21 @@ function fakeMachine(folder, home, screen) {
     start: (file, args, env, how) => reply(file, args, { file, args, path: env.Path ?? '', ...recordOf(how?.env), input: inputOf(waitedFor) }, how?.onOutput),
     startOnScreen: async (file, args, env, extra) =>
       (await reply(file, args, { file, args, path: env.Path ?? '', ...recordOf(extra), onScreen: true, input: inputOf(screen.stdio(false)) })).code,
-    // The reply's output is what the program prints, so it's shown on the screen, as it would be.
-    async startOnScreenAndKeep(file, args, env, extra) {
-      const ran = await reply(file, args, { file, args, path: env.Path ?? '', ...recordOf(extra), onScreen: true, input: inputOf(screen.stdio(true)) });
+    // The reply's output is what the program prints, so it's shown on the screen, as it would be,
+    // and watched. A screen whose input is a pipe (the page's) is given a stand-in for the program
+    // to write to, as it would be given the program, and a reply that reads a line waits for it.
+    async startOnScreenAndKeep(file, args, env, extra, watch) {
+      const input = inputOf(screen.stdio(true));
+      const stdin = input === 'pipe' ? new PassThrough() : undefined;
+      const standIn = stdin && Object.assign(new EventEmitter(), { stdin, stdout: null, stderr: null });
+      if (standIn) screen.attach(/** @type {any} */ (standIn));
+      /** @type {{ file: string, args: string[], path: string, env?: Record<string, string>, onScreen: boolean, input: string, typed?: string }} */
+      const record = { file, args, path: env.Path ?? '', ...recordOf(extra), onScreen: true, input };
+      const ran = await reply(file, args, record, undefined, async (found) => {
+        watch?.(found.output ?? '');
+        if (found.readsALine && stdin) record.typed = await aLineFrom(stdin);
+      });
+      standIn?.emit('close', ran.code);
       screen.write(ran.output);
       return ran;
     },
@@ -461,11 +499,13 @@ function fakeMachine(folder, home, screen) {
 
   /**
    * @param {string} file @param {string[]} args
-   * @param {{ file: string, args: string[], path: string, env?: Record<string, string>, onScreen?: boolean, leftRunning?: boolean, input: string, found?: string[] }} record
+   * @param {{ file: string, args: string[], path: string, env?: Record<string, string>, onScreen?: boolean, leftRunning?: boolean, input: string, found?: string[], typed?: string }} record
    * @param {RunOptions['onOutput']} [onOutput] given the reply's output as the run starts
+   * @param {(found: Reply) => Promise<void>} [whileRunning] what the program does once it has
+   *   started, before it returns; what it adds to the record is recorded too
    * @returns {Promise<Ran>}
    */
-  async function reply(file, args, record, onOutput) {
+  async function reply(file, args, record, onOutput, whileRunning) {
     /** @type {{ file: string, args: string[] }[]} */
     const runs = await read('runs.json', []);
     /** @type {Record<string, Reply | Reply[]>} */
@@ -500,6 +540,11 @@ function fakeMachine(folder, home, screen) {
     }
     if (onOutput && found.output) onOutput(found.output);
     if (found.takes) await sleep(found.takes);
+    if (whileRunning) {
+      await whileRunning(found);
+      // Nothing else runs while it does, so its record is still the last.
+      if (record.typed !== undefined) await write('runs.json', [...runs, record]);
+    }
     return { code: found.code ?? 0, output: found.output ?? '' };
   }
 }
@@ -557,6 +602,25 @@ async function withinRealTime(happens, ms) {
   } finally {
     timer.abort();
   }
+}
+
+/**
+ * The first line written to a fake program's input, without its line break, as the program
+ * would read it; what there was if the input closes first.
+ * @param {import('node:stream').Readable} input
+ * @returns {Promise<string>}
+ */
+function aLineFrom(input) {
+  return new Promise((resolve) => {
+    let text = '';
+    input.setEncoding('utf8');
+    input.on('data', (/** @type {string} */ chunk) => {
+      text += chunk;
+      const end = text.indexOf('\n');
+      if (end >= 0) resolve(text.slice(0, end).replace(/\r$/, ''));
+    });
+    input.once('end', () => resolve(text));
+  });
 }
 
 /** The record's `env`: the environment a run was given beyond PATH, left out when it was given none. @param {Record<string, string>} [extra] */
@@ -675,19 +739,23 @@ function realMachine(loggedRun, screen) {
         child.once('close', (code) => resolve(code ?? -1));
       });
     },
-    startOnScreenAndKeep(file, args, env) {
+    startOnScreenAndKeep(file, args, env, extra, watch) {
       const how = startable(file, args);
       if ('refused' in how) return Promise.resolve({ code: -1, output: how.refused });
       return new Promise((resolve) => {
         let output = '';
         // On the terminal's screen, the window stays the program's input, so its prompt reads what
         // the person types (a paste shows nothing in the window, and nothing passes through the
-        // installer); what it prints is passed on to the window as it comes, and kept. Decoded as
-        // it comes, so a character split between two chunks isn't broken.
+        // installer); what it prints is passed on to the window as it comes, and kept. On the
+        // page's, its input is a pipe the page's code box writes to. Decoded as it comes, so a
+        // character split between two chunks isn't broken.
         const child = spawn(how.file, how.args, { ...how.options, env, stdio: screen.stdio(true) });
         for (const from of [child.stdout, child.stderr]) {
           from?.setEncoding('utf8');
-          from?.on('data', (/** @type {string} */ chunk) => (output += chunk));
+          from?.on('data', (/** @type {string} */ chunk) => {
+            output += chunk;
+            watch?.(output);
+          });
         }
         screen.attach(child);
         child.once('error', (error) => resolve({ code: -1, output: error.message }));
