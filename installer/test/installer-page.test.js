@@ -176,6 +176,30 @@ test('a whole setup done through the page conversation sets up exactly what the 
   assert.equal(await exists(addressFile(onPage.home)), false);
 });
 
+test("a check, once done, says it's done: Claude Code's and T3 Code's end in the past tense, not in the words they began with", async (t) => {
+  const where = await aLaptopWhereEverythingWorks(t);
+  const run = await runOnPage(where, 'york');
+  t.after(run.kill);
+  const page = run.connect();
+  await answerEverything(page, run.answer, { channel: 'stable', extraTools: [] });
+  assert.equal((await run.ended).code, 0);
+
+  /** How each busy that began with `message` ended. @param {string} message */
+  const endings = (message) => {
+    const ids = page.events.filter((event) => event.type === 'busy' && event.message === message).map((event) => event.id);
+    return page.events.filter((event) => event.type === 'ended' && ids.includes(event.busy)).map(({ text, ok }) => ({ text, ok }));
+  };
+  // The page holds a finished busy a moment with its tick; still saying "Checking", it read as
+  // under way.
+  assert.deepEqual(endings('Checking Claude Code'), [{ text: 'Checked Claude Code', ok: true }]);
+  assert.deepEqual(endings('Checking whether T3 Code is installed'), [{ text: 'Checked whether T3 Code is installed', ok: true }]);
+  for (const busy of page.events.filter((event) => event.type === 'busy')) {
+    const ended = page.events.find((event) => event.type === 'ended' && event.busy === busy.id);
+    if (ended?.ok) assert.notEqual(ended.text, busy.message, `"${busy.message}" ended in the words it began with`);
+  }
+  page.close();
+});
+
 test('a second connection, or the same page reconnecting, gets every event so far in order, and the first answer to a question is the one that counts', async (t) => {
   const where = await makeHome(t);
   const run = await runOnPage(where, 'york');
