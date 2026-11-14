@@ -3,7 +3,7 @@
 // and a line under it, a notice into paragraphs and bullets, and finds the links and paths in it.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { blocks, pieces, split } from '../page/words.js';
+import { blocks, opened, pieces, split } from '../page/words.js';
 
 test("a question's first sentence is the heading and the rest goes under it; one sentence is all heading", () => {
   assert.deepEqual(split('Is this your Google Drive folder? If not, type the right one.'), ['Is this your Google Drive folder?', 'If not, type the right one.']);
@@ -65,4 +65,17 @@ test('quotes after a path are not part of it', () => {
     { path: 'C:\\Users\\sam\\settings.json' },
     { text: "'" },
   ]);
+});
+
+test("a page the run opened is its name and its address, which the page makes a button; anything else isn't one", () => {
+  assert.deepEqual(opened('Connectors page: https://claude.ai/customize/connectors'), { label: 'Connectors page', url: 'https://claude.ai/customize/connectors' });
+  assert.deepEqual(opened("Google Drive's installer: https://drive.usercontent.google.com/download?id=abc&export=download&confirm=t"), {
+    label: "Google Drive's installer",
+    url: 'https://drive.usercontent.google.com/download?id=abc&export=download&confirm=t',
+  });
+  // Software Center's address isn't a web page, and stays words.
+  assert.equal(opened('Software Center: softwarecenter:SoftwareID=ScopeId_1/Application_2'), undefined);
+  // A link inside a sentence is a link, not a page that was opened.
+  assert.equal(opened('Installed. See https://example.com/notes for more.'), undefined);
+  assert.equal(opened('Using the Git already at C:\Program Files\Git'), undefined);
 });

@@ -73,3 +73,18 @@ export function pieces(line) {
   return found;
 }
 
+
+/**
+ * A page the run opened in the person's browser, as its step words it: "Connectors page:
+ * https://…", its name then its address and nothing else (installer/src/open-page.js). The page
+ * shows the name as the heading and the address as a button that opens it again. Undefined for
+ * any other line, and for an address that isn't a web page (Software Center's).
+ * @param {string} line
+ * @returns {{ label: string, url: string } | undefined}
+ */
+export function opened(line) {
+  const [label, link, ...rest] = pieces(line);
+  if (!label || !('text' in label) || !link || !('url' in link) || rest.length > 0) return undefined;
+  const name = /^(.+):\s+$/.exec(label.text);
+  return name ? { label: name[1], url: link.url } : undefined;
+}
