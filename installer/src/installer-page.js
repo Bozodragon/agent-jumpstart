@@ -55,6 +55,7 @@
 // reload, the Bootstrap reopening it, a second window), and stops the same way if none does.
 import { spawn } from 'node:child_process';
 import { join } from 'node:path';
+import { backAndChange } from './back-and-change.js';
 import { holdLock, writeWhole } from './lock.js';
 import { openPageServer } from './page-server.js';
 import { GoBack } from './questions.js';
@@ -97,10 +98,49 @@ const finishWithin = 10 * 60_000;
  */
 
 /**
- * A question answered while Back and Change last: what it was, by the id the page knows it by,
- * and the answer.
- * @typedef {{ id: number, key?: string, kind: string, answer: unknown }} Answered
+ * Ends a program on the screen, and whatever it started (cmd.exe's child, say). Resolves once
+ * taskkill has finished, or after 5 seconds at most.
+ * @param {import('node:child_process').ChildProcess} child
+ * @returns {Promise<void>}
  */
+function endProgram(child) {
+  if (child.exitCode !== null || child.signalCode !== null || child.pid === undefined) return Promise.resolve();
+  if (process.platform !== 'win32') return Promise.resolve(void child.kill());
+  const taskkill = join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'taskkill.exe');
+  return new Promise((resolve) => {
+    const done = () => {
+      clearTimeout(timer);
+      resolve();
+    };
+    const timer = setTimeout(done, 5_000);
+    spawn(taskkill, ['/pid', String(child.pid), '/T', '/F'], { stdio: 'ignore', windowsHide: true })
+      .once('error', () => {
+        child.kill();
+        done();
+      })
+      .once('close', done);
+  });
+}
+
+/**
+ * What a sign-in's code box does with a code posted to it: refuses it, with why, unless the
+ * sign-in's own check (`codeBox`) takes it, then writes it to the program's input, with a line
+ * break, while the program is still there to read it.
+ * @param {(code: string) => string | undefined} codeBox
+ * @param {() => import('node:stream').Writable | undefined} input the program's input, while it runs
+ * @returns {Check}
+ */
+function codeBoxCheck(codeBox, input) {
+  return async (posted) => {
+    const code = typeof posted === 'string' ? posted.trim() : '';
+    const why = code === '' ? 'Paste the code first.' : codeBox(code);
+    if (why !== undefined) return { refused: why };
+    const typing = input();
+    if (!typing?.writable) return { refused: 'The sign-in has already finished.' };
+    typing.write(`${code}\n`);
+    return { value: 'sent' };
+  };
+}
 
 /**
  * Opens the page front end: starts the page's server and writes its address to `addressFile`,
@@ -152,31 +192,6 @@ export async function openInstallerPage({ addressFile, connectedFile, page }) {
   const finishing = new Map();
 
   /**
-   * Ends a program on the screen, and whatever it started (cmd.exe's child, say). Resolves once
-   * taskkill has finished, or after 5 seconds at most.
-   * @param {import('node:child_process').ChildProcess} child
-   * @returns {Promise<void>}
-   */
-  const end = (child) => {
-    if (child.exitCode !== null || child.signalCode !== null || child.pid === undefined) return Promise.resolve();
-    if (process.platform !== 'win32') return Promise.resolve(void child.kill());
-    const taskkill = join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'taskkill.exe');
-    return new Promise((resolve) => {
-      const done = () => {
-        clearTimeout(timer);
-        resolve();
-      };
-      const timer = setTimeout(done, 5_000);
-      spawn(taskkill, ['/pid', String(child.pid), '/T', '/F'], { stdio: 'ignore', windowsHide: true })
-        .once('error', () => {
-          child.kill();
-          done();
-        })
-        .once('close', done);
-    });
-  };
-
-  /**
    * Stops the run: whatever it's waiting on throws `why`, and so does whatever it waits on next.
    * A program on the screen is ended: nobody can answer it now.
    * @param {Stop} why
@@ -184,46 +199,18 @@ export async function openInstallerPage({ addressFile, connectedFile, page }) {
   const stop = (why) => {
     if (stopped || over) return;
     stopped = why;
-    // Nothing is asked again after a stop, so there's no going back either.
-    backOpen = false;
-    replay = [];
+    back.close();
     const after = [...finishing].at(-1);
     if (after) say(`the run stops once this step is done: ${after[1]}`);
     server.send({ type: 'stopping', ...(after ? { after: after[0] } : {}) });
     for (const asked of open.values()) asked.reject(why);
     open.clear();
-    for (const child of onScreen) ending.add(end(child));
+    for (const child of onScreen) ending.add(endProgram(child));
     stopNow(why);
   };
 
-  // Back and Change (see FrontEnd's `questions`). They last from the questions' `begin` until
-  // they're fixed.
-  let backOpen = false;
-  let fixed = false;
-  /** The questions answered since the last `begin`, in order. @type {Answered[]} */
-  let pass = [];
-  /** The answers before the question gone back to, given again without asking. @type {Answered[]} */
-  let replay = [];
-  /**
-   * After going back, until a question is put to the page again: what's shown then was shown the
-   * first time through, and the page still has it.
-   */
-  let quiet = false;
-  /** Whether the person has gone back, after which every question starts with their last answer to it. */
-  let wentBack = false;
-  /** The last answer given to each question, by its kind and key. @type {Map<string, unknown>} */
-  const given = new Map();
-  /** @param {{ kind?: unknown, key?: unknown }} question */
-  const named = ({ kind, key }) => `${kind}:${key}`;
-  /** Back and Change are gone for good. */
-  const fix = () => {
-    backOpen = false;
-    replay = [];
-    quiet = false;
-    if (fixed) return;
-    fixed = true;
-    server.send({ type: 'fixed' });
-  };
+  // Back and Change (see FrontEnd's `questions`), which send the page what they need to.
+  const back = backAndChange((event) => server.send(event));
 
   const server = await openPageServer({
     page,
@@ -257,18 +244,14 @@ export async function openInstallerPage({ addressFile, connectedFile, page }) {
     },
     async back(posted) {
       const { to } = /** @type {{ to?: unknown }} */ (posted ?? {});
-      if (!backOpen) return { status: 409, body: { ok: false, reason: "Your answers can't be changed now: the Installer has started using them." } };
-      const at = pass.findIndex((answered) => answered.id === to && answered.key !== undefined);
+      if (!back.open) return { status: 409, body: { ok: false, reason: "Your answers can't be changed now: the Installer has started using them." } };
+      const at = back.find(to);
       // A sign-in's code box isn't a question: nothing waits on it to go back from.
       const waiting = [...open].filter(([, asked]) => !asked.checking && !asked.secret);
       if (at < 0 || waiting.length !== 1) return { status: 409, body: { ok: false, reason: "That question can't be gone back to now." } };
       const [[id, asked]] = waiting;
       open.delete(id);
-      replay = pass.slice(0, at);
-      wentBack = true;
-      quiet = true;
-      server.send({ type: 'back', to });
-      asked.reject(new GoBack(/** @type {string} */ (pass[at].key)));
+      asked.reject(new GoBack(back.goBack(at)));
       return { status: 200, body: { ok: true } };
     },
   });
@@ -286,30 +269,6 @@ export async function openInstallerPage({ addressFile, connectedFile, page }) {
   connected.catch(() => {});
 
   /**
-   * A question's default once the person has gone back: the answer they last gave it, if it would
-   * still do, otherwise its own.
-   * @param {Record<string, any>} question
-   */
-  const defaultOf = (question) => {
-    const before = given.get(named(question));
-    if (!wentBack || before === undefined) return question.initial;
-    /** @type {string[]} */
-    const values = (question.options ?? []).map((/** @type {{ value: string }} */ { value }) => value);
-    switch (question.kind) {
-      case 'choose':
-        return values.includes(/** @type {string} */ (before)) ? before : question.initial;
-      case 'pick':
-        return Array.isArray(before) ? values.filter((value) => before.includes(value)) : question.initial;
-      case 'confirm':
-        return typeof before === 'boolean' ? before : question.initial;
-      case 'folder':
-        return typeof before === 'string' ? before : question.initial;
-      default:
-        return question.initial;
-    }
-  };
-
-  /**
    * Sends a question and waits for its first answer that `check` accepts. After going back, a
    * question before the one gone back to is answered as it was, without being sent.
    * @param {Record<string, any>} question what the page is told
@@ -318,23 +277,12 @@ export async function openInstallerPage({ addressFile, connectedFile, page }) {
    */
   const ask = async (question, check) => {
     if (stopped) throw stopped;
-    const [again] = replay;
-    if (again) {
-      replay = replay.slice(1);
-      const checked = again.key === question.key && again.kind === question.kind ? await check(again.answer) : undefined;
-      if (checked && 'value' in checked) {
-        pass.push({ ...again, answer: checked.value });
-        return checked.value;
-      }
-      // Asked differently this time (something on the laptop changed meanwhile, such as Google
-      // Drive signed in): from here, it's asked, and the page takes off what it had from here.
-      replay = [];
-      server.send({ type: 'back', to: again.id });
-    }
-    quiet = false;
+    const again = await back.replayed(question, check);
+    if (again) return again.value;
+    back.asking();
     return new Promise((resolve, reject) => {
       const id = nextQuestion++;
-      const inPass = backOpen;
+      const inPass = back.open;
       /** @type {() => void} */
       let settle = () => {};
       /** Resolves once it's answered, or the run stops or goes back. @type {Promise<void>} */
@@ -344,8 +292,7 @@ export async function openInstallerPage({ addressFile, connectedFile, page }) {
         checking: false,
         resolve(value) {
           settle();
-          given.set(named(question), value);
-          if (inPass && backOpen) pass.push({ id, key: question.key, kind: question.kind, answer: value });
+          back.answered(id, question, value, inPass);
           resolve(value);
         },
         reject(error) {
@@ -353,7 +300,7 @@ export async function openInstallerPage({ addressFile, connectedFile, page }) {
           reject(error);
         },
       });
-      server.send({ type: 'question', question: id, ...question, initial: defaultOf(question), ...(inPass ? { back: true } : {}) });
+      server.send({ type: 'question', question: id, ...question, initial: back.defaultOf(question), ...(inPass ? { back: true } : {}) });
       waitForAPage(() => open.has(id), settled);
     });
   };
@@ -404,7 +351,7 @@ export async function openInstallerPage({ addressFile, connectedFile, page }) {
     stdio: () => ['pipe', 'pipe', 'pipe'],
     attach(child) {
       for (const from of [child.stdout, child.stderr]) from?.resume();
-      if (stopped) return void ending.add(end(child));
+      if (stopped) return void ending.add(endProgram(child));
       onScreen.add(child);
       const input = child.stdin ?? undefined;
       // A program that has gone before its code arrives mustn't take the Installer with it.
@@ -439,12 +386,12 @@ export async function openInstallerPage({ addressFile, connectedFile, page }) {
       server.send({ type: 'start', title, ...links });
     },
     step(text) {
-      if (!quiet) server.send({ type: 'step', text });
+      if (!back.quiet) server.send({ type: 'step', text });
     },
     async busy(message, task, ended, { changesNothing = false } = {}) {
       if (stopped) throw stopped;
       // Going back, it was shown the first time through. A stop still doesn't wait for it.
-      if (quiet) return Promise.race([task(() => {}, () => {}), stopping]);
+      if (back.quiet) return Promise.race([task(() => {}, () => {}), stopping]);
       const busy = server.send({ type: 'busy', message });
       /** Whether it has ended, after which its task, if left to itself, says nothing more. */
       let gone = false;
@@ -501,12 +448,10 @@ export async function openInstallerPage({ addressFile, connectedFile, page }) {
       if (stopped) throw stopped;
       // A sign-in acts on the laptop, so there's no going back past it (it comes after the
       // questions anyway, which have fixed them already).
-      fix();
+      back.fix();
       const signIn = server.send({ type: 'signIn' });
       /** The code box's id, while it's open. @type {number | undefined} */
       let box;
-      /** @type {import('./front-end.js').SignInShown['codeBox'] & {}} */
-      const pasted = (code) => (code === '' ? 'Paste the code first.' : undefined);
       try {
         // A stop throws from the program on the screen (screen.wait), so from the task too.
         return await task(({ link, code, codeBox }) => {
@@ -524,14 +469,7 @@ export async function openInstallerPage({ addressFile, connectedFile, page }) {
               // Nothing waits on the box itself: the sign-in waits on its program.
               resolve: () => {},
               reject: () => {},
-              async check(posted) {
-                const code = typeof posted === 'string' ? posted.trim() : '';
-                const why = pasted(code) ?? codeBox(code);
-                if (why !== undefined) return { refused: why };
-                if (!typing?.writable) return { refused: 'The sign-in has already finished.' };
-                typing.write(`${code}\n`);
-                return { value: 'sent' };
-              },
+              check: codeBoxCheck(codeBox, () => typing),
             });
             shown.codeBox = id;
           }
@@ -543,13 +481,13 @@ export async function openInstallerPage({ addressFile, connectedFile, page }) {
       }
     },
     problem(text) {
-      if (!quiet) server.send({ type: 'problem', text });
+      if (!back.quiet) server.send({ type: 'problem', text });
     },
     summary(rows, title) {
-      if (!quiet) server.send({ type: 'summary', title, rows });
+      if (!back.quiet) server.send({ type: 'summary', title, rows });
     },
     notice(text, title) {
-      if (!quiet) server.send({ type: 'notice', title, text });
+      if (!back.quiet) server.send({ type: 'notice', title, text });
     },
     async waitForDone(what) {
       await ask({ kind: 'done', what }, async () => ({ value: 'done' }));
@@ -576,11 +514,8 @@ export async function openInstallerPage({ addressFile, connectedFile, page }) {
         ),
     },
     questions: {
-      begin() {
-        pass = [];
-        backOpen = !fixed;
-      },
-      fix,
+      begin: () => back.begin(),
+      fix: () => back.fix(),
     },
     comeBack: (from = 'the browser') => `Once you're done in ${from}, come back to the Installer page.`,
     inWindow: false,
