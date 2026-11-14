@@ -6,6 +6,7 @@ import assert from 'node:assert/strict';
 import { readdir, rm, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { stripVTControlCharacters } from 'node:util';
+import { amounts, downloadsFolder, drawings, percentages } from './terminal-output.js';
 import { checklistSays, fakeMachine, makeHome, readOnlyLog, run, runOnline, stateFolder, supplyT3 } from './harness.js';
 
 /** What T3's stable installer leaves, relative to the home: its program, and the shim T3 writes as it starts. */
@@ -24,9 +25,6 @@ const t3Replies = (installer) => ({
   'claude.exe auth status': { output: JSON.stringify({ loggedIn: true, email: 'jo.bloggs@york.ac.uk' }) },
 });
 
-/** The Installer's own downloads folder, where every download lands first. @param {string} home */
-const downloadsFolder = (home) => join(stateFolder(home), 'downloads');
-
 /**
  * What the Installer's own downloads folder holds, by name and size. It's read while a run may
  * still be downloading, so a file listed and then renamed or removed before its size is read
@@ -40,18 +38,8 @@ async function heldIn(home) {
   return held.filter(({ size }) => size >= 0);
 }
 
-/**
- * The percentages a spinner line showed, in the order it showed them. The line is rewritten in
- * place (each drawing starts with a carriage return), so each drawing is one piece.
- * @param {string} stdout @param {string} message how the line starts
- */
-function percentagesShown(stdout, message) {
-  return stdout
-    .split('\r')
-    .filter((drawing) => drawing.includes(message))
-    .flatMap((drawing) => [.../(\d+)%/.exec(drawing) ?? []].slice(1, 2))
-    .map(Number);
-}
+/** The percentages a spinner line showed, in the order it showed them. @param {string} stdout @param {string} message how the line starts */
+const percentagesShown = (stdout, message) => percentages(drawings(stdout, message));
 
 test("in a terminal, T3 Code's download shows a percentage in its spinner line that rises to 100%, and none of it reaches the log", async (t) => {
   const where = await makeHome(t, { channel: 'stable' });
@@ -145,9 +133,8 @@ test("a download whose size the server doesn't give shows how much has come so f
   const result = await runOnline(where, 'york', { folder: where.downloads, chunk: 500_000, pause: 250, unsized: [installer], terminal: true });
 
   assert.equal(result.code, 0, result.stderr);
-  const drawn = result.stdout.split('\r').filter((drawing) => drawing.includes('Installing T3 Code'));
+  const drawn = drawings(result.stdout, 'Installing T3 Code');
   // Each amount as the person saw it come: a redraw of the same amount, each second, is no change.
-  const amounts = drawn.flatMap((drawing) => [.../(\d+\.\d) MB/.exec(drawing) ?? []].slice(1, 2)).filter((amount, index, all) => amount !== all[index - 1]);
-  assert.deepEqual(amounts, ['0.0', '0.5', '1.0', '1.5', '2.0', '2.5', '3.0'], drawn.join('\n'));
+  assert.deepEqual(amounts(drawn), ['0.0', '0.5', '1.0', '1.5', '2.0', '2.5', '3.0'], drawn.join('\n'));
   assert.deepEqual(percentagesShown(result.stdout, 'Installing T3 Code'), [], 'no percentage without a size');
 });

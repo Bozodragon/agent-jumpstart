@@ -8,12 +8,10 @@ import assert from 'node:assert/strict';
 import { mkdir, readdir } from 'node:fs/promises';
 import { basename, join } from 'node:path';
 import { stripVTControlCharacters } from 'node:util';
-import { checklistSays, claudeProgram, fakeMachine, makeHome, readOnlyLog, runOnline, runWith, stateFolder, supplyClaude, supplyT3, t3Leaves } from './harness.js';
+import { checklistSays, claudeProgram, fakeMachine, makeHome, readOnlyLog, runOnline, runWith, supplyClaude, supplyT3, t3Leaves } from './harness.js';
+import { amounts, downloadsFolder, drawings, flowing, percentages } from './terminal-output.js';
 
 const signedIn = { output: JSON.stringify({ loggedIn: true, authMethod: 'claude.ai', email: 'jo.bloggs@york.ac.uk' }) };
-
-/** The Installer's own downloads folder. @param {string} home */
-const downloadsFolder = (home) => join(stateFolder(home), 'downloads');
 
 /** Replies for a laptop with no Claude Code, whose `claude install` puts it in place. */
 const installs = {
@@ -113,9 +111,6 @@ for (const { failure, release, internet, reason } of [
 
 const skippedEnding =
   "One step didn't work: Claude Code isn't installed, so T3 Code can't use it yet. If T3 Code is open, close it. Then paste the line again: it installs it and skips everything that's already done.";
-
-/** The printed output with the boxes' borders and line breaks taken out, as one line of text. @param {string} stdout */
-const flowing = (stdout) => stdout.replace(/[│|]/g, ' ').replace(/\s+/g, ' ');
 
 /** @param {{ file: string, args: string[] }[]} runs */
 const installsOf = (runs) => runs.filter((run) => basename(run.file) === 'claude.exe' && run.args[0] === 'install');
@@ -267,19 +262,6 @@ test('a download cut short logs how many bytes came, of how many, and how long i
   assert.match(text, /Claude Code: 20000 bytes came, of the 50000 expected, before it stopped, in \d+\.\d s/);
 });
 
-/**
- * Each drawing of the spinner lines that start with this message, without their colours. A line
- * is redrawn in place, each drawing after a carriage return.
- * @param {string} stdout @param {string} message
- */
-const drawings = (stdout, message) =>
-  stripVTControlCharacters(stdout)
-    .split(/[\r\n]/)
-    .filter((drawing) => drawing.includes(message));
-
-/** The percentages shown in these drawings, in order. @param {string[]} drawn */
-const percentages = (drawn) => drawn.flatMap((drawing) => [.../(\d+)% \[/.exec(drawing) ?? []].slice(1, 2)).map(Number);
-
 for (const { from, release, internet, message } of [
   { from: "Anthropic's manifest, when the server doesn't give it", release: { size: 3_000_000 }, internet: { unsized: ['claude.exe'] }, message: 'Downloading Claude Code (3 MB)' },
   { from: "the server, when Anthropic's manifest doesn't give it", release: { size: 3_000_000, unsized: true }, internet: {}, message: 'Downloading Claude Code (3 MB)' },
@@ -311,8 +293,7 @@ test('in a terminal, a download whose size neither the manifest nor the server g
 
   assert.equal(result.code, 0, result.stdout + result.stderr);
   const drawn = drawings(result.stdout, 'Downloading Claude Code');
-  const amounts = [...new Set(drawn.flatMap((drawing) => [.../(\d+\.\d) MB \[/.exec(drawing) ?? []].slice(1, 2)))];
-  assert.deepEqual(amounts, ['0.0', '0.5', '1.0', '1.5'], drawn.join('\n'));
+  assert.deepEqual(amounts(drawn), ['0.0', '0.5', '1.0', '1.5'], drawn.join('\n'));
   assert.deepEqual(percentages(drawn), []);
   assert.ok(!drawn.some((drawing) => drawing.includes(' MB)')), drawn.join('\n'));
 });

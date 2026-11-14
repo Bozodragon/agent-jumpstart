@@ -8,9 +8,7 @@ import { createHash } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { exists, fakeMachine, fixtureProfiles, makeHome, readOnlyLog, readProfile, readSettings, run as runInstaller, runWith } from './harness.js';
-
-/** @param {string} text */
-const flowing = (text) => text.replace(/[│|]/g, ' ').replace(/\s+/g, ' ');
+import { drawings, flowing, percentages } from './terminal-output.js';
 
 const driveId = 'ScopeId_0A1B2C3D-4E5F-6071-8293-A4B5C6D7E8F9/Application_11223344-5566-7788-99aa-bbccddeeff00';
 
@@ -166,7 +164,7 @@ async function inATerminal(t, options) {
   const args = ['--profile', 'york', ...flags, '--home', where.home, '--answers', where.answersFile, '--downloads', where.downloads];
   // The fake internet only to make the output look like a terminal: nothing is fetched.
   const result = await runInstaller(args, { internet: { folder: join(where.downloads, 'nowhere'), terminal: true } });
-  return { where, machine, result, drawings: result.stdout.split(/[\r\n]/).map((line) => line.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '')) };
+  return { where, machine, result, drawings: drawings(result.stdout, '') };
 }
 
 for (const [what, options, line] of [failures[0], failures[4]]) {
@@ -229,11 +227,7 @@ test("in a terminal, the download shows a percentage of the hosted installer's s
   const result = await runInstaller(args, { internet: { folder: join(where.downloads, 'nowhere'), terminal: true } });
 
   assert.equal(result.code, 0, result.stderr);
-  const shown = result.stdout
-    .split('\r')
-    .filter((drawing) => drawing.includes("Downloading Google Drive's installer"))
-    .flatMap((drawing) => [.../(\d+)%/.exec(drawing) ?? []].slice(1, 2))
-    .map(Number);
+  const shown = percentages(drawings(result.stdout, "Downloading Google Drive's installer"));
   assert.ok(new Set(shown).size >= 5, `it rose in steps, not all at once: ${shown.join(', ')}`);
   assert.deepEqual(shown, [...shown].sort((a, b) => a - b), `it only ever rose: ${shown.join(', ')}`);
   assert.equal(shown.at(-1), 100, `it reached 100%: ${shown.join(', ')}`);
