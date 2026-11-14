@@ -425,11 +425,20 @@ async function filesIn(folder) {
 const unfinished = (name) => /\.(crdownload|part|partial|tmp)$/i.test(name);
 
 /**
- * Watches Downloads for the hosted installer among the files that weren't there before: a
- * finished one of its size is it if its SHA-256 matches, and the wrong file if not. The largest
- * new file no bigger than it shows how far the download has got. With no new file after a
- * minute, or nothing new changing for two minutes once there is one, it's given up on, naming
- * the largest new file. Only the waits count.
+ * Whether a new file in Downloads may be the hosted installer, or its download under way: one of
+ * its size, or a smaller one with an unfinished download's name or that has grown since it was
+ * first seen. A finished file of another size that doesn't change, such as a PDF saved from an
+ * email meanwhile, isn't.
+ * @param {{ name: string, size: number }} file @param {HostedInstaller} hosted @param {boolean} grew
+ */
+const mayBeIt = ({ name, size }, hosted, grew) => size === hosted.size || (size < hosted.size && (unfinished(name) || grew));
+
+/**
+ * Watches Downloads for the hosted installer among the files that weren't there before and may
+ * be it (see mayBeIt): a finished one of its size is it if its SHA-256 matches, and the wrong
+ * file if not. The largest of them shows how far the download has got. With none after a
+ * minute, or none changing for two minutes once there is one, it's given up on, naming the
+ * largest. Only the waits count.
  * @param {string} folder @param {Set<string>} before the names already there
  * @param {HostedInstaller} hosted
  * @param {import('./machine.js').Machine} machine
@@ -440,6 +449,10 @@ async function watchDownloads(folder, before, hosted, machine, progress) {
   let waited = 0;
   let changedAt = 0;
   let seen = '';
+  /** Each new file's size when it was first seen. @type {Map<string, number>} */
+  const first = new Map();
+  /** The new files that have grown since. @type {Set<string>} */
+  const grown = new Set();
   progress(0, hosted.size);
   for (;;) {
     /** @type {{ name: string, size: number }[]} */
@@ -447,7 +460,11 @@ async function watchDownloads(folder, before, hosted, machine, progress) {
     for (const name of await filesIn(folder)) {
       if (before.has(name)) continue;
       const size = await stat(join(folder, name)).then((found) => found.size, () => undefined);
-      if (size !== undefined && size <= hosted.size) fresh.push({ name, size });
+      if (size === undefined) continue;
+      const firstSize = first.get(name);
+      if (firstSize === undefined) first.set(name, size);
+      else if (size > firstSize) grown.add(name);
+      if (mayBeIt({ name, size }, hosted, grown.has(name))) fresh.push({ name, size });
     }
     for (const { name, size } of fresh) {
       if (size !== hosted.size || unfinished(name)) continue;

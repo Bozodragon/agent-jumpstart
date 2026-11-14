@@ -180,6 +180,21 @@ for (const [what, options, line] of [failures[0], failures[4]]) {
   });
 }
 
+test('a file that arrives in Downloads during the minute but isn\'t the installer, nor a download under way, isn\'t taken for it, and is left alone', async (t) => {
+  // The browser saves a finished file of another size at once: a PDF from an email, say.
+  const pdf = join('Downloads', 'minutes.pdf');
+  const { where, run } = await aYorkLaptopWithoutDrive(t, { browser: { saves: pdf }, bytes: '%PDF-1.7 the minutes of a meeting', answers: { softwareCenter: 'documents' } });
+
+  const result = await run();
+
+  assert.equal(result.code, 0, result.stdout + result.stderr);
+  assert.equal(flowing(result.stdout).split(failures[0][2]).length - 1, 1, result.stdout);
+  assert.doesNotMatch(result.stdout, /stopped downloading/);
+  const log = (await readOnlyLog(where.home)).text;
+  assert.ok(log.includes('Google Drive for desktop: no download appeared in'), log);
+  assert.equal(await exists(join(where.home, pdf)), true);
+});
+
 test('a slow download that keeps growing for minutes, after starting within a minute, finishes and is installed', async (t) => {
   // 4,000 bytes at 10 a second, starting after 50 seconds: over 7 minutes in all.
   const { where, machine, run } = await aYorkLaptopWithoutDrive(t, { browser: { after: 50_000, perSecond: 10 } });
