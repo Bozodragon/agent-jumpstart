@@ -73,13 +73,3 @@ export function pieces(line) {
   return found;
 }
 
-/**
- * How far something slow has got, in words: a percentage of the total, or the amount so far.
- * Rounded down, so 100% means all of it.
- * @param {number | undefined} received @param {number | undefined} total
- */
-export function soFar(received, total) {
-  if (received === undefined) return '';
-  if (total !== undefined && total > 0) return `${Math.min(Math.floor((received / total) * 100), 100)}%`;
-  return `${(received / 1_000_000).toFixed(1)} MB`;
-}

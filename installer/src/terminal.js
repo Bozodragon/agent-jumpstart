@@ -19,6 +19,7 @@
 import { emitKeypressEvents } from 'node:readline';
 import { styleText } from 'node:util';
 import { Stop } from './stop.js';
+import { soFar } from './text.js';
 import { setWindowTitle, windowTitle } from './window.js';
 
 /** The prompt library's symbols the old console can't draw, and what's printed in their place. */
@@ -98,16 +99,6 @@ async function loadPrompts() {
 function timeSince(since) {
   const seconds = Math.floor((performance.now() - since) / 1000);
   return seconds >= 60 ? `[${Math.floor(seconds / 60)}m ${seconds % 60}s]` : `[${seconds}s]`;
-}
-
-/**
- * How far a task has got, as the spinner line shows it: a percentage of the total, or the
- * amount so far when the total isn't known. Rounded down, so 100% means all of it.
- * @param {number} received @param {number} [total]
- */
-function soFar(received, total) {
-  if (total !== undefined && total > 0) return `${Math.min(Math.floor((received / total) * 100), 100)}%`;
-  return `${(received / 1_000_000).toFixed(1)} MB`;
 }
 
 /**

@@ -6,6 +6,8 @@
 // answers). Going back is the run's to do: the page asks it to (`postBack`), and the run sends
 // `back`, which pacing.js reads.
 
+import { inWordsOrNone } from '../src/text.js';
+
 /** @typedef {import('./pacing.js').Page} Page */
 /** @typedef {import('./pacing.js').Shown} Shown */
 /** @typedef {import('./pacing.js').QuestionScreen} QuestionScreen */
@@ -38,9 +40,6 @@ const labels = /** @type {Record<string, string>} */ ({
  */
 export const backLasts = (page) => !page.events.some((event) => event.type === 'fixed' || event.type === 'stopping');
 
-/** @param {string[]} names */
-const listed = (names) => (names.length === 0 ? 'None' : names.length === 1 ? names[0] : `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`);
-
 /**
  * An answer in the person's words: the option chosen or ticked, Yes or No, or the folder.
  * @param {import('./pacing.js').Asked} question @param {unknown} value
@@ -49,7 +48,7 @@ function inWords(question, value) {
   /** @param {unknown} chosen */
   const labelOf = (chosen) => question.options?.find((option) => option.value === chosen)?.label ?? String(chosen);
   if (question.kind === 'confirm') return value ? 'Yes' : 'No';
-  if (question.kind === 'pick') return listed((Array.isArray(value) ? value : []).map(labelOf));
+  if (question.kind === 'pick') return inWordsOrNone((Array.isArray(value) ? value : []).map(labelOf));
   if (question.kind === 'choose') return labelOf(value);
   return String(value);
 }

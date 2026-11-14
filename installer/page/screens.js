@@ -6,7 +6,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { CopyBox, Line, Path, Status, Words, icons } from './parts.js';
 import { Terminal } from './terminal-panel.js';
-import { soFar, split } from './words.js';
+import { soFar } from '../src/text.js';
+import { split } from './words.js';
 
 /** @typedef {import('./pacing.js').Shown} Shown */
 /** @typedef {import('./pacing.js').QuestionScreen} QuestionScreen */

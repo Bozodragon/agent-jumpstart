@@ -42,7 +42,7 @@ import { findT3, installT3, openT3 } from './t3.js';
 import { End, messageOf, Stop } from './stop.js';
 import { installTools, isRecord } from './tools.js';
 import { openTerminal } from './terminal.js';
-import { inWords } from './text.js';
+import { inWordsOrNone } from './text.js';
 import { openInstallerPage, writeWhole } from './installer-page.js';
 import { setWindowTitle } from './window.js';
 import { addToT3, createWorkspaces } from './workspaces.js';
@@ -122,8 +122,6 @@ async function readEarlierSettings(path, profile, log) {
  */
 async function reusedRows(earlier, choices, given, hidden, downloads) {
   const reused = new Set([...given].filter((key) => !hidden.includes(key)));
-  /** @param {string[]} names */
-  const list = (names) => (names.length === 0 ? 'None' : inWords(names));
   /** @type {[string, string][]} */
   const rows = [];
   if (reused.has('team') && choices.team !== undefined) rows.push(['Team', choices.team]);
@@ -137,8 +135,8 @@ async function reusedRows(earlier, choices, given, hidden, downloads) {
   }
   if (reused.has('channel')) rows.push(['T3 Code', choices.channel === 'nightly' ? 'Nightly' : 'Stable']);
   if (reused.has('github')) rows.push(['GitHub', choices.github ? 'Set up' : 'Not set up']);
-  if (reused.has('workspaces')) rows.push(['Workspaces', list(choices.workspaces)]);
-  if (reused.has('connectors')) rows.push(['Connectors', list(choices.connectors)]);
+  if (reused.has('workspaces')) rows.push(['Workspaces', inWordsOrNone(choices.workspaces)]);
+  if (reused.has('connectors')) rows.push(['Connectors', inWordsOrNone(choices.connectors)]);
   if (reused.has('extraTools')) {
     // Named as the checklist names them, by the tools they install.
     const tools = await loadManifest(downloads).then(({ tools }) => tools, () => []);
@@ -146,7 +144,7 @@ async function reusedRows(earlier, choices, given, hidden, downloads) {
       const named = tools.filter((tool) => tool.when === id).map((tool) => tool.name);
       return named.length > 0 ? named : [id];
     });
-    rows.push(['Extra tools', list(names)]);
+    rows.push(['Extra tools', inWordsOrNone(names)]);
   }
   if (reused.has('fullSkills')) {
     /** @type {Record<import('./profile.js').FullSkills, string>} */
