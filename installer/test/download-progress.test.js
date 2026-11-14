@@ -141,11 +141,13 @@ test("a download whose size the server doesn't give shows how much has come so f
   const installer = await supplyT3(where.downloads, 'latest.yml', '0.1.2', { size: 3_000_000 });
   await fakeMachine(where.home).setReplies(t3Replies(installer));
 
-  const result = await runOnline(where, 'york', { folder: where.downloads, chunk: 500_000, unsized: [installer], terminal: true });
+  // Slow enough that the spinner, which redraws itself each second of real time, draws an amount more than once.
+  const result = await runOnline(where, 'york', { folder: where.downloads, chunk: 500_000, pause: 250, unsized: [installer], terminal: true });
 
   assert.equal(result.code, 0, result.stderr);
   const drawn = result.stdout.split('\r').filter((drawing) => drawing.includes('Installing T3 Code'));
-  const amounts = drawn.flatMap((drawing) => [.../(\d+\.\d) MB/.exec(drawing) ?? []].slice(1, 2));
+  // Each amount as the person saw it come: a redraw of the same amount, each second, is no change.
+  const amounts = drawn.flatMap((drawing) => [.../(\d+\.\d) MB/.exec(drawing) ?? []].slice(1, 2)).filter((amount, index, all) => amount !== all[index - 1]);
   assert.deepEqual(amounts, ['0.0', '0.5', '1.0', '1.5', '2.0', '2.5', '3.0'], drawn.join('\n'));
   assert.deepEqual(percentagesShown(result.stdout, 'Installing T3 Code'), [], 'no percentage without a size');
 });
