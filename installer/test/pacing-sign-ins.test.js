@@ -3,26 +3,8 @@
 // code box. It stays as long as the sign-in runs, whatever the person does, and goes once it has.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { begin, dashes, holds, onScreen, reduce } from '../page/pacing.js';
-
-/** @typedef {import('../page/pacing.js').Page} Page */
-
-/**
- * A page that has connected to a run that had sent `before` events, then is sent `events`, each
- * at the time given with it.
- * @param {[number, Record<string, unknown>][]} timed [time, event] pairs; ids are numbered from 1
- * @param {{ before?: number }} [options]
- */
-function play(timed, { before = 0 } = {}) {
-  let page = reduce(begin, { type: 'connected', before });
-  timed.forEach(([now, event], index) => {
-    page = reduce(page, { type: 'event', event: /** @type {any} */ ({ id: index + 1, ...event }), now });
-  });
-  return page;
-}
-
-/** What's on screen at `now`. @param {Page} page @param {number} now @returns {any} */
-const at = (page, now) => onScreen(reduce(page, { type: 'tick', now }));
+import { dashes, holds, reduce } from '../page/pacing.js';
+import { at, play } from './pacing-play.js';
 
 const notice = { type: 'notice', title: 'Sign in to Claude Code', text: 'Claude Code signs you in next, in your browser.' };
 const link = { url: 'https://claude.com/cai/oauth/authorize?code=true&state=abc123', label: 'If no tab opens, use this link' };

@@ -4,26 +4,10 @@
 // These tests play events in at given times (in ms) and read what's on screen.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { begin, dashes, holds, onScreen, reduce, wakeAt } from '../page/pacing.js';
+import { dashes, holds, onScreen, reduce, wakeAt } from '../page/pacing.js';
+import { at, play } from './pacing-play.js';
 
 /** @typedef {import('../page/pacing.js').Page} Page */
-
-/**
- * A page that has connected to a run that had sent `before` events, then is sent `events`, each
- * at the time given with it (the history all at once, at 0).
- * @param {[number, Record<string, unknown>][]} timed [time, event] pairs; ids are numbered from 1
- * @param {{ before?: number }} [options]
- */
-function play(timed, { before = 0 } = {}) {
-  let page = reduce(begin, { type: 'connected', before });
-  timed.forEach(([now, event], index) => {
-    page = reduce(page, { type: 'event', event: /** @type {any} */ ({ id: index + 1, ...event }), now });
-  });
-  return page;
-}
-
-/** What's on screen at `now`. @param {Page} page @param {number} now */
-const at = (page, now) => onScreen(reduce(page, { type: 'tick', now }));
 
 /** @param {Page} page @param {number} now */
 const later = (page, now) => reduce(page, { type: 'tick', now });

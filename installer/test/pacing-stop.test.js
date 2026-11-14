@@ -4,18 +4,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { begin, dashes, onScreen, reduce } from '../page/pacing.js';
-
-/**
- * A page sent `events`, each at the time given with it; ids are numbered from 1.
- * @param {[number, Record<string, unknown>][]} timed
- */
-function play(timed) {
-  let page = reduce(begin, { type: 'connected', before: 0 });
-  timed.forEach(([now, event], index) => {
-    page = reduce(page, { type: 'event', event: /** @type {any} */ ({ id: index + 1, ...event }), now });
-  });
-  return page;
-}
+import { play } from './pacing-play.js';
 
 /** What a stop sends after `stopping`, as main.js says it. */
 const stopScreen = [

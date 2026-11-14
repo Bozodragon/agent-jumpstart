@@ -4,21 +4,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { answers, backTo, setUp } from '../page/details.js';
-import { begin, dashes, onScreen, reduce } from '../page/pacing.js';
-
-/** @typedef {import('../page/pacing.js').Page} Page */
-
-/**
- * A page sent `events`, numbered from 1, all at time 0.
- * @param {Record<string, unknown>[]} events
- */
-function play(events) {
-  let page = reduce(begin, { type: 'connected', before: 0 });
-  events.forEach((event, index) => {
-    page = reduce(page, { type: 'event', event: /** @type {any} */ ({ id: index + 1, ...event }), now: 0 });
-  });
-  return page;
-}
+import { dashes, onScreen } from '../page/pacing.js';
+import { play } from './pacing-play.js';
 
 const options = {
   team: [
