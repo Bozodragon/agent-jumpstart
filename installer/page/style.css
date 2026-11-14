@@ -32,6 +32,7 @@ html { font-size: clamp(16px, min(1.1713vw, 2.0834vh), 30px); }
   --warn-line: rgba(240, 166, 86, .58);
   --warn-text: #fad8b0;
   --lit: inset 0 1px 0 rgba(255, 255, 255, .055);
+  /* Set with its ligatures off wherever it is used: on, it draws "https://" as "https: //". */
   --mono: "JetBrains Mono", Consolas, monospace;
   --ease: cubic-bezier(.2, .7, .2, 1);
   /* A window taller than the composition: the spare height, part of which goes above the stage. */
@@ -53,10 +54,10 @@ body {
 a { color: var(--accent); text-underline-offset: 3px; }
 a:focus-visible, button:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: .25rem; }
 code, kbd {
-  font-family: var(--mono); font-size: .82em; color: var(--text);
+  font-family: var(--mono); font-variant-ligatures: none; font-size: .82em; color: var(--text);
   background: var(--selected); border: 1px solid var(--outline); border-radius: .375rem; padding: 1px .375rem;
 }
-.path { font-family: var(--mono); font-size: .88em; }
+.path { font-family: var(--mono); font-variant-ligatures: none; font-size: .88em; }
 .path > span { white-space: nowrap; }
 
 /* ---- The shell: one column, the same left edge for everything ---- */
@@ -292,7 +293,7 @@ form { margin: 0; }
 /* ---- A folder to type ---- */
 .input {
   width: 100%; height: 3.375rem; padding: 0 1.125rem;
-  font-family: var(--mono); font-size: .9375rem; color: var(--text);
+  font-family: var(--mono); font-variant-ligatures: none; font-size: .9375rem; color: var(--text);
   background: var(--panel); border: 1px solid var(--outline); border-radius: .875rem; box-shadow: var(--lit);
 }
 .input::placeholder { color: var(--muted); }
@@ -403,7 +404,7 @@ form { margin: 0; }
 /* ---- A sign-in: the link the program printed, its code, and the box for a pasted code ---- */
 .copybox-link {
   display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden;
-  margin: .75rem 1rem; font-family: var(--mono); font-size: .8125rem; line-height: 1.65;
+  margin: .75rem 1rem; font-family: var(--mono); font-variant-ligatures: none; font-size: .8125rem; line-height: 1.65;
   color: var(--accent); text-decoration: none; word-break: break-all;
 }
 .copybox-link:hover { text-decoration: underline; text-underline-offset: 3px; }
