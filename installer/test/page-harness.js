@@ -6,8 +6,7 @@
 import { spawn } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { pathToFileURL } from 'node:url';
-import { program, repo, stateFolder } from './harness.js';
+import { installerProcess, stateFolder } from './harness.js';
 
 /**
  * What the Installer sends the page: one event per front-end call, numbered in order from 1.
@@ -40,15 +39,10 @@ export const connectedFile = (home) => join(stateFolder(home), 'page-connected.t
  *   downloads from a folder, as `runOnline` does, with no `--downloads`
  */
 export async function runOnPage(where, profile, extra = [], { internet } = {}) {
-  /** @type {NodeJS.ProcessEnv} */
-  const env = { ...process.env, NO_COLOR: '1' };
-  delete env.WT_SESSION;
-  delete env.AGENT_JUMPSTART_FAKE_INTERNET;
-  if (internet) env.AGENT_JUMPSTART_FAKE_INTERNET = JSON.stringify(internet);
-  const preload = internet ? ['--import', pathToFileURL(join(repo, 'installer', 'test', 'fake-internet.js')).href] : [];
   const downloads = internet ? [] : ['--downloads', where.downloads];
-  const child = spawn(process.execPath, [...preload, program, '--profile', profile, ...extra, '--home', where.home, ...downloads], {
-    env,
+  const started = installerProcess(['--profile', profile, ...extra, '--home', where.home, ...downloads], { internet });
+  const child = spawn(process.execPath, started.args, {
+    env: started.env,
     detached: true,
     windowsHide: true,
     stdio: ['ignore', 'pipe', 'pipe'],

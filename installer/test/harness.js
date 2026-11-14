@@ -123,6 +123,26 @@ export async function seedSettings(home, settings) {
 }
 
 /**
+ * How every test starts the real installer: Node's arguments for `main.js` with `args`, and the
+ * environment to start it in. Colour is off; `WT_SESSION` is unset unless `windowsTerminal` says
+ * otherwise, whatever window the tests themselves run in; and with `internet`, the run's
+ * downloads are answered by fake-internet.js, preloaded, rather than by the real internet.
+ * @param {string[]} args
+ * @param {{ windowsTerminal?: boolean, internet?: Internet }} [options] as for `run`
+ * @returns {{ args: string[], env: NodeJS.ProcessEnv }} to start `process.execPath` with
+ */
+export function installerProcess(args, { windowsTerminal = false, internet } = {}) {
+  /** @type {NodeJS.ProcessEnv} */
+  const env = { ...process.env, NO_COLOR: '1' };
+  if (windowsTerminal) env.WT_SESSION = 'a-test-window';
+  else delete env.WT_SESSION;
+  if (internet) env.AGENT_JUMPSTART_FAKE_INTERNET = JSON.stringify(internet);
+  else delete env.AGENT_JUMPSTART_FAKE_INTERNET;
+  const preload = internet ? ['--import', pathToFileURL(fakeInternet).href] : [];
+  return { args: [...preload, program, ...args], env };
+}
+
+/**
  * Runs the real installer with the test overrides. It starts with `WT_SESSION` unset unless
  * `windowsTerminal` says otherwise, whatever window the tests themselves run in. It starts with no
  * console of its own (detached), so the title it sets for its window can't reach the console the
@@ -137,15 +157,9 @@ export async function seedSettings(home, settings) {
  */
 export function run(args, { windowsTerminal = false, internet, stopWhen } = {}) {
   return new Promise((resolve) => {
-    /** @type {NodeJS.ProcessEnv} */
-    const env = { ...process.env, NO_COLOR: '1' };
-    if (windowsTerminal) env.WT_SESSION = 'a-test-window';
-    else delete env.WT_SESSION;
-    if (internet) env.AGENT_JUMPSTART_FAKE_INTERNET = JSON.stringify(internet);
-    else delete env.AGENT_JUMPSTART_FAKE_INTERNET;
-    const preload = internet ? ['--import', pathToFileURL(fakeInternet).href] : [];
-    const options = { env, timeout: 30_000, detached: true, windowsHide: true };
-    const child = execFile(process.execPath, [...preload, program, ...args], options, (error, stdout, stderr) => {
+    const started = installerProcess(args, { windowsTerminal, internet });
+    const options = { env: started.env, timeout: 30_000, detached: true, windowsHide: true };
+    const child = execFile(process.execPath, started.args, options, (error, stdout, stderr) => {
       clearInterval(watching);
       resolve({ code: error ? Number(error.code ?? 1) : 0, stdout, stderr });
     });
