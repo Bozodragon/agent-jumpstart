@@ -3,6 +3,7 @@
 // one (issue #66). ansi.js turns what it printed into styled lines; this draws them.
 import { useLayoutEffect, useMemo, useRef } from 'react';
 import { draw } from './ansi.js';
+import { Thumb } from './overlay.js';
 import { icons } from './parts.js';
 
 /** What the panel's title bar says, as a window's would. */
@@ -102,6 +103,7 @@ export function Terminal({ text, running }) {
         ))}
         {endsLine && <div className="t-line">{cursor}</div>}
       </div>
+      <Thumb of={view} />
     </div>
   );
 }

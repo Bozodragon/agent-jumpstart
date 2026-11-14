@@ -41,6 +41,19 @@ html { font-size: clamp(16px, min(1.1713vw, 2.0834vh), 30px); }
 }
 * { box-sizing: border-box; }
 html { background: var(--bg); }
+/* No scrollbar of the browser's anywhere: one took room as it came and went, so the column moved
+   over on each screen that ran past the window's foot. What can scroll (the page in a small
+   window, the Details panel, the skills terminal) gets overlay.js's thumb, over its content. */
+html, .sheet-body, .term-body { scrollbar-width: none; }
+html::-webkit-scrollbar, .sheet-body::-webkit-scrollbar, .term-body::-webkit-scrollbar { display: none; }
+.thumb {
+  position: absolute; right: 3px; z-index: 5; width: 6px; border-radius: 3px;
+  background: #6b6f79; opacity: .38; touch-action: none;
+  transition: opacity .2s ease, width .12s ease, right .12s ease;
+}
+.thumb.is-page { position: fixed; z-index: 19; }
+.thumb.is-bright, .thumb:hover { opacity: .8; }
+.thumb:hover { width: 8px; right: 2px; }
 body {
   margin: 0;
   background: var(--bg);
@@ -63,7 +76,7 @@ code, kbd {
 /* ---- The shell: one column, the same left edge for everything ---- */
 .shell {
   max-width: 48rem; min-height: 100vh; margin: 0 auto;
-  padding: 1.75rem 1.5rem 7rem;
+  padding: 1.75rem 1.5rem 2.5rem;
   transition: max-width .45s var(--ease);
 }
 .shell.is-ending { max-width: 68rem; }
@@ -73,17 +86,12 @@ code, kbd {
   margin-bottom: calc(clamp(1.75rem, 10vh, 5.75rem) + var(--spare) * .3);
 }
 .shell.is-ending .head { margin-bottom: calc(clamp(1.75rem, 6vh, 3.25rem) + var(--spare) * .25); }
-.brand { display: flex; align-items: center; gap: .75rem; min-width: 0; font-size: .875rem; font-weight: 500; color: var(--secondary); white-space: nowrap; }
-.brand > span:last-child { overflow: hidden; text-overflow: ellipsis; }
-.mark {
-  width: 1.875rem; height: 1.875rem; flex: none; border-radius: .625rem;
-  background: var(--selected); border: 1px solid var(--outline); box-shadow: var(--lit);
-  display: grid; place-items: center;
-}
-.mark svg { width: .9375rem; height: .9375rem; stroke: var(--accent); }
+/* The header holds no name: the profile's name is the window's title, beside its icon (the >_
+   mark), in the title bar and on the taskbar. */
 
-/* Back to the setup page: quiet, in the person's browser. */
+/* Back to the setup page: quiet, in the person's browser, its words on the column's left edge. */
 .setup {
+  margin-left: -.75rem;
   display: inline-flex; align-items: center; gap: .375rem; flex: none;
   height: 2.25rem; padding: 0 .75rem; border-radius: 999px;
   font-size: .8125rem; font-weight: 500; color: var(--muted); text-decoration: none; white-space: nowrap;
@@ -103,9 +111,6 @@ code, kbd {
 .stop:hover { color: var(--warn-text); border-color: var(--warn-line); background: var(--warn-fill); }
 .stop:disabled { cursor: default; color: var(--muted); border-color: var(--hairline); background: none; }
 .stop:focus-visible { border-radius: 999px; }
-/* With Stop beside them, the dashes give way, not the name (they squeeze by design), unless the
-   name is long. At 640px and narrower the dashes have a line of their own. */
-@media (min-width: 641px) { .brand { flex-shrink: 0; max-width: 45%; } }
 .confirm {
   width: min(29rem, calc(100vw - 2rem)); padding: 1.75rem 1.75rem 1.625rem;
   color: var(--text); background: var(--panel); border: 1px solid var(--outline); border-radius: 1.125rem;
@@ -148,13 +153,16 @@ code, kbd {
 .scrim { position: fixed; inset: 0; z-index: 20; background: rgba(0, 0, 0, .62); animation: fade-in .16s ease both; }
 .sheet {
   position: absolute; z-index: 21; top: calc(100% + .625rem); left: 0; right: 0;
-  display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  max-height: calc(100vh - 6.25rem); overflow-y: auto; overscroll-behavior: contain;
+  overflow: hidden;
   background: var(--panel); border: 1px solid var(--outline); border-radius: 1rem;
   box-shadow: var(--lit), 0 1.5rem 4rem rgba(0, 0, 0, .8);
   animation: drop .2s var(--ease) both;
 }
 .sheet[hidden] { display: none; }
+.sheet-body {
+  display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  max-height: calc(100vh - 6.25rem); overflow-y: auto; overscroll-behavior: contain;
+}
 @keyframes drop { from { opacity: 0; transform: translateY(-.5rem); } }
 .part { padding: 1.125rem .75rem .875rem; min-width: 0; }
 .part + .part { border-left: 1px solid var(--hairline); }
@@ -366,7 +374,7 @@ form { margin: 0; }
   --ansi-4: #5b95ff; --ansi-5: #c99bff; --ansi-6: #5fc8d6; --ansi-7: #d4d6db;
   --ansi-8: #5e626b; --ansi-9: #ff9d9d; --ansi-10: #94e0b4; --ansi-11: #f5d993;
   --ansi-12: #8fb6ff; --ansi-13: #dcbcff; --ansi-14: #92e2ec; --ansi-15: #f2f3f5;
-  margin-top: 1.75rem; border: 1px solid var(--hairline); border-radius: .875rem; overflow: hidden;
+  position: relative; margin-top: 1.75rem; border: 1px solid var(--hairline); border-radius: .875rem; overflow: hidden;
   background: var(--term-bg); box-shadow: var(--lit);
 }
 .term-head {
@@ -378,7 +386,7 @@ form { margin: 0; }
 .term-body {
   height: 17.5rem; overflow-y: auto; padding: .875rem 1.125rem 1rem;
   font-family: "Cascadia Mono", Consolas, monospace; font-size: .8125rem; line-height: 1.42; color: var(--term-text);
-  scrollbar-width: thin; scrollbar-color: var(--outline) transparent; overflow-anchor: none;
+  overflow-anchor: none;
 }
 .term-body:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .t-line { min-height: 1.42em; white-space: pre-wrap; overflow-wrap: anywhere; }
@@ -468,23 +476,15 @@ form { margin: 0; }
   .ending { grid-template-columns: minmax(0, 5fr) minmax(0, 6fr); gap: 3.5rem; align-items: start; }
 }
 
-/* ---- A narrower window: the header takes two lines, and the dashes get the second ---- */
+/* ---- A narrower window: the Details panel's halves one above the other ---- */
 @media (max-width: 640px) {
-  .head { flex-wrap: wrap; row-gap: .75rem; }
-  .brand { margin-right: auto; }
-  .setup { margin-right: -.75rem; }
-  .progress { order: 3; flex: 1 1 100%; max-width: none; margin-left: 0; }
-  .dashes { flex: 1; }
-  .sheet { grid-template-columns: minmax(0, 1fr); }
+  .sheet-body { grid-template-columns: minmax(0, 1fr); }
   .part + .part { border-left: 0; border-top: 1px solid var(--hairline); }
   .part:last-child .part-head { margin-bottom: .625rem; }
-  .run.is-work { flex: 1 1 auto; }
-  .dash { flex: 1 1 1rem; }
 }
 
 @media (max-width: 560px) {
-  .shell { padding: 1.25rem 1rem 5rem; }
-  .brand { gap: .625rem; }
+  .shell { padding: 1.25rem 1rem 2rem; }
   .status { margin-bottom: 1.125rem; }
   .body { margin-top: 1.5rem; }
   .lede, .next p, .readout { font-size: 1rem; }
@@ -502,7 +502,7 @@ form { margin: 0; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .shell, .dash, .box, .box::after, .bar i, .progress, .chevron { transition: none; }
+  .shell, .dash, .box, .box::after, .bar i, .progress, .chevron, .thumb { transition: none; }
   .screen, .check, .help, .sheet, .scrim { animation: none; }
   .did.is-now .did-mark { animation: none; }
   .screen.is-leaving { display: none; }

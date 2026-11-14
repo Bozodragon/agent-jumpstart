@@ -7,6 +7,7 @@ import { createRoot } from 'react-dom/client';
 import { backTo } from './details.js';
 import { Details } from './details-panel.js';
 import { begin, onScreen, reduce, wakeAt } from './pacing.js';
+import { Thumb } from './overlay.js';
 import { icons } from './parts.js';
 import { Screen, announced, postAnswer, postBack } from './screens.js';
 import { StopButton } from './stop.js';
@@ -75,24 +76,20 @@ function App() {
           shareLogLine: page.shareLogLine,
         }}
       />
+      <Thumb />
     </div>
   );
 }
 
 /**
- * The name, the way back to the setup page, the dashes that say how far along the run is, which
- * open the Details panel, and Stop.
+ * The way back to the setup page, the dashes that say how far along the run is, which open the
+ * Details panel, and Stop. The profile's name isn't here: it's the page's title, which an app
+ * window shows in its title bar and on the taskbar, beside the >_ mark (icon.svg).
  * @param {{ page: import('./pacing.js').Page, over: boolean }} props
  */
 function Header({ page, over }) {
   return (
     <header className="head">
-      <div className="brand">
-        <span className="mark" aria-hidden="true">
-          {icons.mark}
-        </span>
-        <span>{page.title}</span>
-      </div>
       {page.setupPage && (
         <a className="setup" href={page.setupPage} target="_blank" rel="noopener noreferrer">
           Setup page

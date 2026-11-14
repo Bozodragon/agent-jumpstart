@@ -5,6 +5,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { answers, backLasts, setUp } from './details.js';
 import { dashes } from './pacing.js';
+import { Thumb } from './overlay.js';
 import { Line, icons } from './parts.js';
 
 /** What a screen reader hears of each row's mark. */
@@ -17,6 +18,7 @@ const said = { done: 'done', now: 'under way', bad: "didn't work" };
 export function Details({ page, onChange }) {
   const [open, setOpen] = useState(false);
   const toggle = useRef(/** @type {HTMLButtonElement | null} */ (null));
+  const body = useRef(/** @type {HTMLDivElement | null} */ (null));
   // Escape closes it, and the focus goes back to the button that opened it.
   useEffect(() => {
     if (!open) return;
@@ -61,65 +63,68 @@ export function Details({ page, onChange }) {
       </button>
       {open && <div className="scrim" onClick={() => setOpen(false)} />}
       <div className="sheet" id="details" role="region" aria-label="Your answers, and what's set up on this laptop" hidden={!open}>
-        <section className="part">
-          <div className="part-head">
-            <h2>Your answers</h2>
-          </div>
-          <p className="part-note">{lasts ? 'You can change these until the install starts.' : 'Fixed now the install has started.'}</p>
-          {given.length === 0 ? (
-            <p className="part-empty">Nothing asked yet.</p>
-          ) : (
-            <dl className="answers">
-              {given.map((answer) => (
-                <div key={answer.question} className={`answer${answer.now ? ' is-now' : ''}`}>
-                  <dt>{answer.label}</dt>
-                  <dd>{answer.now ? <span className="quiet">Answering now</span> : <Line text={answer.value} />}</dd>
-                  {answer.change && (
-                    <button
-                      className="change"
-                      type="button"
-                      aria-label={`Change your answer: ${answer.label}`}
-                      onClick={() => {
-                        setOpen(false);
-                        onChange(answer.question);
-                      }}
-                    >
-                      Change
-                    </button>
-                  )}
-                </div>
-              ))}
-            </dl>
-          )}
-        </section>
-        <section className="part">
-          <div className="part-head">
-            <h2>Set up on this laptop</h2>
-            <span className="part-count">{laptop.of === undefined ? (worked > 0 ? `${worked} so far` : '') : `${laptop.worked} of ${laptop.of}`}</span>
-          </div>
-          {laptop.rows.length === 0 ? (
-            <p className="part-empty">Nothing yet: the install starts once the questions are answered.</p>
-          ) : (
-            <ol className="did-rows">
-              {laptop.rows.map((row, index) => (
-                <li key={index} className={`did is-${row.state}`}>
-                  <span className="did-mark" aria-hidden="true">
-                    {row.state === 'done' ? icons.smallTick : row.state === 'bad' ? '!' : ''}
-                  </span>
-                  <span className="did-label">
-                    <Line text={row.label} />
-                    <span className="offscreen">, {said[row.state]}</span>
-                  </span>
-                  {row.value !== undefined && (
-                    <span className="did-value">
-                      <Line text={row.value} />
+        <div className="sheet-body" ref={body}>
+          <section className="part">
+            <div className="part-head">
+              <h2>Your answers</h2>
+            </div>
+            <p className="part-note">{lasts ? 'You can change these until the install starts.' : 'Fixed now the install has started.'}</p>
+            {given.length === 0 ? (
+              <p className="part-empty">Nothing asked yet.</p>
+            ) : (
+              <dl className="answers">
+                {given.map((answer) => (
+                  <div key={answer.question} className={`answer${answer.now ? ' is-now' : ''}`}>
+                    <dt>{answer.label}</dt>
+                    <dd>{answer.now ? <span className="quiet">Answering now</span> : <Line text={answer.value} />}</dd>
+                    {answer.change && (
+                      <button
+                        className="change"
+                        type="button"
+                        aria-label={`Change your answer: ${answer.label}`}
+                        onClick={() => {
+                          setOpen(false);
+                          onChange(answer.question);
+                        }}
+                      >
+                        Change
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </dl>
+            )}
+          </section>
+          <section className="part">
+            <div className="part-head">
+              <h2>Set up on this laptop</h2>
+              <span className="part-count">{laptop.of === undefined ? (worked > 0 ? `${worked} so far` : '') : `${laptop.worked} of ${laptop.of}`}</span>
+            </div>
+            {laptop.rows.length === 0 ? (
+              <p className="part-empty">Nothing yet: the install starts once the questions are answered.</p>
+            ) : (
+              <ol className="did-rows">
+                {laptop.rows.map((row, index) => (
+                  <li key={index} className={`did is-${row.state}`}>
+                    <span className="did-mark" aria-hidden="true">
+                      {row.state === 'done' ? icons.smallTick : row.state === 'bad' ? '!' : ''}
                     </span>
-                  )}
-                </li>
-              ))}
-            </ol>
-          )}
-        </section>
+                    <span className="did-label">
+                      <Line text={row.label} />
+                      <span className="offscreen">, {said[row.state]}</span>
+                    </span>
+                    {row.value !== undefined && (
+                      <span className="did-value">
+                        <Line text={row.value} />
+                      </span>
+                    )}
+                  </li>
+                ))}
+              </ol>
+            )}
+          </section>
+        </div>
+        <Thumb of={body} />
       </div>
     </>
   );
