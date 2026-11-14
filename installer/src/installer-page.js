@@ -16,11 +16,21 @@
 //            kind is folder, choose, confirm, pick, or done (waitForDone: `what` in place of a
 //            message, answered with anything)
 //   answered { question, answer }           the first answer, which counts; the page moves on
-//   refused  { question, answer, reason }   a folder that won't do; the question is still open
-//   output   { text, busy? }                what a program on screen printed; with `busy`, what
-//                                            the skills installer printed during that busy (the
-//                                            one program whose own output the page shows), as
-//                                            it printed it, escape codes and all
+//   refused  { question, answer?, reason }  a folder that won't do; the question is still open
+//                                            (no `answer` for a code box: a code is never sent back)
+//   signIn   {}                              a sign-in under way in the browser; its id is the
+//                                            sign-in's id, and the notice just before it explains it
+//   signInShows { signIn, link?, code?, codeBox? }  what the person needs for it, as its program
+//                                            prints it: `link` { url, label }, a `code` to copy,
+//                                            and `codeBox`, the id a pasted code is posted to as
+//                                            an answer (answered with 'sent' once it's gone to the
+//                                            program's input, or refused with the reason)
+//   signInEnded { signIn }                   its program has finished, whichever way
+//   output   { text, busy? }                what a program printed; with `busy`, what the skills
+//                                            installer printed during that busy (the one program
+//                                            whose own output the page shows), as it printed it,
+//                                            escape codes and all. A sign-in's program keeps its
+//                                            output: the page's screen relays none of it
 //   finish   { text }                       the run's last words
 //   stopping {}                             the run is stopping (Stop was pressed, or the page was
 //                                            closed and none came back): nothing before this is
@@ -60,6 +70,7 @@ const comeBackWithin = 10 * 60_000;
  * @property {(value: unknown) => void} resolve
  * @property {(error: Stop) => void} reject Ends the wait for it, as the run stops.
  * @property {boolean} checking Whether an answer to it is being checked now.
+ * @property {boolean} [secret] Whether what's posted is kept from the events (a sign-in code).
  */
 
 /**
@@ -161,7 +172,7 @@ export async function openInstallerPage({ addressFile, connectedFile, page }) {
       // Stopped while it was being checked: the question isn't asked any more.
       if (!open.has(question)) return { status: 409, body: { ok: false, reason: 'The Installer has stopped.' } };
       if ('refused' in checked) {
-        server.send({ type: 'refused', question, answer, reason: checked.refused });
+        server.send({ type: 'refused', question, ...(asked.secret ? {} : { answer }), reason: checked.refused });
         return { status: 422, body: { ok: false, reason: checked.refused } };
       }
       open.delete(question);
@@ -248,23 +259,30 @@ export async function openInstallerPage({ addressFile, connectedFile, page }) {
   /** @param {import('./questions.js').Option<string>[]} options */
   const shown = (options) => options.map(({ value, label, hint }) => ({ value, label, ...(hint === undefined ? {} : { hint }) }));
 
+  /** The input of the program on the screen now, while it runs: where a pasted code goes. @type {import('node:stream').Writable | undefined} */
+  let typing;
+
   /** @type {import('./front-end.js').Screen} */
   const screen = {
     // Nothing on the page is a terminal: a program's input and output are always pipes. What it
-    // prints is relayed to the page; its input stays open, for a page to write to.
+    // prints is its caller's (a sign-in takes the link and code from it and logs the rest), so
+    // none of it goes to the page; it's read anyway, so a program never waits on a full pipe. Its
+    // input stays open while it runs, for a code pasted on the page.
     stdio: () => ['pipe', 'pipe', 'pipe'],
     attach(child) {
-      for (const from of [child.stdout, child.stderr]) {
-        from?.setEncoding('utf8');
-        from?.on('data', (/** @type {string} */ text) => server.send({ type: 'output', text }));
-      }
+      for (const from of [child.stdout, child.stderr]) from?.resume();
       if (stopped) return end(child);
       onScreen.add(child);
-      child.once('close', () => onScreen.delete(child));
+      const input = child.stdin ?? undefined;
+      // A program that has gone before its code arrives mustn't take the Installer with it.
+      input?.on('error', () => {});
+      typing = input;
+      child.once('close', () => {
+        onScreen.delete(child);
+        if (typing === input) typing = undefined;
+      });
     },
-    write(text) {
-      if (text !== '') server.send({ type: 'output', text });
-    },
+    write() {},
     // A program on the page's screen waits on the person (a sign-in), like a question: a stop
     // throws from it at once, and with no page open it's waited on only so long.
     wait(running) {
@@ -322,6 +340,48 @@ export async function openInstallerPage({ addressFile, connectedFile, page }) {
       const { text, ok } = ended?.(result) ?? { text: message, ok: true };
       server.send({ type: 'ended', busy, text, ok });
       return result;
+    },
+    async signIn(task) {
+      if (stopped) throw stopped;
+      const signIn = server.send({ type: 'signIn' });
+      /** The code box's id, while it's open. @type {number | undefined} */
+      let box;
+      /** @type {import('./front-end.js').SignInShown['codeBox'] & {}} */
+      const pasted = (code) => (code === '' ? 'Paste the code first.' : undefined);
+      try {
+        // A stop throws from the program on the screen (screen.wait), so from the task too.
+        return await task(({ link, code, codeBox }) => {
+          if (stopped) return;
+          /** @type {Record<string, unknown>} */
+          const shown = {};
+          if (link) shown.link = { url: link.url, label: link.label };
+          if (code !== undefined) shown.code = code;
+          if (codeBox && box === undefined) {
+            box = nextQuestion++;
+            const id = box;
+            open.set(id, {
+              checking: false,
+              secret: true,
+              // Nothing waits on the box itself: the sign-in waits on its program.
+              resolve: () => {},
+              reject: () => {},
+              async check(posted) {
+                const code = typeof posted === 'string' ? posted.trim() : '';
+                const why = pasted(code) ?? codeBox(code);
+                if (why !== undefined) return { refused: why };
+                if (!typing?.writable) return { refused: 'The sign-in has already finished.' };
+                typing.write(`${code}\n`);
+                return { value: 'sent' };
+              },
+            });
+            shown.codeBox = id;
+          }
+          if (Object.keys(shown).length > 0) server.send({ type: 'signInShows', signIn, ...shown });
+        });
+      } finally {
+        if (box !== undefined) open.delete(box);
+        server.send({ type: 'signInEnded', signIn });
+      }
     },
     problem(text) {
       server.send({ type: 'problem', text });

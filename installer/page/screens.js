@@ -67,6 +67,8 @@ export function announced(shown) {
       return shown.text;
     case 'busy':
       return shown.ended?.text ?? shown.message;
+    case 'signIn':
+      return shown.sent ? 'Checking the code' : 'Waiting for you to sign in';
     case 'ending':
       return shown.closing ?? '';
     case 'problem':
@@ -96,6 +98,8 @@ export function Screen({ shown, actions }) {
       );
     case 'busy':
       return <Busy screen={shown} />;
+    case 'signIn':
+      return <SignIn screen={shown} actions={actions} />;
     case 'ending':
       return <Ending screen={shown} />;
     case 'problem':
@@ -196,6 +200,98 @@ function Busy({ screen }) {
         </p>
       )}
     </>
+  );
+}
+
+/**
+ * A sign-in in the person's browser, on one screen: what happens (the notice it's joined to),
+ * the code to copy and the link to use if no tab opens, as the program prints them, the wait,
+ * and, for Claude, a box to paste a code into, which goes to the program's input. It stays until
+ * the program has finished.
+ * @param {{ screen: import('./pacing.js').SignInScreen, actions: Actions }} props
+ */
+function SignIn({ screen, actions }) {
+  const { notice, link, code, codeBox, sent, refused } = screen;
+  const [typed, setTyped] = useState('');
+  const [sending, setSending] = useState(false);
+  const [edited, setEdited] = useState(false);
+  // Each refusal is shown, even for the same reason as the last.
+  useEffect(() => {
+    setEdited(false);
+  }, [refused?.by]);
+  const ref = useFocus(codeBox !== undefined ? '.input' : link ? '.copybox-link' : '.title');
+  // A code sent disables the box, which would leave the focus nowhere: the heading takes it.
+  useEffect(() => {
+    const title = ref.current?.querySelector('.title');
+    if (sent && title instanceof HTMLElement) title.focus({ preventScroll: true });
+  }, [sent]);
+  const showRefusal = refused !== undefined && !edited && !sent;
+  const id = `code${codeBox ?? ''}`;
+
+  /** @param {import('react').FormEvent} event */
+  const submit = async (event) => {
+    event.preventDefault();
+    const code = typed.trim();
+    if (codeBox === undefined || sending || sent || code === '') return;
+    setTyped(code);
+    setSending(true);
+    await actions.answer(codeBox, code);
+    setSending(false);
+  };
+
+  return (
+    <div ref={/** @type {any} */ (ref)} className="signin">
+      {sent ? <Status kind="ring">Checking the code</Status> : <Status kind="you" waiting>Waiting for you to sign in</Status>}
+      <h1 className="title" tabIndex={-1}>
+        {notice?.title ?? 'Sign in'}
+      </h1>
+      {notice && (
+        <div className="notice-body">
+          <Words text={notice.text} />
+        </div>
+      )}
+      {code !== undefined && <CopyBox label="Your one-time code" text={code} />}
+      {link && (
+        <div className="copybox">
+          <div className="copybox-head">{link.label}</div>
+          <a className="copybox-link" href={link.url} target="_blank" rel="noopener noreferrer">
+            {link.url}
+          </a>
+        </div>
+      )}
+      {codeBox !== undefined && (
+        <form className="signin-form" onSubmit={submit} noValidate>
+          <label className="label" htmlFor={id}>
+            Code from the sign-in page
+          </label>
+          <div className="coderow">
+            <input
+              className="input"
+              id={id}
+              type="text"
+              value={typed}
+              disabled={sent}
+              spellCheck={false}
+              autoComplete="one-time-code"
+              aria-invalid={showRefusal}
+              aria-describedby={showRefusal ? `${id}-error` : undefined}
+              onChange={(event) => {
+                setTyped(event.target.value);
+                setEdited(true);
+              }}
+            />
+            <button className="primary" type="submit" disabled={sent || sending || typed.trim() === ''}>
+              Continue
+            </button>
+          </div>
+          {showRefusal && (
+            <p className="error" id={`${id}-error`} role="alert">
+              <Line text={refused.reason} />
+            </p>
+          )}
+        </form>
+      )}
+    </div>
   );
 }
 

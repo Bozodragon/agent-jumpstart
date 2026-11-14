@@ -1,8 +1,8 @@
 // The front end: what the person sees and answers. It's a dependency passed in, like `machine`:
 // `main` creates one, and each step gets it in the context it already takes (`context.frontEnd`).
-// Nothing else draws, asks or prints. The terminal front end (terminal.js) is the only one for
-// now; the Installer page is to be a second, behind the same interface, so a step never checks
-// which one it has, except a sign-in that differs on the page, which reads `inWindow`.
+// Nothing else draws, asks or prints. There are two: the terminal front end (terminal.js) and the
+// Installer page (installer-page.js), behind the same interface, so a step never checks which one
+// it has, except a sign-in, whose steps differ on the page, which picks its version by `inWindow`.
 //
 // Words a step passes in name neither a key nor the window: how to accept a default, what to
 // press once something's done and where to come back to are each front end's own to say.
@@ -41,6 +41,18 @@
  */
 
 /**
+ * What a sign-in in the person's browser needs them to have, taken from its program's output as
+ * it comes. Each `show` adds to what's there.
+ * @typedef {object} SignInShown
+ * @property {{ url: string, label: string }} [link] An address to open, such as the program's
+ *   own address for when the browser didn't open by itself. `label` says when to use it.
+ * @property {string} [code] A code to copy into the browser, such as GitHub's one-time code.
+ * @property {(code: string) => string | undefined} [codeBox] A box to paste a code into, which
+ *   goes to the program's input as a line once this finds nothing wrong with it (it's given the
+ *   code trimmed, and returns why it won't do, if it won't). The first code it takes is the only one.
+ */
+
+/**
  * @typedef {object} Links
  * @property {string} [setupPage] The profile's setup page, which the person came from.
  * @property {string} [shareLogLine] The line that copies the newest installer log, for asking for help.
@@ -59,6 +71,13 @@
  *   how far it has got through `progress` (the terminal shows a percentage beside the message,
  *   or the amount so far when the total isn't known); it needn't. It may pass on what a program
  *   it runs prints through `output`, for a front end that shows it.
+ * @property {<T>(task: (show: (shown: SignInShown) => void) => Promise<T>) => Promise<T>} signIn
+ *   A sign-in under way in the person's browser, for a front end whose screen isn't the person's
+ *   window (`inWindow` false), so the program can't be seen or answered there: `task` runs it and
+ *   hands `show` the link and code the person needs as the program prints them. The notice just
+ *   before it is its explanation, and the page shows the two as one screen, until `task` is over.
+ *   Like `busy`, nothing else may be shown while it runs. (The terminal shows the link and code as
+ *   steps, and no code box: there, the program reads the window itself.)
  * @property {(text: string) => void} problem Something that didn't work, or why the run stopped.
  * @property {(rows: [string, string][], title: string) => void} summary Labelled rows, such as the checklist.
  * @property {(text: string, title: string) => void} notice Something to read before what comes next.

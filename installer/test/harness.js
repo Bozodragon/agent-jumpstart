@@ -49,7 +49,7 @@ export async function readProfile(name) {
 
 /** @typedef {{ from: string, saves: string, after?: number, perSecond?: number, stopsAt?: number }} BrowserDownload See the fake machine's `setBrowser`. */
 
-/** @typedef {{ code?: number, output?: string, creates?: string[], writes?: Record<string, string>, reads?: string[], takes?: number }} Reply What a faked program run returns, leaves behind, and looks for as it starts (its record says which of `reads` it `found`), and how many milliseconds it really takes before it returns (`takes`, to watch a spinner over a fake run; only claude.test.js uses it, in its test of `takes` itself, over Claude Code's install). */
+/** @typedef {{ code?: number, output?: string, creates?: string[], writes?: Record<string, string>, reads?: string[], takes?: number, readsALine?: boolean }} Reply What a faked program run returns, leaves behind, and looks for as it starts (its record says which of `reads` it `found`), how many milliseconds it really takes before it returns (`takes`, to watch a spinner over a fake run; only claude.test.js uses it, in its test of `takes` itself, over Claude Code's install), and, on the page's screen, whether it waits for a line on its input (`readsALine`, as Claude's sign-in waits for a pasted code; its record says what it was given, `typed`). */
 
 /** The version of Claude Code whose release files every test home's downloads folder holds. */
 export const defaultClaude = '2.1.400';
@@ -302,7 +302,7 @@ export function fakeMachine(home) {
      * `env` is the environment variables a run was given beyond PATH, for that run only (the
      * record has none for a run given none). `input` is what the program's input was: `pipe`, or
      * `inherit` (the person's window, for a program on the terminal's screen).
-     * @returns {Promise<{ file: string, args: string[], path: string, env?: Record<string, string>, onScreen?: boolean, leftRunning?: boolean, input: string, found?: string[] }[]>}
+     * @returns {Promise<{ file: string, args: string[], path: string, env?: Record<string, string>, onScreen?: boolean, leftRunning?: boolean, input: string, found?: string[], typed?: string }[]>}
      */
     runs: () => readJson('runs.json', []),
     /** @returns {Promise<string[]>} the addresses it was asked to open in the browser, in order */

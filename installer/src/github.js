@@ -7,7 +7,7 @@
 import { githubHost as host, loadManifest, toolEntry } from './manifest.js';
 import { showPage } from './open-page.js';
 import { messageOf, Stop } from './stop.js';
-import { bullet } from './text.js';
+import { bullet, plainLines, wholeLines } from './text.js';
 import { findTool } from './tools.js';
 
 /**
@@ -51,7 +51,7 @@ export async function signedInBefore(context) {
  * @returns {Promise<string>} The checklist's GitHub line.
  */
 export async function setUpGitHub(profile, wanted, programs, context, signedIn) {
-  const { machine, frontEnd, downloads, log } = context;
+  const { machine, downloads, log } = context;
   const say = (/** @type {string} */ line) => log.write(`GitHub: ${line}`);
   if (!wanted) {
     say('not chosen, so it was skipped');
@@ -80,18 +80,8 @@ export async function setUpGitHub(profile, wanted, programs, context, signedIn) 
   } else {
     say('not signed in yet');
     await walkThroughSignUp(github, { ...context, say });
-    frontEnd.notice(
-      [
-        "GitHub's own tool signs you in next, in your browser:",
-        '',
-        `  ${bullet} Asked to authenticate Git? Press Enter for Yes.`,
-        `  ${bullet} It copies a one-time code for you.`,
-        `  ${bullet} Press Enter to open the browser.`,
-        `  ${bullet} Paste the code, sign in, and click Authorize.`,
-      ].join('\n'),
-      'Sign in to GitHub',
-    );
-    const code = await machine.runOnScreen(program.file, [...program.args, 'auth', 'login', '--hostname', host, '--git-protocol', 'https', '--web', '--clipboard']);
+    const login = [...program.args, 'auth', 'login', '--hostname', host, '--git-protocol', 'https', '--web', '--clipboard'];
+    const code = context.frontEnd.inWindow ? await signInInTheWindow(program.file, login, context) : await signInOnThePage(program.file, login, context, say);
     if (code !== 0) {
       say(`gh auth login stopped with code ${code}`);
       return "Not signed in: the GitHub sign-in didn't finish";
@@ -113,6 +103,79 @@ export async function setUpGitHub(profile, wanted, programs, context, signedIn) 
     return `Signed in as ${username}, but Git isn't set up to use it`;
   }
   return `Signed in as ${username}`;
+}
+
+/**
+ * gh's sign-in in the person's window, where gh is interactive: it asks about Git and waits for
+ * Enter before it opens the browser, which the notice says.
+ * @param {string} file @param {string[]} args
+ * @param {import('./tools.js').Context} context
+ * @returns {Promise<number>} its exit code
+ */
+function signInInTheWindow(file, args, { machine, frontEnd }) {
+  frontEnd.notice(
+    [
+      "GitHub's own tool signs you in next, in your browser:",
+      '',
+      `  ${bullet} Asked to authenticate Git? Press Enter for Yes.`,
+      `  ${bullet} It copies a one-time code for you.`,
+      `  ${bullet} Press Enter to open the browser.`,
+      `  ${bullet} Paste the code, sign in, and click Authorize.`,
+    ].join('\n'),
+    'Sign in to GitHub',
+  );
+  return machine.runOnScreen(file, args);
+}
+
+/**
+ * gh's sign-in on the page. Piped, gh asks nothing (the Git step after it covers Git) and opens
+ * nothing: it prints its one-time code and the address to sign in at. The page is given the
+ * code, and the Installer opens the address itself. All gh printed goes to the log.
+ * @param {string} file @param {string[]} args
+ * @param {import('./tools.js').Context} context @param {(line: string) => void} say
+ * @returns {Promise<number>} its exit code
+ */
+async function signInOnThePage(file, args, { machine, frontEnd }, say) {
+  frontEnd.notice(
+    [
+      "GitHub's own tool signs you in next, in your browser:",
+      '',
+      `  ${bullet} A new tab opens at GitHub's sign-in page. If no tab opens, use the link below.`,
+      `  ${bullet} Copy the one-time code below and paste it there. Then sign in, if GitHub asks, and click Authorize.`,
+      `  ${bullet} ${frontEnd.comeBack()} It carries on by itself.`,
+    ].join('\n'),
+    'Sign in to GitHub',
+  );
+  /** @type {Promise<void>} */
+  let opening = Promise.resolve();
+  const ran = await frontEnd.signIn((show) => {
+    /** @type {string | undefined} */
+    let code;
+    /** @type {string | undefined} */
+    let address;
+    return machine.runOnScreenAndKeep(file, args, {
+      watch(printed) {
+        const lines = wholeLines(printed);
+        const found = lines.map((line) => /one-time code\W+([A-Z0-9]{4}-[A-Z0-9]{4})\b/i.exec(line)?.[1]).find(Boolean);
+        if (code === undefined && found) {
+          code = found;
+          show({ code });
+        }
+        const url = lines.map((line) => /\b(https:\/\/\S+)/.exec(line)?.[1]).find(Boolean);
+        if (address === undefined && url) {
+          address = url;
+          show({ link: { url, label: 'If no tab opens, use this link' } });
+          opening = machine.openPage(url).then(
+            () => say(`sign-in page: ${url} (opened)`),
+            (error) => say(`sign-in page: ${url} (couldn't open: ${messageOf(error)})`),
+          );
+        }
+      },
+    });
+  });
+  await opening;
+  for (const line of plainLines(ran.output)) say(`sign-in said: ${line}`);
+  return ran.code;
 }
 
 /**
