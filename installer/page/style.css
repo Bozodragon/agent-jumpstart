@@ -263,14 +263,17 @@ form { margin: 0; }
 .option input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
 .option:hover { background: var(--hover); }
 .option:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 0; }
+/* The chosen radio's dot is a gradient in the ring's own box, not a child placed inside it: the
+   page scales with the window, and a child's fractional size and place rounded to whole pixels
+   apart from the ring's, so the dot sat off centre. One box can't. */
+@property --dot { syntax: "<percentage>"; inherits: false; initial-value: 0%; }
 .box {
   flex: none; width: 1.125rem; height: 1.125rem; border-radius: 50%;
   border: 1.5px solid var(--outline); display: grid; place-items: center;
-  transition: border-color .12s ease, background-color .12s ease;
+  background: radial-gradient(circle closest-side, var(--accent) calc(var(--dot) - 7%), transparent var(--dot));
+  transition: border-color .12s ease, background-color .12s ease, --dot .14s ease;
 }
-.box::after { content: ""; width: .5rem; height: .5rem; border-radius: 50%; background: var(--accent); transform: scale(0); transition: transform .14s ease; }
-.option:has(input:checked) .box { border-color: var(--accent); }
-.option:has(input:checked) .box::after { transform: scale(1); }
+.option:has(input:checked) .box { border-color: var(--accent); --dot: 54%; }
 .option-text { display: flex; flex-wrap: wrap; align-items: baseline; gap: 1px .875rem; min-width: 0; }
 .option-label { font-weight: 500; }
 .option-hint { font-size: .90625rem; color: var(--secondary); }
@@ -279,11 +282,14 @@ form { margin: 0; }
 /* Tick boxes, and what each one is for in a second column. */
 .options.is-pick .option { padding: .625rem .875rem; }
 .options.is-pick .option-text { display: grid; grid-template-columns: 9.25rem minmax(0, 1fr); flex: 1; }
-.options.is-pick .box { border-radius: .3125rem; }
+/* With no hint, the label has the row: the 9.25rem column is the hints' (lining them up), and a
+   long question in it alone wrapped onto six lines beside an empty one. */
+.options.is-pick .option-label:only-child { grid-column: 1 / -1; }
+.options.is-pick .box { border-radius: .3125rem; background: none; }
 .options.is-pick .box::after {
-  width: .625rem; height: .375rem; border-radius: 0; background: none;
+  content: ""; width: .625rem; height: .375rem;
   border-left: 2px solid var(--on-accent); border-bottom: 2px solid var(--on-accent);
-  transform: translateY(-1px) rotate(-45deg) scale(0);
+  transform: translateY(-1px) rotate(-45deg) scale(0); transition: transform .14s ease;
 }
 .options.is-pick .option:has(input:checked) .box { background: var(--accent); }
 .options.is-pick .option:has(input:checked) .box::after { transform: translateY(-1px) rotate(-45deg) scale(1); }
