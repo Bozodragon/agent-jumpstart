@@ -49,10 +49,11 @@ test('an error the Installer didn’t expect is told in plain words, then ends t
   assert.match(text, /Failed: Error: EISDIR/);
 });
 
-// What the person sees is checked through the page harness, which fails a test whose run sends
-// the page a question naming a key. The terminal can't be checked that way (an answers-file run
-// shows no question, and an attended one needs a real console), and no set of runs reaches every
-// question (each sign-in's retry, Software Center's), so this reads the questions' own words too.
+// What the person sees is checked through the page harness: once a run sends the page a question
+// naming a key, every later wait on the page fails, so nearly every page test checks it. The
+// terminal can't be checked that way (an answers-file run shows no question, and an attended one
+// needs a real console), and no set of runs reaches every question (each sign-in's retry,
+// Software Center's), so this reads the questions' own words too.
 test('no question, and nothing waiting for the person, names a key in its own words', async () => {
   const offenders = [];
   // The terminal front end words its own prompts, `waitForDone`'s "Press Enter once …" among them.

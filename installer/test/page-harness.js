@@ -139,13 +139,16 @@ function connect(events, { lastEventId } = {}) {
   /** @type {(error: unknown) => void} */
   let failed = () => {};
   const finished = new Promise((resolve) => (failed = resolve));
+  /** Why the run broke the rule that no question names a key, once it has. @type {Error | undefined} */
+  let keyNamed;
 
   /** @param {PageEvent} event */
   const arrive = (event) => {
     // No question, nor what a Done waits for, names a key in its own words: how to answer is the
-    // front end's to show (spec #92). Checked on what every page test's run sends.
+    // front end's to show (spec #92). Checked on what every page test's run sends: once one has,
+    // every wait on the page fails (`next`), even for an event already here.
     const words = event.type === 'question' ? `${event.message ?? ''} ${event.what ?? ''}` : '';
-    if (/\bEnter\b/i.test(words)) failed(new Error(`a question the page was sent names a key: ${JSON.stringify(event)}`));
+    if (/\bEnter\b/i.test(words)) keyNamed ??= new Error(`a question the page was sent names a key: ${JSON.stringify(event)}`);
     seen.push(event);
     waiting = waiting.filter((wait) => {
       if (!wait.match(event)) return true;
@@ -217,6 +220,7 @@ function connect(events, { lastEventId } = {}) {
      * @returns {Promise<PageEvent>}
      */
     next(match, { timeout = 20_000 } = {}) {
+      if (keyNamed) return Promise.reject(keyNamed);
       const found = seen.find(match);
       if (found) return Promise.resolve(found);
       return /** @type {Promise<PageEvent>} */ (
@@ -226,7 +230,7 @@ function connect(events, { lastEventId } = {}) {
           new Promise((_, reject) =>
             setTimeout(() => reject(new Error(`no matching event within ${timeout} ms; had:\n${seen.map((e) => JSON.stringify(e)).join('\n')}`)), timeout).unref(),
           ),
-        ])
+        ]).then((event) => (keyNamed ? Promise.reject(keyNamed) : event))
       );
     },
     /** Says this page has shown everything up to `event`, as a page does. @param {number} event */
