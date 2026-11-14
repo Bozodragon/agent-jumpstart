@@ -57,16 +57,21 @@ export async function findT3({ places, machine, frontEnd, downloads, log }) {
   /** @type {('stable' | 'nightly')[]} */
   const channels = ['stable', 'nightly'];
   // reg.exe can take a moment, before anything else is on screen.
-  const { version, programsThere } = await frontEnd.busy(`Checking whether ${entry.name} is installed`, async () => {
-    const version = await installedVersion(machine, entry.install.versionIn);
-    /** @type {('stable' | 'nightly')[]} */
-    const programsThere = [];
-    for (const channel of channels) {
-      const where = entry.channels[channel];
-      if (where && (await exists(join(places.programs, entry.install.folder, where.program)))) programsThere.push(channel);
-    }
-    return { version, programsThere };
-  });
+  const { version, programsThere } = await frontEnd.busy(
+    `Checking whether ${entry.name} is installed`,
+    async () => {
+      const version = await installedVersion(machine, entry.install.versionIn);
+      /** @type {('stable' | 'nightly')[]} */
+      const programsThere = [];
+      for (const channel of channels) {
+        const where = entry.channels[channel];
+        if (where && (await exists(join(places.programs, entry.install.folder, where.program)))) programsThere.push(channel);
+      }
+      return { version, programsThere };
+    },
+    undefined,
+    { changesNothing: true },
+  );
   if (!version && programsThere.length === 0) {
     log.write(`${entry.name}: not installed yet`);
     return undefined;
@@ -144,7 +149,7 @@ export async function installT3(profile, channel, found, open, context) {
   // The download and the silent install show nothing of their own for about half a minute.
   const outcome = await frontEnd.busy(`Installing ${entry.name}. This takes about a minute${open ? `, and ${entry.name} opens by itself when it's done` : ''}.`, install, (outcome) =>
     'release' in outcome
-      ? { text: `${entry.name} ${outcome.release.version} installed`, ok: true }
+      ? { text: `${entry.name} ${outcome.release.version} installed`, ok: true, done: [entry.name, `${outcome.release.version} (${channel}, ${change.installed})`] }
       : { text: `${entry.name} not installed: ${outcome.reason}`, ok: false },
   );
   if (!('release' in outcome)) return { row: `Not installed: ${outcome.reason}`, installed: false, opened: await exists(shim), shim };
@@ -258,7 +263,9 @@ async function installedVersion(machine, key) {
  */
 async function waitForFirstLaunch(shim, patience, { machine, frontEnd, attended, say, name }) {
   const wait = () => keepTrying({ machine, every: 1000, patience }, () => exists(shim), (there) => there);
-  if (patience > 0 && !(await exists(shim))) await frontEnd.busy(`Waiting for ${name} to open`, wait, ({ result }) => ({ text: result ? `${name} is open` : `${name} hasn't opened`, ok: result }));
+  if (patience > 0 && !(await exists(shim))) {
+    await frontEnd.busy(`Waiting for ${name} to open`, wait, ({ result }) => ({ text: result ? `${name} is open` : `${name} hasn't opened`, ok: result }), { changesNothing: true });
+  }
   if (!(await exists(shim)) && attended) {
     frontEnd.notice(`Open ${name} from the Start menu and wait for its window to appear.`, `Open ${name}`);
     await frontEnd.waitForDone(`${name} is open`);

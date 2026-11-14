@@ -188,7 +188,29 @@ async function main() {
     process.stdout.write(`${opened.why}\n`);
     return noPage;
   }
-  const { frontEnd, page } = opened;
+  const { page, frontEnd: openedFrontEnd } = opened;
+  /**
+   * What the busies of the step under way have done (each that changed something and says so),
+   * for a run that stops before that step's own rows are recorded.
+   * @type {[string, string][]}
+   */
+  let doneInStep = [];
+  /** @type {import('./front-end.js').FrontEnd} */
+  const frontEnd = {
+    ...openedFrontEnd,
+    busy: (message, task, ended, how) =>
+      openedFrontEnd.busy(
+        message,
+        task,
+        ended &&
+          ((result) => {
+            const said = ended(result);
+            if (said.ok && said.done) doneInStep.push(said.done);
+            return said;
+          }),
+        how,
+      ),
+  };
   log.write(frontEnd.description);
   if (options.answers) log.write(`Answers from: ${options.answers}`);
   if (options.downloads) log.write(`Downloads from: ${options.downloads}`);
@@ -220,6 +242,11 @@ async function main() {
    * @type {[string, string][]}
    */
   const done = [];
+  /** @param {[string, string][]} rows a step's, which cover what its busies did */
+  const recordDone = (rows) => {
+    done.push(...rows);
+    doneInStep = [];
+  };
   /** What the ending says: the steps that didn't work, noted as the run meets them. */
   const ending = newEnding();
   /**
@@ -227,7 +254,7 @@ async function main() {
    * @param {[string, string][]} rows @param {string} [step] as for `note`
    */
   const record = (rows, step) => {
-    done.push(...rows);
+    recordDone(rows);
     note(ending, rows, step);
   };
 
@@ -323,7 +350,9 @@ async function main() {
     const settings = { ...earlier, profile: profile.id, ...choices };
     await writeSettings(places.settings, settings);
     log.write(`Settings written to ${places.settings}`);
-    done.push(['Settings', 'Your answers, saved for next time']);
+    // The questions have no rows of their own, so what their busies did (Google Drive installed)
+    // stays among what's done.
+    recordDone([...doneInStep, ['Settings', 'Your answers, saved for next time']]);
 
     const workspaces = await createWorkspaces(choices.topWorkspace, choices.workspaces, log);
     record(workspaces.rows, 'Workspaces');
@@ -365,7 +394,7 @@ async function main() {
     // Settings' connectors are kept only when every one is still offered, so equal means known.
     const connectedBefore = JSON.stringify(earlier?.connectors) === JSON.stringify(choices.connectors);
     const connectors = await walkThroughConnectors(profile, choices.connectors, { ...context, connectedBefore });
-    done.push(['Connectors', connectors]);
+    recordDone([['Connectors', connectors]]);
     const extraTools = await setUpExtraTools(profile, choices.extraTools, context);
     record(extraTools);
     // Their steps are named as their manifest entries name them (installTools has read it).
@@ -430,7 +459,9 @@ async function main() {
     }
     log.write(`Stopped: ${error.message}`);
     // Only here is the person told what a stop left behind, so it's never claimed that nothing
-    // changed after something did.
+    // changed after something did: that's the steps done, and what the busies of the step it
+    // stopped in had done, such as the install a stop waited for.
+    done.push(...doneInStep);
     if (done.length === 0) {
       frontEnd.problem(`${error.message} Nothing has been changed.`);
     } else {

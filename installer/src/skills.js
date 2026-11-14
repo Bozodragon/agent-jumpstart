@@ -84,6 +84,7 @@ export async function installSkills(profile, ours, installedFrom, context) {
         for (const { source } of toLookUp) latest.set(source, await latestCommit(source, join(git[0], 'git.exe'), context));
       },
       () => ({ text: 'Checked the skill sources for changes', ok: true }),
+      { changesNothing: true },
     );
   }
 
@@ -110,7 +111,7 @@ export async function installSkills(profile, ours, installedFrom, context) {
       const what = `${wanted.length === 1 ? 'the skill' : `${wanted.length} skills`} from ${source}`;
       const command = [...program.args, ...args];
       ran = await frontEnd.busy(`Installing ${what}`, (_, output) => machine.run(program.file, command, { env: forceColor, onOutput: output }), ({ code }) =>
-        code === 0 ? { text: `Installed ${what}`, ok: true } : { text: `Couldn't install ${what}`, ok: false },
+        code === 0 ? { text: `Installed ${what}`, ok: true, done: ['Skills', `Installed ${what}`] } : { text: `Couldn't install ${what}`, ok: false },
       );
     }
     for (const name of skills) {

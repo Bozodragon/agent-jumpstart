@@ -38,13 +38,17 @@
 //                                            escape codes and all. A sign-in's program keeps its
 //                                            output: the page's screen relays none of it
 //   finish   { text }                       the run's last words
-//   stopping {}                             the run is stopping (Stop was pressed, or the page was
+//   stopping { after? }                     the run is stopping (Stop was pressed, or the page was
 //                                            closed and none came back): nothing before this is
-//                                            waited on any more, and the stop screen follows
+//                                            waited on any more, but for the busy `after`, if
+//                                            given, which the run finishes first; then the stop
+//                                            screen follows
 //
 // Stopping: Stop on the page throws `Stop('Stopped at your request.')` from whichever call the
-// run is waiting on (a question; a busy, whose task is left to itself; a program on the screen,
-// such as a sign-in, which is ended), or from the next one it makes, if it's waiting on none. A
+// run is waiting on (a question; a program on the screen, such as a sign-in, which is ended), or
+// from the next one it makes, if it's waiting on none. A busy that changes something (an
+// install) is waited for: it finishes, and the next call that waits throws. One that changes
+// nothing (a look, a wait for the person, a download) throws at once, its task left to itself. A
 // run whose every page has gone finishes the step it's on, then waits at the next question (or
 // program on the screen, which needs the page) about 10 minutes for a page to come back (a
 // reload, the Bootstrap reopening it, a second window), and stops the same way if none does.
@@ -141,6 +145,8 @@ export async function openInstallerPage({ addressFile, connectedFile, page }) {
   let over = false;
   /** The programs on the screen now, which a stop ends. @type {Set<import('node:child_process').ChildProcess>} */
   const onScreen = new Set();
+  /** The busies under way that a stop waits for, by id, each with its message. @type {Map<number, string>} */
+  const finishing = new Map();
 
   /**
    * Ends a program on the screen, and whatever it started (cmd.exe's child, say).
@@ -164,7 +170,9 @@ export async function openInstallerPage({ addressFile, connectedFile, page }) {
     // Nothing is asked again after a stop, so there's no going back either.
     backOpen = false;
     replay = [];
-    server.send({ type: 'stopping' });
+    const after = [...finishing].at(-1);
+    if (after) say(`the run stops once this step is done: ${after[1]}`);
+    server.send({ type: 'stopping', ...(after ? { after: after[0] } : {}) });
     for (const asked of open.values()) asked.reject(why);
     open.clear();
     for (const child of onScreen) end(child);
@@ -416,16 +424,18 @@ export async function openInstallerPage({ addressFile, connectedFile, page }) {
     step(text) {
       if (!quiet) server.send({ type: 'step', text });
     },
-    async busy(message, task, ended) {
+    async busy(message, task, ended, { changesNothing = false } = {}) {
       if (stopped) throw stopped;
       // Going back, it was shown the first time through. A stop still doesn't wait for it.
       if (quiet) return Promise.race([task(() => {}, () => {}), stopping]);
       const busy = server.send({ type: 'busy', message });
+      /** Whether it has ended, after which its task, if left to itself, says nothing more. */
+      let gone = false;
       let last = -Infinity;
       let shownReceived = -1;
       /** @type {import('./front-end.js').Progress} */
       const progress = (received, total) => {
-        if (stopped) return;
+        if (gone) return;
         const now = performance.now();
         const whole = total !== undefined && received >= total;
         if (received === shownReceived || (!whole && now - last < progressEvery)) return;
@@ -435,18 +445,23 @@ export async function openInstallerPage({ addressFile, connectedFile, page }) {
       };
       /** @type {import('./front-end.js').Output} */
       const output = (text) => {
-        // A task left to itself by a stop says nothing after the stop screen.
-        if (text !== '' && !stopped) server.send({ type: 'output', busy, text });
+        if (text !== '' && !gone) server.send({ type: 'output', busy, text });
       };
       let result;
+      if (!changesNothing) finishing.set(busy, message);
       try {
-        // A stop doesn't wait for the task: what it started is left to finish by itself.
-        result = await Promise.race([task(progress, output), stopping]);
+        // A stop waits for a task that changes something, so what it started is done, and
+        // counted, before the run stops. One that changes nothing is left to itself.
+        result = await (changesNothing ? Promise.race([task(progress, output), stopping]) : task(progress, output));
       } catch (error) {
+        gone = true;
         // Stopped, it simply ended, with no mark of failure.
         server.send({ type: 'ended', busy, text: message, ...(error === stopped ? {} : { ok: false }) });
         throw error;
+      } finally {
+        finishing.delete(busy);
       }
+      gone = true;
       const { text, ok } = ended?.(result) ?? { text: message, ok: true };
       server.send({ type: 'ended', busy, text, ok });
       return result;

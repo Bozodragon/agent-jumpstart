@@ -149,7 +149,7 @@ export async function readyGoogleDrive(profile, places, ask, drive, context) {
   /** @type {Promise<string | undefined>} */
   const looking =
     context.once?.get('myDrive') ??
-    (machine.patience > 0 ? frontEnd.busy(message, look, ({ result }) => ({ text: 'Looked for My Drive', ok: result.status === 'signed-in' && result.folder !== undefined })) : look()).then(({ result, waited }) => {
+    (machine.patience > 0 ? frontEnd.busy(message, look, ({ result }) => ({ text: 'Looked for My Drive', ok: result.status === 'signed-in' && result.folder !== undefined }), { changesNothing: true }) : look()).then(({ result, waited }) => {
       const found = result.status === 'signed-in' ? result.folder : undefined;
       say(found ? `My Drive found at ${found} after ${waited / 1000} seconds` : `My Drive not found after ${waited / 1000} seconds, so where it is is asked`);
       return found;
@@ -219,6 +219,8 @@ async function fromSoftwareCenter(profile, places, ask, id, context) {
     'Waiting until Google Drive is installed',
     () => waitFor(() => installing(places), (there) => there),
     ({ result }) => (result ? { text: 'Google Drive is installed', ok: true } : { text: "Google Drive still isn't installed after 15 minutes", ok: false }),
+    // Software Center installs it, not the Installer: a stop doesn't wait up to 15 minutes for it.
+    { changesNothing: true },
   );
   if (!install.result) {
     say(`not installed from Software Center after ${install.waited / 1000} seconds, so Documents is offered`);
@@ -249,6 +251,7 @@ async function waitForSignIn(places, { machine, frontEnd, log }) {
     'Waiting until Google Drive is signed in',
     () => keepTrying({ machine, every: softwareCenterEvery, patience: softwareCenterPatience }, () => findGoogleDrive(places), (drive) => drive.status === 'signed-in'),
     ({ result }) => (result.status === 'signed-in' ? { text: 'Google Drive is signed in', ok: true } : { text: "Google Drive still isn't signed in after 15 minutes", ok: false }),
+    { changesNothing: true },
   );
   say(`${signIn.result.status === 'signed-in' ? 'signed in' : 'not signed in'} after ${signIn.waited / 1000} more seconds`);
   // Drive's version folder comes first, and its program follows: it's installed.
@@ -338,6 +341,8 @@ async function fromHostedInstaller(profile, places, offered, context) {
     downloading,
     (progress) => watchDownloads(folder, before, hosted, machine, progress),
     (outcome) => (outcome.status === 'found' ? { text: "Google Drive's installer downloaded", ok: true } : { text: downloading, ok: false }),
+    // The browser downloads it: a stop needn't wait to watch it.
+    { changesNothing: true },
   );
   /** @param {string} file */
   const tidy = async (file) => {
@@ -380,7 +385,7 @@ async function fromHostedInstaller(profile, places, offered, context) {
       const { result: there } = await keepTrying({ machine, every: softwareCenterEvery, patience: installPatience }, () => programThere(places), (found) => found);
       return { code: ran.code, there };
     },
-    ({ there }) => (there ? { text: 'Google Drive is installed', ok: true } : { text: 'Installing Google Drive', ok: false }),
+    ({ there }) => (there ? { text: 'Google Drive is installed', ok: true, done: ['Google Drive', 'Installed'] } : { text: 'Installing Google Drive', ok: false }),
   );
   await tidy(downloaded.file);
   if (!install.there) {

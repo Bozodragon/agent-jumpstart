@@ -78,7 +78,7 @@ export function announced(shown) {
     case 'step':
       return shown.text;
     case 'busy':
-      return shown.ended?.text ?? shown.message;
+      return shown.ended?.text ?? (shown.stopsAfter ? `${shown.message.replace(/\.?$/, '.')} ${stopsAfter}` : shown.message);
     case 'signIn':
       return shown.sent ? 'Checking the code' : 'Waiting for you to sign in';
     case 'ending':
@@ -172,13 +172,16 @@ function Rows({ rows }) {
   );
 }
 
+/** What a step says while the run finishes it, after Stop, before it stops. */
+const stopsAfter = 'The Installer stops once this step is done.';
+
 /**
  * Something slow: the turning ring while it runs, with a bar once its size is known, then how
- * it ended.
+ * it ended. After Stop, a step the run finishes first says so.
  * @param {{ screen: import('./pacing.js').BusyScreen }} props
  */
 function Busy({ screen }) {
-  const { message, received, total, ended, terminal } = screen;
+  const { message, received, total, ended, terminal, stopsAfter: stopping } = screen;
   if (terminal) return <Skills screen={screen} terminal={terminal} />;
   if (ended) {
     return (
@@ -196,6 +199,7 @@ function Busy({ screen }) {
     <>
       <Status kind="ring" />
       <Heading text={message} />
+      {stopping && <p className="lede">{stopsAfter}</p>}
       {sized && (
         <>
           <div className="bar" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={parseInt(percent, 10)} aria-valuetext={`${percent} of ${megabytes}`}>
@@ -320,7 +324,7 @@ function Skills({ screen, terminal }) {
       <h1 className="title">
         <Line text={ended?.text ?? message} />
       </h1>
-      <p className="lede">This is the skills installer at work. Adding a skill yourself later looks just like this.</p>
+      <p className="lede">{screen.stopsAfter && !ended ? stopsAfter : 'This is the skills installer at work. Adding a skill yourself later looks just like this.'}</p>
       <Terminal text={terminal} running={!ended} />
     </>
   );
