@@ -93,9 +93,10 @@ export async function setUpClaude(context, ask) {
   // A failed install is offered again, as often as it fails, each time the whole thing afresh.
   // "Checking Claude Code" starts only once the install's last spinner has ended.
   while (!state.present) {
-    const reason = await install(entry, program, context, say);
+    const tried = await install(entry, program, context, say);
     state = await look();
     if (state.present) break;
+    const reason = tried.installed ? "its setup didn't leave it in place" : tried.reason;
     frontEnd.problem(`${entry.name} isn't installed: ${reason}.`);
     const choice = await ask.choose({
       key: 'claudeInstall',
@@ -295,19 +296,20 @@ function pasteLinkIn(printed) {
  * install` and there's no downloads folder, Anthropic's script.
  * @param {import('./manifest.js').ClaudeEntry} entry @param {string} program where it should end up
  * @param {import('./tools.js').Context} context @param {(line: string) => void} say
- * @returns {Promise<string>} why it isn't installed, in words for the checklist; empty once it is
+ * @returns {Promise<{ installed: true } | { installed: false, reason: string }>} why it isn't
+ *   installed, in words for the checklist, when it isn't
  */
 async function install(entry, program, context, say) {
   const { machine, frontEnd, downloads, log } = context;
   const own = await ownRoute(entry, program, context, say);
   if (own.installed) {
     say('installed by its own download');
-    return '';
+    return { installed: true };
   }
-  if (!own.fallBack) return own.reason;
+  if (!own.fallBack) return own;
   if (downloads) {
     say(`Anthropic's script isn't run when the files come from the downloads folder, so it isn't installed: ${own.reason}`);
-    return own.reason;
+    return own;
   }
   say(`falling back to Anthropic's script, because ${own.reason}`);
   const script = anthropicsInstaller(entry.fallback.script);
@@ -327,10 +329,10 @@ async function install(entry, program, context, say) {
   if (ran.code === 0 && !there && !log.debug) for (const line of plainLines(ran.output)) say(`installer said: ${line}`);
   if (!there) {
     say(`Anthropic's script finished with code ${ran.code}, and ${program} isn't there`);
-    return `${entry.name}'s installer didn't finish`;
+    return { installed: false, reason: `${entry.name}'s installer didn't finish` };
   }
   say(`installed by Anthropic's script (code ${ran.code})`);
-  return '';
+  return { installed: true };
 }
 
 /**
