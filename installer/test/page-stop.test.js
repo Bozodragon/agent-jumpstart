@@ -6,7 +6,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
-import { claudeFolder, exists, fakeMachine, makeHome, readManifest, readOnlyLog, readProfile, readSettings, skillsCli, supplyDownloads, supplyT3, t3Leaves, claudeProgram } from './harness.js';
+import { createHash } from 'node:crypto';
+import { claudeFolder, exists, fakeMachine, fixtureProfiles, makeHome, readManifest, readOnlyLog, readProfile, readSettings, skillsCli, supplyDownloads, supplyT3, t3Leaves, claudeProgram } from './harness.js';
 import { addressFile, runOnPage } from './page-harness.js';
 
 /** The answers given on the page: a team, a first-timer, and the connectors, which end in a Done. */
@@ -17,12 +18,13 @@ let answers = { team: 'Marketing', aiExperience: 'first-time', codingExperience:
  * ms of real time to, so a test can act while that step is under way. After the skills, the run
  * walks through the connectors and waits for the person to say they're done.
  * @param {import('node:test').TestContext} t
- * @param {{ skillsTake?: number, replies?: Record<string, import('../src/machine.js').Reply>, claudeThere?: boolean, skillsArrive?: boolean }} [options] `replies`: more of the fake machine's.
+ * @param {{ skillsTake?: number, replies?: Record<string, import('../src/machine.js').Reply | import('../src/machine.js').Reply[]>, claudeThere?: boolean, skillsArrive?: boolean, googleDrive?: import('./harness.js').GoogleDriveState }} [options] `replies`: more of the fake machine's.
+ *   `googleDrive`: Google Drive for desktop's state, as makeHome takes it (signed in, unless this says otherwise).
  *   `claudeThere`: whether Claude Code is already installed (it is, unless this says not).
  *   `skillsArrive`: whether the skills CLI, which always says it worked, leaves the skills in place
  */
-async function aLaptop(t, { skillsTake = 0, replies = {}, claudeThere = true, skillsArrive = true } = {}) {
-  const where = await makeHome(t);
+async function aLaptop(t, { skillsTake = 0, replies = {}, claudeThere = true, skillsArrive = true, googleDrive = 'signed-in' } = {}) {
+  const where = await makeHome(t, {}, { googleDrive });
   const profile = await readProfile('york');
   await supplyDownloads(where, ['skills']);
   const theirs = join(where.home, 'Program Files', 'Tools');
@@ -259,6 +261,68 @@ test('Stop, pressed while `claude install` sets Claude Code up, waits for it, an
   assert.deepEqual([ended.text, ended.ok], ['Claude Code installed', true]);
   assert.equal(await exists(join(where.home, claudeProgram)), true);
   assert.ok(summary.rows.some((/** @type {[string, string]} */ [label, value]) => label === 'Claude Code' && value === 'Installed'), JSON.stringify(summary.rows));
+});
+
+test("Stop, pressed while Google Drive's own installer installs it during the questions, waits for it, and lists Google Drive as done", async (t) => {
+  const program = join('Program Files', 'Google', 'Drive File Stream', '132.0.0.0', 'GoogleDriveFS.exe');
+  const { where, machine } = await aLaptop(t, {
+    googleDrive: 'missing',
+    replies: {
+      'sc.exe query CcmExec': { output: 'SERVICE_NAME: CcmExec\r\n        STATE              : 4  RUNNING\r\n' },
+      'reg.exe query HKCR\\softwarecenter': { output: 'HKEY_CLASSES_ROOT\\softwarecenter\r\n    URL Protocol    REG_SZ    \r\n' },
+      // Software Center offers Drive at the hosted installer's version, and the installer, run silently, takes a while.
+      'powershell.exe -NoProfile -NonInteractive -Command': [
+        { output: `${JSON.stringify({ Id: 'ScopeId_1/Application_2', Name: 'Google Drive', InstallState: 'NotInstalled', SoftwareVersion: '132.0.0' })}\r\n` },
+        { creates: [program], takes: 2_000 },
+      ],
+    },
+  });
+  const standIn = 'stand-in for GoogleDriveFSSetup.exe'.padEnd(4000, '.');
+  const source = join(where.home, '..', 'GoogleDriveFSSetup.exe');
+  await writeFile(source, standIn);
+  const york = await readProfile('york');
+  york.googleDrive.hostedInstaller = { id: 'a-test-drive-file', version: '132.0.0.0', size: standIn.length, sha256: createHash('sha256').update(standIn).digest('hex') };
+  const flags = await fixtureProfiles(where, { york });
+  await machine.setBrowser({ 'https://drive.usercontent.google.com/download?id=a-test-drive-file&export=download&confirm=t': { from: source, saves: join('Downloads', 'GoogleDriveFSSetup.exe') } });
+  const run = await runOnPage(where, 'york', flags);
+  t.after(run.kill);
+  const page = run.connect();
+  const busy = await answerUntil(page, run, (event) => event.type === 'busy' && event.message === 'Installing Google Drive');
+
+  assert.equal((await run.stop()).status, 200);
+  const summary = await page.next((event) => event.type === 'summary' && event.title === 'Done before it stopped');
+  await page.seen(page.events.at(-1)?.id ?? 0);
+  const result = await run.ended;
+
+  assert.equal(result.code, 1, result.stdout + result.stderr);
+  assert.equal((await page.next((event) => event.type === 'ended' && event.busy === busy.id)).ok, true);
+  assert.equal(await exists(join(where.home, program)), true);
+  assert.deepEqual(summary.rows, [['Google Drive', 'Installed']]);
+  // Nothing after it started: the sign-in it would have asked for never came.
+  assert.ok(!page.events.some((event) => event.type === 'notice' && event.title === 'Sign in to Google Drive'), JSON.stringify(page.events.slice(-6)));
+});
+
+test('Stop, pressed while the top workspace is added to T3 Code, waits for it, and lists the workspace as added', async (t) => {
+  const installer = 'T3-Code-0.0.30-x64.exe';
+  // T3 installs, and its first start leaves its shim, so the workspace is added: slowly.
+  const t3 = { creates: [t3Leaves.program, t3Leaves.shim] };
+  const { where } = await aLaptop(t, { replies: { [installer]: t3, 'T3-Code-0.0.30-arm64.exe': t3, 't3.cmd project add': { code: 0, takes: 2_000 } } });
+  await supplyT3(where.downloads, 'latest.yml', '0.0.30');
+  const run = await runOnPage(where, 'york');
+  t.after(run.kill);
+  const page = run.connect();
+  const busy = await answerUntil(page, run, (event) => event.type === 'busy' && /^Adding .* to T3 Code$/.test(event.message));
+
+  assert.equal((await run.stop()).status, 200);
+  const summary = await page.next((event) => event.type === 'summary' && event.title === 'Done before it stopped');
+  await page.seen(page.events.at(-1)?.id ?? 0);
+  const result = await run.ended;
+
+  assert.equal(result.code, 1, result.stdout + result.stderr);
+  assert.equal((await page.next((event) => event.type === 'ended' && event.busy === busy.id)).ok, true);
+  assert.ok(summary.rows.some((/** @type {[string, string]} */ [label, value]) => label === 'Workspaces' && value === 'Claude, added to T3 Code'), JSON.stringify(summary.rows));
+  // It was the run's last step: the ending, which opens T3 Code, never came.
+  assert.ok(!page.events.some((event) => event.type === 'summary' && event.title === 'Checklist'));
 });
 
 /** Waits until the run's log says `what`, as Jacob reading it would see. @param {string} home @param {RegExp} what */
