@@ -86,14 +86,16 @@ async function signIn(tool, program, extra, { machine, frontEnd, log }) {
     say(`already signed in as ${before}, so the sign-in was skipped`);
     return { account: before, already: true };
   }
-  // The profile's words name neither a key nor the window; where to come back to is the front end's.
-  const told = extra.signIn ?? 'A browser window will open for you to sign in.';
+  const plainly = 'A browser window will open for you to sign in.';
   /** @type {number} */
   let code;
   if (frontEnd.inWindow) {
-    frontEnd.notice(`${told} ${frontEnd.comeBack()}`, `Sign in to ${tool.name}`);
+    // The terminal's sign-in is as it always was, in the profile's own words.
+    frontEnd.notice(extra.signIn ?? plainly, `Sign in to ${tool.name}`);
     code = await machine.runOnScreen(program.file, [...program.args, ...how.run]);
   } else {
+    // The page's words name neither a key nor the window: where to come back to is the front end's.
+    const told = extra.signInOnPage ?? plainly;
     // On the page it runs piped. It opens the browser itself, and prints the address it opened,
     // which still comes back to it by itself, so the page offers it in case no window opened.
     frontEnd.notice([told, '', `If no window opens, use the link below. ${frontEnd.comeBack()} It carries on by itself.`].join('\n'), `Sign in to ${tool.name}`);

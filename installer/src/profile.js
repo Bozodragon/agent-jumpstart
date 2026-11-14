@@ -101,8 +101,10 @@ export const fullSkillsSizes = /** @type {const} */ (['no', 'finished', 'beta'])
  * @property {string} id
  * @property {string} question
  * @property {boolean} default
- * @property {string} [signIn] Said before a tool's browser sign-in starts. It names neither a key nor the
- *   window: each front end adds where to come back to.
+ * @property {string} [signIn] Said in the terminal before a tool's browser sign-in starts in the
+ *   person's window, which it may name ("come back here").
+ * @property {string} [signInOnPage] Said on the Installer page before the sign-in starts. It names
+ *   neither a key nor the window: the page adds where to come back to.
  * @property {string} [settingsPage] A page the person must change a setting on themselves.
  * @property {string} [settings] What to do on that page.
  */
