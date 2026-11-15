@@ -344,7 +344,7 @@ test('Stop, pressed while the top workspace is added to T3 Code, waits for it, a
   assert.ok(!page.events.some((event) => event.type === 'summary' && event.title === 'Checklist'));
 });
 
-/** Waits until the run's log says `what`, as Jacob reading it would see. @param {string} home @param {RegExp} what */
+/** Waits until the run's log says `what`, as the maintainer reading it would see. @param {string} home @param {RegExp} what */
 async function logSays(home, what) {
   const giveUp = performance.now() + 20_000;
   for (;;) {

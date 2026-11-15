@@ -8,7 +8,7 @@
 # Same rules as the bootstrap: plain ASCII, no byte-order mark, no exit, no Add-Type,
 # New-Object or .NET method calls.
 
-# Who this profile sends the log to, as "Jacob at jacob.hamood@york.ac.uk", or nothing at all
+# Who this profile sends the log to, as "<logGoesTo> at <logEmail>", or nothing at all
 # when the installer never saved its settings or the profile names nobody.
 function Get-AgentJumpstartRecipient {
   param([string]$State)
