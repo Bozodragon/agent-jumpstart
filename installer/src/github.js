@@ -3,7 +3,7 @@
 // CLI (the copy the tools step found or put in place: the person's own, if they had one) signs
 // them in through the browser and makes itself Git's credential helper, so a later clone needs
 // no password. Someone already signed in keeps Git set up the way they had it. No organisation
-// invites: the username goes in the checklist so Jacob can send one.
+// invites: the username goes in the checklist so the maintainer can send one.
 import { githubHost as host, loadManifest, toolEntry } from './manifest.js';
 import { showPage } from './open-page.js';
 import { messageOf, Stop } from './stop.js';
